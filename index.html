@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>일본어 단어 장기기억</title>
+<meta name="theme-color" content="#0f1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="일단장">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <button class="icon-btn" id="btnHome" title="홈">←</button>
+  <div id="topTitle">일본어 단어 장기기억</div>
+  <button class="icon-btn" id="btnTimeTop" title="공부 시간">📅</button>
+  <button class="icon-btn" id="btnSearchTop" title="검색">🔍</button>
+</header>
+
+<main>
+
+<!-- ============ 홈 ============ -->
+<section id="viewHome" class="view active">
+  <div class="prog-card">
+    <div class="prog-top">
+      <div>
+        <div class="prog-label">장기기억으로 외운 단어</div>
+        <div class="prog-count"><b id="progLong">0</b> <span id="progTotal">/ 0 단어</span></div>
+      </div>
+      <div class="prog-pct" id="progPct">0<i>%</i></div>
+    </div>
+    <div class="prog-bar" id="progSeg"></div>
+  </div>
+
+  <button class="resume-btn" id="btnResume" hidden>
+    <span class="rs-main">
+      <span class="rs-label">이어서 학습</span>
+      <span class="rs-info" id="resumeInfo"></span>
+    </span>
+    <span class="rs-go">▶</span>
+  </button>
+
+  <div class="stat-grid" id="globalStats"></div>
+
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnReviewToday">
+      <span class="bb-title">오늘의 복습</span>
+      <span class="bb-sub" id="reviewCount">0개 대기</span>
+    </button>
+    <button class="big-btn" id="btnWeakStudy">
+      <span class="bb-title">모르는 단어만</span>
+      <span class="bb-sub" id="weakCount">0개</span>
+    </button>
+  </div>
+
+  <div class="rand-card">
+    <div class="rand-row">
+      <span class="rand-title">전체에서 랜덤</span>
+      <span class="rand-pool" id="randPool"></span>
+    </div>
+    <div class="chips" id="randCounts">
+      <button class="chip" data-n="10">10</button>
+      <button class="chip" data-n="15">15</button>
+      <button class="chip sel" data-n="20">20</button>
+      <button class="chip" data-n="25">25</button>
+      <button class="chip" data-n="30">30</button>
+      <button class="chip" data-n="0">전체</button>
+    </div>
+    <button class="rand-go" id="btnRandStudy">랜덤 학습 시작</button>
+  </div>
+
+  <div class="section-head">
+    <h2>Day 선택</h2>
+    <div class="head-actions">
+      <button class="mini-btn" id="btnSelAll">전체 선택</button>
+      <button class="mini-btn" id="btnUpload">＋ 파일 불러오기</button>
+      <button class="mini-btn" id="btnBackup">백업 내보내기</button>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".json,.csv,.tsv,.txt" multiple hidden>
+
+  <div id="dayGrid" class="day-grid"></div>
+  <p class="empty-note" id="emptyNote" hidden>단어 파일을 업로드하세요.</p>
+</section>
+
+<div id="selBar" class="sel-bar" hidden>
+  <div class="sel-info">
+    <b id="selDays"></b>
+    <span id="selWords"></span>
+  </div>
+  <div class="sel-actions">
+    <button class="mini-btn" id="btnSelClear">해제</button>
+    <button class="mini-btn" id="btnSelView">목록</button>
+    <button class="sel-go" id="btnSelStudy">학습 시작</button>
+  </div>
+</div>
+
+<!-- ============ Day 상세 ============ -->
+<section id="viewDay" class="view">
+  <div class="day-head">
+    <h1 id="dayHeadTitle">DAY 00</h1>
+    <p class="sub" id="dayHeadSub"></p>
+  </div>
+  <div class="stat-grid" id="dayStats"></div>
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnStudyAll">
+      <span class="bb-title">전체 학습</span><span class="bb-sub" id="dayAllCount"></span>
+    </button>
+    <button class="big-btn" id="btnStudyDue">
+      <span class="bb-title">복습할 것만</span><span class="bb-sub" id="dayDueCount"></span>
+    </button>
+  </div>
+  <div class="section-head"><h2>단어 목록</h2></div>
+  <div id="dayWordList" class="word-list"></div>
+</section>
+
+<!-- ============ 학습 ============ -->
+<section id="viewStudy" class="view">
+  <div class="progress-wrap">
+    <div class="progress-bar"><div id="progressFill"></div></div>
+    <div class="progress-text"><span id="progressText">0 / 0</span><span id="studyLabel"></span></div>
+  </div>
+
+  <div class="card" id="card">
+    <div class="card-meta"><span id="cardBadge" class="badge">미학습</span><span id="cardNo" class="card-no"></span></div>
+
+    <div class="jp-word" id="jpWord">単語</div>
+
+    <div id="answerBox" class="answer-box" hidden>
+      <div class="ans-row"><span class="ans-label">읽는 법</span><span class="ans-value reading" id="ansReading">-</span></div>
+      <div class="ans-row"><span class="ans-label">뜻</span><span class="ans-value" id="ansMeaning">-</span></div>
+    </div>
+
+    <!-- 문제를 푸는 동안에도 보인다. 단, 해석·문형은 quiz 클래스로 가려둔다. -->
+    <div id="detailBox" class="detail-box quiz" hidden></div>
+
+    <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
+
+    <div id="checkBox" class="check-box" hidden>
+      <div class="check-row">
+        <span class="check-label">읽는 법을 알았나요?</span>
+        <div class="ox">
+          <button class="ox-btn o" data-t="reading" data-v="1">O<kbd>1</kbd></button>
+          <button class="ox-btn x" data-t="reading" data-v="0">X<kbd>2</kbd></button>
+        </div>
+      </div>
+      <div class="check-row">
+        <span class="check-label">뜻을 알았나요?</span>
+        <div class="ox">
+          <button class="ox-btn o" data-t="meaning" data-v="1">O<kbd>3</kbd></button>
+          <button class="ox-btn x" data-t="meaning" data-v="0">X<kbd>4</kbd></button>
+        </div>
+      </div>
+      <button class="next-btn" id="btnNext" disabled>다음 <kbd>Enter</kbd></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 결과 ============ -->
+<section id="viewResult" class="view">
+  <div class="hero">
+    <h1 id="resultSub">학습 완료</h1>
+  </div>
+  <div class="stat-grid" id="resultStats"></div>
+  <div id="resultList" class="word-list"></div>
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnRetryWrong"><span class="bb-title">틀린 것 다시</span><span class="bb-sub" id="retryCount"></span></button>
+    <button class="big-btn" id="btnResultHome"><span class="bb-title">홈으로</span><span class="bb-sub">&nbsp;</span></button>
+  </div>
+</section>
+
+<!-- ============ 공부 시간 ============ -->
+<section id="viewTime" class="view">
+  <div class="time-top">
+    <div>
+      <div class="time-label">오늘 공부</div>
+      <div class="time-today" id="timeToday">0분</div>
+    </div>
+    <div class="time-total-wrap">
+      <div class="time-label">누적</div>
+      <div class="time-total" id="timeTotal">0분</div>
+      <div class="time-total-min" id="timeTotalMin">총 0분</div>
+    </div>
+  </div>
+
+  <div class="cal-card">
+    <div class="cal-head">
+      <button class="cal-nav" id="calPrev" aria-label="이전 달">‹</button>
+      <span class="cal-title" id="calTitle"></span>
+      <button class="cal-nav" id="calNext" aria-label="다음 달">›</button>
+    </div>
+    <div class="cal-dow"><i>일</i><i>월</i><i>화</i><i>수</i><i>목</i><i>금</i><i>토</i></div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-foot" id="calFoot"></div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ 검색 (어느 화면 위에서든 열린다. 학습 중에도 세션이 유지된다) ============ -->
+<div id="searchPanel" class="search-panel" hidden>
+  <div class="sp-head">
+    <input type="search" id="searchInput" placeholder="한자 · 히라가나 · 한글 뜻으로 검색" autocomplete="off">
+    <button class="icon-btn" id="btnSearchClose" title="닫기">✕</button>
+  </div>
+  <div class="sp-body">
+    <p class="search-hint" id="searchHint"></p>
+    <div id="searchResults" class="word-list"></div>
+  </div>
+</div>
+
+<script src="data/vocab.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+<script>
+  // 설치형 앱으로 쓰기 위한 서비스워커. file:// 로 열었을 때는 등록되지 않는다.
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,521 @@
+/* 단어 데이터 + 학습 기록 저장소 */
+(function (global) {
+  'use strict';
+
+  var VOCAB_KEY = 'jvocab.vocab.v1';
+  var PROG_KEY  = 'jvocab.progress.v1';
+  var TIME_KEY  = 'jvocab.time.v1';
+  var SESS_KEY  = 'jvocab.session.v1';
+  var DEV_KEY   = 'jvocab.device.v1';
+
+  // 레벨별 다음 복습까지의 간격(일). 레벨이 오를수록 간격이 벌어지면서
+  // 단기기억 → 장기기억으로 넘어간다.
+  var INTERVALS = [0, 1, 3, 7, 16, 35];
+  var MAX_LEVEL = INTERVALS.length - 1;
+  var LONG_LEVEL = 4; // 이 레벨부터 장기기억
+
+  var DAY_MS = 86400000;
+
+  // 책에 쓰이는 품사 표기. CSV에서 품사 칸을 알아보는 데 쓴다.
+  var POS_RE = /^(명|동|い형|な형|부|접속|감|연체|조수|접두|접미|명·동|형)$/;
+
+  function today() {
+    var d = new Date();
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
+  }
+
+  function read(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function write(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  var days = {};      // { "26": {day, title, words:[...]} }
+  var progress = {};  // { "26-1552": {level, due, seen, rO, rX, mO, mX, last} }
+  var timeLog = {};   // { "2026-08-27": { 기기id: 초 } }
+  var deviceId = '';  // 이 기기를 구분하는 값. PC와 폰의 공부 시간을 따로 세는 데 쓴다.
+
+  function keyOf(day, word) {
+    return day + '-' + (word.no != null ? word.no : word.word);
+  }
+
+  /* ---------- 데이터 적재 ---------- */
+
+  function normalizeExamples(v) {
+    if (!Array.isArray(v)) return [];
+    return v.map(function (e) {
+      if (typeof e === 'string') return { jp: e.trim(), ko: '' };
+      if (!e || !e.jp) return null;
+      return { jp: String(e.jp).trim(), ko: String(e.ko == null ? '' : e.ko).trim() };
+    }).filter(Boolean);
+  }
+
+  function normalizeGrammar(v) {
+    if (!Array.isArray(v)) return [];
+    return v.map(function (g) {
+      // "동사 보통형 + だけあって -(인) 만큼" 처럼 한 줄로 줘도 받아들인다.
+      if (typeof g === 'string') {
+        var s = g.trim();
+        if (!s) return null;
+        var m = s.split(/\s+[-–—]\s+|\s{2,}/);
+        return m.length > 1 ? { form: m[0].trim(), meaning: m.slice(1).join(' ').trim() }
+                            : { form: s, meaning: '' };
+      }
+      if (!g || !g.form) return null;
+      return { form: String(g.form).trim(), meaning: String(g.meaning == null ? '' : g.meaning).trim() };
+    }).filter(Boolean);
+  }
+
+  function normalizeRelated(v) {
+    if (!Array.isArray(v)) return [];
+    return v.map(function (r) {
+      if (!r || !r.word) return null;
+      return {
+        word: String(r.word).trim(),
+        reading: String(r.reading == null ? '' : r.reading).trim(),
+        pos: String(r.pos == null ? '' : r.pos).trim(),
+        meaning: String(r.meaning == null ? '' : r.meaning).trim()
+      };
+    }).filter(Boolean);
+  }
+
+  function normalizeDay(obj) {
+    if (!obj || obj.day == null || !Array.isArray(obj.words)) return null;
+    var words = [];
+    obj.words.forEach(function (w) {
+      if (!w || !w.word) return;
+      words.push({
+        no: w.no != null ? w.no : null,
+        word: String(w.word).trim(),
+        reading: (w.reading == null || w.reading === '') ? '-' : String(w.reading).trim(),
+        pos: String(w.pos == null ? '' : w.pos).trim(),
+        meaning: String(w.meaning == null ? '' : w.meaning).trim(),
+        star: !!w.star,
+        examples: normalizeExamples(w.examples),
+        grammar: normalizeGrammar(w.grammar),
+        related: normalizeRelated(w.related)
+      });
+    });
+    if (!words.length) return null;
+    return { day: Number(obj.day), title: String(obj.title || '').trim(), words: words };
+  }
+
+  function addDays(list) {
+    var added = 0;
+    list.forEach(function (raw) {
+      var d = normalizeDay(raw);
+      if (!d) return;
+      days[d.day] = d;
+      added++;
+    });
+    if (added) write(VOCAB_KEY, days);
+    return added;
+  }
+
+  // CSV/TSV: day,no,word,reading,meaning  (헤더 줄은 있어도 되고 없어도 됨)
+  function parseDelimited(text) {
+    var sep = text.indexOf('\t') > -1 ? '\t' : ',';
+    var byDay = {};
+    text.split(/\r?\n/).forEach(function (line) {
+      if (!line.trim()) return;
+      var raw = line.split(sep);
+      if (raw.length < 5) return;
+      var cell = function (i) { return String(raw[i] == null ? '' : raw[i]).trim().replace(/^"|"$/g, ''); };
+      if (!/^\d+$/.test(cell(0))) return; // 헤더 등 건너뜀
+      var d = Number(cell(0));
+      if (!byDay[d]) byDay[d] = { day: d, title: '', words: [] };
+      // 품사 칸은 있어도 되고 없어도 된다. 5번째 칸이 품사 표기면 품사로 본다.
+      var hasPos = POS_RE.test(cell(4));
+      var mStart = hasPos ? 5 : 4;
+      // 뜻에 쉼표가 흔하므로 그 뒤부터 줄 끝까지를 통째로 뜻으로 본다.
+      byDay[d].words.push({
+        no: /^\d+$/.test(cell(1)) ? Number(cell(1)) : null,
+        word: cell(2), reading: cell(3),
+        pos: hasPos ? cell(4) : '',
+        meaning: raw.slice(mStart).join(sep).trim().replace(/^"|"$/g, '')
+      });
+    });
+    return Object.keys(byDay).map(function (k) { return byDay[k]; });
+  }
+
+  function importText(text) {
+    var trimmed = text.replace(/^﻿/, '').trim();
+    if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+      var json = JSON.parse(trimmed);
+      return addDays(Array.isArray(json) ? json : [json]);
+    }
+    return addDays(parseDelimited(trimmed));
+  }
+
+  /* ---------- 기억 단계 ---------- */
+
+  // 레벨 0 = 아직 못 맞춘 단어, 1~3 = 간격이 짧은 단기기억,
+  // 4~5 = 16일·35일 간격을 견딘 장기기억.
+  function stageOf(level, seen) {
+    if (!seen) return 'new';
+    if (level === 0) return 'unknown';
+    return level < LONG_LEVEL ? 'short' : 'long';
+  }
+
+  var STAGE_LABEL = { 'new': '미학습', unknown: '모르는 단어', short: '단기기억', long: '장기기억' };
+
+  function recOf(day, word) {
+    var k = keyOf(day, word);
+    return progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+  }
+
+  function stageFor(day, word) {
+    var r = recOf(day, word);
+    return stageOf(r.level, r.seen);
+  }
+
+  function isDue(day, word) {
+    var r = recOf(day, word);
+    if (!r.seen) return true;
+    return r.due <= today();
+  }
+
+  /* ---------- 채점 ---------- */
+  // 읽는 법 O/X, 뜻 O/X 두 체크로 점수를 갱신한다.
+  //   둘 다 O  → 레벨 +1 (간격이 늘어남 = 장기기억으로 이동)
+  //   하나만 O → 레벨 유지, 내일 다시
+  //   둘 다 X  → 레벨 -2 (0 밑으로는 안 내려감), 오늘 다시
+  function grade(day, word, readingOk, meaningOk) {
+    var k = keyOf(day, word);
+    var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    var t = today();
+
+    if (readingOk) r.rO++; else r.rX++;
+    if (meaningOk) r.mO++; else r.mX++;
+
+    if (readingOk && meaningOk) {
+      r.level = Math.min(MAX_LEVEL, r.level + 1);
+      r.due = t + INTERVALS[r.level];
+    } else if (readingOk || meaningOk) {
+      // 읽는 법과 뜻 중 하나라도 모르면 장기기억으로 인정하지 않는다.
+      // 이미 장기기억이던 단어도 단기기억으로 끌어내린다.
+      r.level = Math.min(r.level, LONG_LEVEL - 1);
+      r.due = t + 1;
+    } else {
+      // 둘 다 모르면 레벨을 두 단계 떨어뜨리고 오늘 다시 낸다.
+      // 장기기억(4·5)이던 단어는 단기기억(2·3)으로 재분류되고,
+      // 원래 낮았던 단어만 '아예 모르는 단어'(0)로 내려간다.
+      r.level = Math.max(0, r.level - 2);
+      r.due = t;
+    }
+
+    r.seen++;
+    r.last = Date.now();
+    progress[k] = r;
+    write(PROG_KEY, progress);
+    return r;
+  }
+
+  /* ---------- 조회 ---------- */
+
+  function allDays() {
+    return Object.keys(days).map(Number).sort(function (a, b) { return a - b; })
+      .map(function (d) { return days[d]; });
+  }
+
+  function getDay(n) { return days[n] || null; }
+
+  function allWords() {
+    var out = [];
+    allDays().forEach(function (d) {
+      d.words.forEach(function (w) { out.push({ day: d.day, title: d.title, w: w }); });
+    });
+    return out;
+  }
+
+  function summarize(words, dayNo) {
+    var s = { total: words.length, unknown: 0, short: 0, long: 0, 'new': 0 };
+    words.forEach(function (w) { s[stageFor(dayNo, w)]++; });
+    return s;
+  }
+
+  function summarizeAll() {
+    var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
+    allWords().forEach(function (e) {
+      s.total++;
+      s[stageFor(e.day, e.w)]++;
+    });
+    return s;
+  }
+
+  function dueList() {
+    return allWords().filter(function (e) { return recOf(e.day, e.w).seen && isDue(e.day, e.w); });
+  }
+
+  function weakList() {
+    return allWords().filter(function (e) {
+      var st = stageFor(e.day, e.w);
+      return st === 'unknown' || st === 'new';
+    });
+  }
+
+  function search(q) {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    return allWords().filter(function (e) {
+      return e.w.word.toLowerCase().indexOf(q) > -1
+          || e.w.reading.toLowerCase().indexOf(q) > -1
+          || e.w.meaning.toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  /* ---------- 공부 시간 ---------- */
+
+  // 기기마다 한 번 만들어 두고 계속 쓴다. 기기를 알아보는 용도일 뿐
+  // 개인 정보는 담지 않는다.
+  function ensureDeviceId() {
+    var id = null;
+    try { id = localStorage.getItem(DEV_KEY); } catch (e) {}
+    if (!id) {
+      id = 'd' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      try { localStorage.setItem(DEV_KEY, id); } catch (e) {}
+    }
+    return id;
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function dateKey(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  // 공부 시간은 날짜별로 '기기마다 따로' 쌓는다.
+  //   timeLog = { "2026-08-27": { "d3f9a1c2": 1200, "d7b0e4aa": 1800 } }
+  // 이렇게 두면 기기를 합칠 때 기기별로 큰 값을 취하면 되므로,
+  // 같은 날 PC와 폰에서 공부한 시간이 제대로 더해지면서도
+  // 같은 백업을 여러 번 넣어도 시간이 부풀지 않는다.
+
+  function sumRec(rec) {
+    if (!rec) return 0;
+    if (typeof rec === 'number') return rec;   // 기기별로 나누기 전의 옛 기록
+    var s = 0;
+    Object.keys(rec).forEach(function (k) { s += rec[k] || 0; });
+    return s;
+  }
+
+  function addTime(sec) {
+    if (!(sec > 0)) return;
+    var k = dateKey(new Date());
+    var rec = timeLog[k];
+    if (typeof rec === 'number') rec = wrapLegacy(rec);
+    if (!rec) rec = {};
+    rec[deviceId] = (rec[deviceId] || 0) + sec;
+    timeLog[k] = rec;
+    write(TIME_KEY, timeLog);
+  }
+
+  function wrapLegacy(n) {
+    var o = {};
+    o[deviceId] = n;
+    return o;
+  }
+
+  function timeOn(d) { return sumRec(timeLog[dateKey(d)]); }
+
+  function timeToday() { return timeOn(new Date()); }
+
+  function timeTotal() {
+    var sum = 0;
+    Object.keys(timeLog).forEach(function (k) { sum += sumRec(timeLog[k]); });
+    return sum;
+  }
+
+  // 오늘까지 최근 n일을 오래된 순으로 돌려준다.
+  function recentDays(n) {
+    var out = [], now = new Date();
+    for (var i = n - 1; i >= 0; i--) {
+      var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      out.push({ date: d, key: dateKey(d), sec: sumRec(timeLog[dateKey(d)]) });
+    }
+    return out;
+  }
+
+  // 공부한 날이 며칠인지 (하루라도 기록이 있으면 1일)
+  function studiedDayCount() {
+    return Object.keys(timeLog).filter(function (k) { return sumRec(timeLog[k]) > 0; }).length;
+  }
+
+  /* ---------- 진행 중인 학습 저장 ---------- */
+  // 단어 전체를 저장하지 않고 (day, no, word) 참조만 남긴다.
+  // 나중에 단어 파일을 다시 올려도 어긋나지 않는다.
+
+  function saveSession(s) { write(SESS_KEY, s); }
+
+  function loadSession() { return read(SESS_KEY, null); }
+
+  function clearSession() {
+    try { localStorage.removeItem(SESS_KEY); } catch (e) {}
+  }
+
+  // 저장해 둔 참조로 실제 단어를 되찾는다. 못 찾으면 null.
+  function findWord(dayNo, no, wordText) {
+    var d = days[dayNo];
+    if (!d) return null;
+    var hit = null;
+    d.words.forEach(function (w) {
+      if (hit) return;
+      if (no != null && w.no === no) hit = w;
+      else if (no == null && w.word === wordText) hit = w;
+    });
+    if (!hit && wordText) {
+      d.words.forEach(function (w) { if (!hit && w.word === wordText) hit = w; });
+    }
+    return hit;
+  }
+
+  /* ---------- 백업 · 기기 간 합치기 ---------- */
+
+  function exportAll() {
+    return {
+      jvocab: 1,                       // 이 파일이 백업임을 알아보는 표시
+      device: deviceId,                // 어느 기기에서 나온 백업인지
+      exportedAt: new Date().toISOString(),
+      vocab: days,
+      progress: progress,
+      time: timeLog
+    };
+  }
+
+  function isBackup(obj) {
+    return !!(obj && obj.jvocab && obj.progress !== undefined);
+  }
+
+  // 다른 기기의 백업을 현재 기기 기록과 합친다.
+  //  - 단어: 같은 Day 는 들어온 쪽으로 교체
+  //  - 진도: 단어마다 '마지막으로 학습한 시각'이 더 나중인 쪽을 채택
+  //  - 시간: 날짜별로 더 큰 값을 채택 (같은 파일을 두 번 넣어도 부풀지 않도록)
+  function importBackup(obj) {
+    var stat = { days: 0, words: 0, mine: 0, theirs: 0, dates: 0 };
+
+    if (obj.vocab) {
+      Object.keys(obj.vocab).forEach(function (k) {
+        var d = normalizeDay(obj.vocab[k]);
+        if (d) { days[d.day] = d; stat.days++; }
+      });
+      write(VOCAB_KEY, days);
+    }
+
+    if (obj.progress) {
+      Object.keys(obj.progress).forEach(function (k) {
+        var incoming = obj.progress[k];
+        var current = progress[k];
+        if (!incoming) return;
+        stat.words++;
+        if (!current) { progress[k] = incoming; stat.theirs++; return; }
+        if ((incoming.last || 0) > (current.last || 0)) {
+          progress[k] = incoming; stat.theirs++;
+        } else {
+          stat.mine++;
+        }
+      });
+      write(PROG_KEY, progress);
+    }
+
+    if (obj.time) {
+      Object.keys(obj.time).forEach(function (k) {
+        var inc = obj.time[k];
+        var cur = timeLog[k];
+        // 아주 예전 백업은 숫자로 들어온다. 어느 기기 것인지 알 수 있게 표시해 둔다.
+        if (typeof inc === 'number') {
+          var legacyKey = 'legacy:' + (obj.device || 'unknown');
+          var tmp = {}; tmp[legacyKey] = inc; inc = tmp;
+        }
+        if (typeof cur === 'number') cur = wrapLegacy(cur);
+        if (!cur) cur = {};
+        if (!inc) return;
+
+        var changed = false;
+        // 기기별로 더 큰 값을 남긴다. 같은 백업을 다시 넣어도 그대로다.
+        Object.keys(inc).forEach(function (dev) {
+          if ((inc[dev] || 0) > (cur[dev] || 0)) { cur[dev] = inc[dev]; changed = true; }
+        });
+        timeLog[k] = cur;
+        if (changed) stat.dates++;
+      });
+      write(TIME_KEY, timeLog);
+    }
+    stat.time = timeTotal();
+
+    return stat;
+  }
+
+  function resetProgress() {
+    progress = {};
+    write(PROG_KEY, progress);
+  }
+
+  /* ---------- 초기화 ---------- */
+
+  function init() {
+    days = read(VOCAB_KEY, {});
+    progress = read(PROG_KEY, {});
+    timeLog = read(TIME_KEY, {});
+    deviceId = ensureDeviceId();
+
+    // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
+    // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
+    // 그 백업을 되넣을 때 같은 시간이 두 번 더해진다.
+    var migrated = false;
+    Object.keys(timeLog).forEach(function (k) {
+      if (typeof timeLog[k] === 'number') {
+        timeLog[k] = wrapLegacy(timeLog[k]);
+        migrated = true;
+      }
+    });
+    if (migrated) write(TIME_KEY, timeLog);
+    if (global.DEFAULT_VOCAB) {
+      // 내장 데이터는 저장된 것이 없을 때만 채워 넣는다(업로드본을 덮지 않음).
+      global.DEFAULT_VOCAB.forEach(function (d) {
+        if (!days[d.day]) {
+          var n = normalizeDay(d);
+          if (n) days[n.day] = n;
+        }
+      });
+      write(VOCAB_KEY, days);
+    }
+  }
+
+  global.Store = {
+    init: init,
+    importText: importText,
+    allDays: allDays,
+    getDay: getDay,
+    allWords: allWords,
+    search: search,
+    grade: grade,
+    recOf: recOf,
+    stageFor: stageFor,
+    stageOf: stageOf,
+    isDue: isDue,
+    summarize: summarize,
+    summarizeAll: summarizeAll,
+    dueList: dueList,
+    weakList: weakList,
+    resetProgress: resetProgress,
+    exportAll: exportAll,
+    isBackup: isBackup,
+    importBackup: importBackup,
+    saveSession: saveSession,
+    loadSession: loadSession,
+    clearSession: clearSession,
+    findWord: findWord,
+    addTime: addTime,
+    timeOn: timeOn,
+    timeToday: timeToday,
+    timeTotal: timeTotal,
+    recentDays: recentDays,
+    studiedDayCount: studiedDayCount,
+    STAGE_LABEL: STAGE_LABEL,
+    INTERVALS: INTERVALS,
+    MAX_LEVEL: MAX_LEVEL
+  };
+})(window);
