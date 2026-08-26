@@ -349,6 +349,7 @@
 
     session.index++;
     persistSession();
+    if (global_Sync()) Sync.touch(); // 세션 중간에 앱을 꺼도 잃지 않게
     if (session.index >= session.queue.length) renderResult();
     else renderCard();
   }

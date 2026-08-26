@@ -141,6 +141,22 @@
     });
   }
 
+  /* ---------- 학습 중 자동 저장 ---------- */
+  // 세션을 끝내지 않고 앱을 꺼도 잃지 않도록, 단어를 채점할 때마다
+  // 타이머를 다시 걸어 마지막 채점 후 잠시 뒤에 한 번 올린다.
+
+  var IDLE_PUSH_MS = 20000;
+  var timer = null;
+
+  function touch() {
+    if (!user) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () {
+      timer = null;
+      sync().catch(function () {});
+    }, IDLE_PUSH_MS);
+  }
+
   /* ---------- 시작 ---------- */
 
   function init() {
@@ -149,9 +165,14 @@
     if (read(EMAIL_KEY)) load().catch(function () {});
 
     global.addEventListener('online', function () { if (user) sync().catch(function () {}); });
+
     // 앱을 덮거나 끌 때 마지막 상태를 올린다.
+    // visibilitychange 는 확실하지 않은 경우가 있어 pagehide 도 같이 건다.
     document.addEventListener('visibilitychange', function () {
       if (document.hidden && user) sync().catch(function () {});
+    });
+    global.addEventListener('pagehide', function () {
+      if (user) sync().catch(function () {});
     });
   }
 
@@ -162,6 +183,7 @@
     signIn: signIn,
     signUp: signUp,
     signOut: signOut,
-    sync: sync
+    sync: sync,
+    touch: touch
   };
 })(window);
