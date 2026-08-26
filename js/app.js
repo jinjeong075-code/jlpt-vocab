@@ -357,6 +357,7 @@
 
   function renderResult() {
     Store.clearSession(); // 다 풀었으므로 이어하기 대상이 아니다
+    if (global_Sync()) Sync.sync().catch(function () {}); // 결과를 바로 올린다
     $('progressFill').style.width = '100%';
     var res = session.results;
     var perfect = res.filter(function (x) { return x.r && x.m; }).length;
@@ -501,6 +502,107 @@
     var h = m / 60;
     return (h % 1 === 0 ? h : h.toFixed(1)) + 'h';
   }
+
+  /* ---------------- 동기화 ---------------- */
+
+  function fmtAgo(ts) {
+    if (!ts) return '아직 없음';
+    var s = Math.round((Date.now() - ts) / 1000);
+    if (s < 60) return '방금';
+    if (s < 3600) return Math.floor(s / 60) + '분 전';
+    if (s < 86400) return Math.floor(s / 3600) + '시간 전';
+    return Math.floor(s / 86400) + '일 전';
+  }
+
+  function renderSync(st) {
+    $('btnSyncTop').hidden = !st.configured;
+    if (!st.configured) return;
+
+    $('btnSyncTop').textContent = st.busy ? '⟳' : '☁';
+    $('btnSyncTop').classList.toggle('spin', st.busy);
+    $('btnSyncTop').classList.toggle('on', st.signedIn);
+
+    $('syncOut').hidden = st.signedIn;
+    $('syncIn').hidden = !st.signedIn;
+    if (st.signedIn) {
+      $('syncWho').textContent = st.email;
+      $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
+      $('btnSyncNow').disabled = st.busy || !st.online;
+      $('btnSyncNow').textContent = st.busy ? '동기화 중…'
+        : (st.online ? '지금 동기화' : '오프라인');
+    } else if (st.email) {
+      $('syncEmail').value = $('syncEmail').value || st.email;
+    }
+  }
+
+  function syncError(e) {
+    var m = String((e && e.code) || (e && e.message) || e);
+    if (m.indexOf('invalid-credential') > -1 || m.indexOf('wrong-password') > -1
+        || m.indexOf('user-not-found') > -1) return '이메일이나 비밀번호가 맞지 않습니다.';
+    if (m.indexOf('email-already-in-use') > -1) return '이미 있는 계정입니다. 로그인을 눌러 주세요.';
+    if (m.indexOf('weak-password') > -1) return '비밀번호는 6자 이상이어야 합니다.';
+    if (m.indexOf('invalid-email') > -1) return '이메일 형식이 올바르지 않습니다.';
+    if (m.indexOf('network') > -1) return '인터넷 연결을 확인해 주세요.';
+    return m;
+  }
+
+  function showSyncErr(id, msg) {
+    var el = $(id);
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  function bindSync() {
+    if (!global_Sync()) return;
+
+    Sync.onChange(renderSync);
+    renderSync(Sync.status());
+
+    $('btnSyncTop').addEventListener('click', function () {
+      showSyncErr('syncErr', ''); showSyncErr('syncErr2', '');
+      $('syncPanel').hidden = false;
+      renderSync(Sync.status());
+    });
+    $('btnSyncClose').addEventListener('click', function () { $('syncPanel').hidden = true; });
+    $('syncPanel').addEventListener('click', function (ev) {
+      if (ev.target === $('syncPanel')) $('syncPanel').hidden = true;
+    });
+
+    var creds = function () {
+      return [$('syncEmail').value.trim(), $('syncPw').value];
+    };
+
+    $('btnSignIn').addEventListener('click', function () {
+      var c = creds();
+      showSyncErr('syncErr', '');
+      Sync.signIn(c[0], c[1])
+        .then(function () { $('syncPw').value = ''; })
+        .catch(function (e) { showSyncErr('syncErr', syncError(e)); });
+    });
+
+    $('btnSignUp').addEventListener('click', function () {
+      var c = creds();
+      showSyncErr('syncErr', '');
+      Sync.signUp(c[0], c[1])
+        .then(function () { $('syncPw').value = ''; })
+        .catch(function (e) { showSyncErr('syncErr', syncError(e)); });
+    });
+
+    $('btnSyncNow').addEventListener('click', function () {
+      showSyncErr('syncErr2', '');
+      Sync.sync()
+        .then(function () { renderHome(); })
+        .catch(function (e) { showSyncErr('syncErr2', syncError(e)); });
+    });
+
+    $('btnSignOut').addEventListener('click', function () {
+      Sync.signOut().then(function () { showSyncErr('syncErr', ''); });
+    });
+
+    Sync.init();
+  }
+
+  function global_Sync() { return typeof Sync !== 'undefined' && Sync; }
 
   /* ---------------- 백업 내보내기 ---------------- */
 
@@ -796,6 +898,7 @@
 
   Store.init();
   bind();
+  bindSync();
   ['click', 'keydown', 'pointerdown', 'touchstart'].forEach(function (t) {
     document.addEventListener(t, markActivity, true);
   });

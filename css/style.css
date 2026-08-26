@@ -415,6 +415,53 @@ kbd {
 }
 .ox-btn kbd { display: block; margin: 2px 0 0; background: transparent; opacity: .5; }
 
+/* ---------- 동기화 ---------- */
+.icon-btn.on { color: var(--ok); }
+.icon-btn.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.sheet {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0,0,0,.55); animation: fade .15s ease;
+}
+.sheet-box {
+  width: 100%; max-width: 360px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 10px 12px 16px; border-bottom: 1px solid var(--line);
+}
+.sheet-title { font-size: 15px; font-weight: 700; }
+.sheet-body { padding: 16px; display: flex; flex-direction: column; gap: 9px; }
+.sheet-note { margin: 0 0 4px; font-size: 12px; color: var(--dim); line-height: 1.5; }
+.sheet-body input {
+  width: 100%; padding: 12px 13px; font-size: 15px; font-family: inherit;
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text); outline: none;
+}
+.sheet-body input:focus { border-color: var(--accent); }
+.sheet-err {
+  margin: 0; font-size: 12px; color: var(--no);
+  background: rgba(248,113,113,.1); border-radius: 8px; padding: 9px 11px;
+}
+.sheet-go {
+  width: 100%; padding: 13px; border-radius: 10px; border: none; cursor: pointer;
+  background: var(--accent); color: #0f1117; font-size: 14px; font-weight: 700; font-family: inherit;
+}
+.sheet-go:disabled { background: var(--panel2); color: var(--dim); cursor: not-allowed; }
+.sheet-sub {
+  width: 100%; padding: 10px; border-radius: 10px; cursor: pointer;
+  background: transparent; border: none; color: var(--dim);
+  font-size: 12px; font-family: inherit;
+}
+.sheet-sub:hover { color: var(--text); }
+.sync-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+.sync-k { color: var(--dim); }
+.sync-v { text-align: right; word-break: break-all; }
+
 /* ---------- 검색 패널 (전체 화면 위에 겹침) ---------- */
 body.no-scroll { overflow: hidden; }
 

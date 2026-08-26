@@ -19,6 +19,7 @@
 <header id="topbar">
   <button class="icon-btn" id="btnHome" title="홈">←</button>
   <div id="topTitle">일본어 단어 장기기억</div>
+  <button class="icon-btn" id="btnSyncTop" title="동기화" hidden>☁</button>
   <button class="icon-btn" id="btnTimeTop" title="공부 시간">📅</button>
   <button class="icon-btn" id="btnSearchTop" title="검색">🔍</button>
 </header>
@@ -203,6 +204,33 @@
 
 </main>
 
+<!-- ============ 동기화 ============ -->
+<div id="syncPanel" class="sheet" hidden>
+  <div class="sheet-box">
+    <div class="sheet-head">
+      <span class="sheet-title">동기화</span>
+      <button class="icon-btn" id="btnSyncClose" title="닫기">✕</button>
+    </div>
+
+    <div id="syncOut" class="sheet-body">
+      <p class="sheet-note">같은 계정으로 로그인한 기기끼리 단어·진도·공부 시간이 합쳐집니다.</p>
+      <input type="email" id="syncEmail" placeholder="이메일" autocomplete="username">
+      <input type="password" id="syncPw" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">
+      <p class="sheet-err" id="syncErr" hidden></p>
+      <button class="sheet-go" id="btnSignIn">로그인</button>
+      <button class="sheet-sub" id="btnSignUp">처음이면 계정 만들기</button>
+    </div>
+
+    <div id="syncIn" class="sheet-body" hidden>
+      <div class="sync-row"><span class="sync-k">계정</span><span class="sync-v" id="syncWho"></span></div>
+      <div class="sync-row"><span class="sync-k">마지막 동기화</span><span class="sync-v" id="syncLast"></span></div>
+      <p class="sheet-err" id="syncErr2" hidden></p>
+      <button class="sheet-go" id="btnSyncNow">지금 동기화</button>
+      <button class="sheet-sub" id="btnSignOut">로그아웃</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ 검색 (어느 화면 위에서든 열린다. 학습 중에도 세션이 유지된다) ============ -->
 <div id="searchPanel" class="search-panel" hidden>
   <div class="sp-head">
@@ -216,7 +244,9 @@
 </div>
 
 <script src="data/vocab.js"></script>
+<script src="js/firebase-config.js"></script>
 <script src="js/store.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 <script>
   // 설치형 앱으로 쓰기 위한 서비스워커. file:// 로 열었을 때는 등록되지 않는다.
