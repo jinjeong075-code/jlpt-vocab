@@ -81,6 +81,7 @@
     <div class="head-actions">
       <button class="mini-btn" id="btnSelAll">전체 선택</button>
       <button class="mini-btn" id="btnUpload">＋ 파일 불러오기</button>
+      <button class="mini-btn" id="btnHowTo">단어 만드는 법</button>
       <button class="mini-btn" id="btnBackup">백업 내보내기</button>
     </div>
   </div>
@@ -203,6 +204,39 @@
 </section>
 
 </main>
+
+<!-- ============ 단어 추가 (폰에서 Claude로 만든 JSON을 바로 붙여넣는다) ============ -->
+<div id="howToPanel" class="sheet" hidden>
+  <div class="sheet-box wide">
+    <div class="sheet-head">
+      <span class="sheet-title">단어 만드는 법</span>
+      <button class="icon-btn" id="btnHowToClose" title="닫기">✕</button>
+    </div>
+
+    <div class="sheet-body">
+      <div class="step">
+        <span class="step-n">1</span>
+        <div class="step-b">
+          <b>Claude 앱에 책 PDF나 사진을 올리고</b>
+          <span>아래 문장을 복사해서 같이 보낸다</span>
+          <button class="sheet-sub copy" id="btnCopyPrompt">프롬프트 복사</button>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">2</span>
+        <div class="step-b">
+          <b>Claude가 준 JSON을 복사해서</b>
+          <span>아래 칸에 붙여넣고 추가를 누른다</span>
+        </div>
+      </div>
+
+      <textarea id="pasteBox" rows="6" placeholder='{ "day": 27, "title": "...", "words": [ ... ] }' spellcheck="false"></textarea>
+      <p class="sheet-err" id="pasteErr" hidden></p>
+      <button class="sheet-go" id="btnPasteAdd">추가</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ 동기화 ============ -->
 <div id="syncPanel" class="sheet" hidden>

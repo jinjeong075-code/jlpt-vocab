@@ -605,6 +605,111 @@
 
   function global_Sync() { return typeof Sync !== 'undefined' && Sync; }
 
+  /* ---------------- 단어 만드는 법 · 붙여넣기 추가 ---------------- */
+
+  // Claude 에게 그대로 보내면 되는 지시문. 이 앱이 읽는 형식을 설명한다.
+  var PROMPT = [
+    '이 일본어 단어장 페이지에서 단어를 뽑아 아래 JSON 형식으로만 답해줘.',
+    '설명은 빼고 JSON만.',
+    '',
+    '{',
+    '  "day": 27,',
+    '  "title": "페이지 하단에 적힌 주제",',
+    '  "words": [',
+    '    {',
+    '      "no": 1558,',
+    '      "word": "見送る",',
+    '      "reading": "みおくる",',
+    '      "pos": "동",',
+    '      "meaning": "배웅하다",',
+    '      "star": true,',
+    '      "examples": [{',
+    '        "jp": "友[とも]だちを空港[くうこう]まで見送[みおく]った。",',
+    '        "ko": "친구를 공항까지 배웅했다."',
+    '      }],',
+    '      "grammar": [{ "form": "동사 사전형 + ところだ", "meaning": "-(하)려던 참이다" }],',
+    '      "related": [{ "word": "見送り", "reading": "みおくり", "pos": "명", "meaning": "배웅, 전송" }]',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    '규칙:',
+    '- word = 왼쪽 일본어 단어, reading = 가운데 히라가나(없으면 "-"), meaning = 오른쪽 한글 뜻',
+    '- pos = 뜻 앞 작은 네모의 품사: 명 / 동 / い형 / な형 / 부',
+    '- star = 단어 옆에 ★ 가 있으면 true, 없으면 생략',
+    '- 예문의 한자에는 후리가나를 漢字[かな] 형태로 반드시 붙일 것.',
+    '  한자마다가 아니라 읽기 단위로: 留学[りゅうがく]に行[い]く',
+    '- grammar 는 예문 아래 [문형], related 는 [관련어]. 없으면 생략',
+    '- 여러 Day 를 한 번에 주면 [ {...}, {...} ] 배열로',
+    '- 확실하지 않은 글자는 지어내지 말고 그 단어를 빼고 어떤 걸 뺐는지 마지막에 알려줘'
+  ].join('\n');
+
+  function copyPrompt() {
+    var done = function () {
+      var b = $('btnCopyPrompt');
+      b.textContent = '복사됨';
+      setTimeout(function () { b.textContent = '프롬프트 복사'; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(PROMPT).then(done, fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+    function fallbackCopy() {
+      var ta = document.createElement('textarea');
+      ta.value = PROMPT;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  }
+
+  function pasteAdd() {
+    var text = $('pasteBox').value.trim();
+    $('pasteErr').hidden = true;
+    if (!text) { showPasteErr('붙여넣은 내용이 없습니다.'); return; }
+
+    // Claude 가 ```json 으로 감싸 주는 경우가 흔하다.
+    text = text.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+
+    var obj;
+    try {
+      obj = JSON.parse(text);
+    } catch (e) {
+      showPasteErr('JSON 형식이 아닙니다. { 부터 } 까지 통째로 복사했는지 확인해 주세요.');
+      return;
+    }
+
+    try {
+      if (Store.isBackup(obj)) {
+        var s = Store.importBackup(obj);
+        finishPaste('백업을 합쳤습니다. 단어 ' + s.words + '개 확인.');
+      } else {
+        var n = Store.importText(JSON.stringify(obj));
+        if (!n) { showPasteErr('단어를 찾지 못했습니다. day 와 words 가 있는지 확인해 주세요.'); return; }
+        finishPaste(n + '개 Day를 추가했습니다.');
+      }
+    } catch (e) {
+      showPasteErr('불러오지 못했습니다: ' + e.message);
+    }
+  }
+
+  function showPasteErr(msg) {
+    $('pasteErr').textContent = msg;
+    $('pasteErr').hidden = false;
+  }
+
+  function finishPaste(msg) {
+    $('pasteBox').value = '';
+    $('howToPanel').hidden = true;
+    renderHome();
+    if (global_Sync()) Sync.sync().catch(function () {});  // 다른 기기로 바로 보낸다
+    alert(msg);
+  }
+
   /* ---------------- 백업 내보내기 ---------------- */
 
   function exportBackup() {
@@ -835,6 +940,17 @@
 
     $('btnUpload').addEventListener('click', function () { $('fileInput').click(); });
     $('btnBackup').addEventListener('click', exportBackup);
+
+    $('btnHowTo').addEventListener('click', function () {
+      $('pasteErr').hidden = true;
+      $('howToPanel').hidden = false;
+    });
+    $('btnHowToClose').addEventListener('click', function () { $('howToPanel').hidden = true; });
+    $('howToPanel').addEventListener('click', function (ev) {
+      if (ev.target === $('howToPanel')) $('howToPanel').hidden = true;
+    });
+    $('btnCopyPrompt').addEventListener('click', copyPrompt);
+    $('btnPasteAdd').addEventListener('click', pasteAdd);
 
     // 단어 파일과 백업 파일을 같은 버튼으로 받는다. 내용을 보고 알아서 구분한다.
     $('fileInput').addEventListener('change', function (ev) {

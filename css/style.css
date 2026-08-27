@@ -208,7 +208,13 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 12px; flex-wrap: wrap; gap: 8px; }
 .section-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
-.head-actions { display: flex; gap: 6px; }
+.head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 버튼이 여러 개라 좁은 화면에서는 글자가 잘린다. 한 줄을 통째로 내준다. */
+@media (max-width: 520px) {
+  .section-head { flex-direction: column; align-items: stretch; }
+  .head-actions { justify-content: flex-start; }
+  .head-actions .mini-btn { flex: 1 1 auto; white-space: nowrap; }
+}
 .mini-btn {
   padding: 7px 11px; font-size: 12px; border-radius: 9px; cursor: pointer;
   background: var(--panel2); border: 1px solid var(--line); color: var(--dim); font-family: inherit;
@@ -458,6 +464,30 @@ kbd {
   font-size: 12px; font-family: inherit;
 }
 .sheet-sub:hover { color: var(--text); }
+.sheet-box.wide { max-width: 460px; }
+.sheet-box.wide .sheet-body { max-height: 74vh; overflow-y: auto; }
+.step { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 4px; }
+.step-n {
+  flex: 0 0 auto; width: 21px; height: 21px; border-radius: 50%;
+  background: var(--accent); color: #0f1117;
+  font-size: 12px; font-weight: 700; text-align: center; line-height: 21px;
+}
+.step-b { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.step-b b { font-size: 13px; font-weight: 600; }
+.step-b span { font-size: 12px; color: var(--dim); line-height: 1.5; }
+.sheet-sub.copy {
+  align-self: flex-start; width: auto; margin-top: 6px; padding: 7px 13px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--accent); font-weight: 600;
+}
+#pasteBox {
+  width: 100%; padding: 11px 12px; font-size: 13px; line-height: 1.5;
+  font-family: ui-monospace, Consolas, monospace;
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text); outline: none; resize: vertical;
+}
+#pasteBox:focus { border-color: var(--accent); }
+
 .sync-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
 .sync-k { color: var(--dim); }
 .sync-v { text-align: right; word-break: break-all; }
