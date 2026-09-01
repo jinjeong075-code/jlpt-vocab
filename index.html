@@ -99,7 +99,8 @@
   <div class="sel-actions">
     <button class="mini-btn" id="btnSelClear">해제</button>
     <button class="mini-btn" id="btnSelView">목록</button>
-    <button class="sel-go" id="btnSelStudy">학습 시작</button>
+    <button class="sel-go alt" id="btnSelDue">복습</button>
+    <button class="sel-go" id="btnSelStudy">전체</button>
   </div>
 </div>
 
@@ -145,6 +146,9 @@
     <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
 
     <div id="checkBox" class="check-box" hidden>
+      <button class="both-btn" id="btnBothOk">둘 다 알았음 <kbd>Enter</kbd></button>
+      <div class="check-sep"><span>하나만 맞았으면 따로 체크</span></div>
+
       <div class="check-row">
         <span class="check-label">읽는 법을 알았나요?</span>
         <div class="ox">
@@ -160,6 +164,9 @@
         </div>
       </div>
       <button class="next-btn" id="btnNext" disabled>다음 <kbd>Enter</kbd></button>
+
+      <!-- 확실히 아는 단어를 복습 목록에서 빼는 버튼. 실수로 누르지 않도록 떨어뜨려 둔다. -->
+      <button class="known-btn" id="btnKnown">이미 확실히 아는 단어 — 장기기억으로 보내기</button>
     </div>
   </div>
 </section>
@@ -170,6 +177,11 @@
     <h1 id="resultSub">학습 완료</h1>
   </div>
   <div class="stat-grid" id="resultStats"></div>
+  <div class="res-tabs" id="resultTabs" hidden>
+    <button class="res-tab sel" id="tabWrong">틀린 단어</button>
+    <button class="res-tab" id="tabAll">전체</button>
+  </div>
+  <p class="empty-note" id="resultEmpty" hidden></p>
   <div id="resultList" class="word-list"></div>
   <div class="row-btns">
     <button class="big-btn primary" id="btnRetryWrong"><span class="bb-title">틀린 것 다시</span><span class="bb-sub" id="retryCount"></span></button>

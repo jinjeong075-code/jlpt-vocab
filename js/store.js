@@ -247,6 +247,21 @@
     return s;
   }
 
+  // 이미 확실히 아는 단어를 곧바로 장기기억으로 보낸다.
+  // 복습으로 증명된 것과 구분할 수 있게 known 표시를 남겨 둔다.
+  function markKnown(day, word) {
+    var k = keyOf(day, word);
+    var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    r.level = MAX_LEVEL;
+    r.due = today() + INTERVALS[MAX_LEVEL];
+    r.seen = (r.seen || 0) + 1;
+    r.known = 1;
+    r.last = Date.now();
+    progress[k] = r;
+    write(PROG_KEY, progress);
+    return r;
+  }
+
   function dueList() {
     return allWords().filter(function (e) { return recOf(e.day, e.w).seen && isDue(e.day, e.w); });
   }
@@ -501,6 +516,7 @@
     dueList: dueList,
     weakList: weakList,
     resetProgress: resetProgress,
+    markKnown: markKnown,
     exportAll: exportAll,
     isBackup: isBackup,
     importBackup: importBackup,

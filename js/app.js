@@ -12,10 +12,41 @@
   var randCount = 20;     // 전체 랜덤 학습에서 뽑을 개수 (0 = 전체)
   var calDate = new Date(); // 달력에서 보고 있는 달
   var searchOpen = false;   // 검색 패널이 떠 있는지
+  var resultAll = [], resultWrong = [], resultView = 'wrong';  // 결과 화면 탭
+  var navLock = false;      // 뒤로가기 처리 중에는 히스토리를 쌓지 않는다
 
   /* ---------------- 화면 ---------------- */
 
+  /* ---------------- 안드로이드 뒤로가기 ---------------- */
+  // 홈이 아닌 화면이나 덮개를 열 때 히스토리에 한 칸을 쌓아 둔다.
+  // 그래야 뒤로가기가 앱을 끄지 않고 이전 화면으로 돌아온다.
+  // 홈에서 뒤로가기를 누르면 쌓인 게 없으므로 안드로이드 관례대로 앱이 닫힌다.
+
+  function pushNav() {
+    if (navLock) return;
+    try { history.pushState({ jv: 1 }, ''); } catch (e) {}
+  }
+
+  // 덮개를 닫는 버튼은 직접 숨기지 않고 뒤로가기를 부른다.
+  // 그래야 쌓아 둔 히스토리가 정확히 하나씩 소모된다.
+  function goBack() {
+    try { history.back(); } catch (e) {}
+  }
+
+  function handleBack() {
+    navLock = true;
+    try {
+      if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
+      else if (!$('howToPanel').hidden) $('howToPanel').hidden = true;
+      else if (searchOpen) closeSearch();
+      else if (view !== 'home') { renderHome(); show('home'); }
+    } finally {
+      navLock = false;
+    }
+  }
+
   function show(name) {
+    if (name !== 'home' && name !== view) pushNav();
     view = name;
     $$('.view').forEach(function (v) { v.classList.remove('active'); });
     $('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
@@ -32,6 +63,7 @@
 
   function openSearch() {
     searchOpen = true;
+    pushNav();
     $('searchPanel').hidden = false;
     document.body.classList.add('no-scroll');
     runSearch();
@@ -123,10 +155,14 @@
     bar.hidden = !selected.length;
     document.body.classList.toggle('has-selbar', !!selected.length && view === 'home');
     if (!selected.length) return;
-    var n = wordsOf(selected).length;
+    var all = wordsOf(selected);
+    var due = all.filter(function (e) { return Store.isDue(e.day, e.w); });
     $('selDays').textContent = dayLabel(selected);
-    $('selWords').textContent = n + '단어';
-    $('btnSelStudy').disabled = !n;
+    $('selWords').textContent = all.length + '단어 · 복습할 것 ' + due.length + '개';
+    $('btnSelStudy').textContent = '전체 ' + all.length;
+    $('btnSelDue').textContent = '복습 ' + due.length;
+    $('btnSelStudy').disabled = !all.length;
+    $('btnSelDue').disabled = !due.length;
   }
 
   // 홈 상단의 진도 카드. '외웠다'의 기준은 장기기억이다.
@@ -341,12 +377,32 @@
     $('btnNext').disabled = (picked.reading === null || picked.meaning === null);
   }
 
+  // 둘 다 O 로 찍고 바로 넘어간다. 아는 단어를 빠르게 지나가기 위한 지름길.
+  function bothOk() {
+    if ($('checkBox').hidden) return;
+    pick('reading', 1);
+    pick('meaning', 1);
+    next();
+  }
+
+  // 확실히 아는 단어를 복습 목록에서 빼고 장기기억으로 보낸다.
+  function markKnown() {
+    if ($('checkBox').hidden) return;
+    var e = session.queue[session.index];
+    var rec = Store.markKnown(e.day, e.w);
+    session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
+    advance();
+  }
+
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
     var e = session.queue[session.index];
     var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1);
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
+    advance();
+  }
 
+  function advance() {
     session.index++;
     persistSession();
     if (global_Sync()) Sync.touch(); // 세션 중간에 앱을 꺼도 잃지 않게
@@ -370,31 +426,54 @@
     res.forEach(function (x) { s[Store.stageOf(x.level, 1)]++; });
     $('resultStats').innerHTML = statHTML(s);
 
-    $('resultList').innerHTML = res.map(function (x) {
-      var st = Store.stageOf(x.level, 1);
-      var detail = detailHTML(x.w, true);
-      return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
-          (detail ? ' role="button" tabindex="0"' : '') + '>' +
-        '<div class="wl-head">' +
-          '<span class="wl-dot dot-' + st + '"></span>' +
-          '<span class="wl-main">' +
-            '<span class="wl-word">' + dictHTML(x.w.word) +
-              '<span class="wl-reading">' + esc(x.w.reading) + '</span>' + posHTML(x.w.pos) +
-            '</span>' +
-            '<div class="wl-meaning">' + esc(x.w.meaning) + '</div>' +
-          '</span>' +
-          '<span class="wl-side">읽기 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X') +
-            '<span class="wl-day">' + Store.STAGE_LABEL[st] + '</span></span>' +
-          (detail ? '<span class="wl-caret">▾</span>' : '') +
-        '</div>' +
-        (detail ? '<div class="wl-detail" hidden>' + detail + '</div>' : '') +
-      '</div>';
-    }).join('');
+    // 틀린 단어만 모아서 먼저 보여주고, 전체로도 넘겨볼 수 있게 한다.
+    resultAll = res;
+    resultWrong = wrong;
+    resultView = wrong.length ? 'wrong' : 'all';
+    renderResultList();
 
     $('retryCount').textContent = wrong.length + '개';
     $('btnRetryWrong').disabled = !wrong.length;
     session.wrong = wrong.map(function (x) { return { day: x.day, w: x.w }; });
     show('result');
+  }
+
+  function resultItemHTML(x) {
+    var st = Store.stageOf(x.level, 1);
+    var detail = detailHTML(x.w, true);
+    var mark = x.known ? '이미 아는 단어'
+      : '읽기 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X');
+    return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
+        (detail ? ' role="button" tabindex="0"' : '') + '>' +
+      '<div class="wl-head">' +
+        '<span class="wl-dot dot-' + st + '"></span>' +
+        '<span class="wl-main">' +
+          '<span class="wl-word">' + dictHTML(x.w.word) +
+            '<span class="wl-reading">' + esc(x.w.reading) + '</span>' + posHTML(x.w.pos) +
+          '</span>' +
+          '<div class="wl-meaning">' + esc(x.w.meaning) + '</div>' +
+        '</span>' +
+        '<span class="wl-side">' + mark +
+          '<span class="wl-day">' + Store.STAGE_LABEL[st] + '</span></span>' +
+        (detail ? '<span class="wl-caret">▾</span>' : '') +
+      '</div>' +
+      (detail ? '<div class="wl-detail" hidden>' + detail + '</div>' : '') +
+    '</div>';
+  }
+
+  function renderResultList() {
+    var wrongOn = (resultView === 'wrong');
+    var list = wrongOn ? resultWrong : resultAll;
+
+    $('resultTabs').hidden = !resultWrong.length;  // 다 맞았으면 탭이 필요 없다
+    $('tabWrong').textContent = '틀린 단어 ' + resultWrong.length;
+    $('tabAll').textContent = '전체 ' + resultAll.length;
+    $('tabWrong').classList.toggle('sel', wrongOn);
+    $('tabAll').classList.toggle('sel', !wrongOn);
+
+    $('resultEmpty').hidden = list.length > 0;
+    $('resultEmpty').textContent = '틀린 단어가 없습니다. 전부 맞혔어요.';
+    $('resultList').innerHTML = list.map(resultItemHTML).join('');
   }
 
   /* ---------------- 검색 ---------------- */
@@ -561,12 +640,13 @@
 
     $('btnSyncTop').addEventListener('click', function () {
       showSyncErr('syncErr', ''); showSyncErr('syncErr2', '');
+      pushNav();
       $('syncPanel').hidden = false;
       renderSync(Sync.status());
     });
-    $('btnSyncClose').addEventListener('click', function () { $('syncPanel').hidden = true; });
+    $('btnSyncClose').addEventListener('click', goBack);
     $('syncPanel').addEventListener('click', function (ev) {
-      if (ev.target === $('syncPanel')) $('syncPanel').hidden = true;
+      if (ev.target === $('syncPanel')) goBack();
     });
 
     var creds = function () {
@@ -847,7 +927,7 @@
   function bind() {
     $('btnHome').addEventListener('click', function () { renderHome(); show('home'); });
     $('btnSearchTop').addEventListener('click', openSearch);
-    $('btnSearchClose').addEventListener('click', closeSearch);
+    $('btnSearchClose').addEventListener('click', goBack);
 
     $('btnResume').addEventListener('click', function () {
       var s = restoreSession();
@@ -894,6 +974,9 @@
     $('btnSelStudy').addEventListener('click', function () {
       startSession(entriesOfDays(selected, false), dayLabel(selected));
     });
+    $('btnSelDue').addEventListener('click', function () {
+      startSession(entriesOfDays(selected, true), dayLabel(selected) + ' 복습');
+    });
 
     $('btnStudyAll').addEventListener('click', function () {
       startSession(entriesOfDays(currentDays, false), dayLabel(currentDays));
@@ -923,6 +1006,10 @@
 
     $('btnReveal').addEventListener('click', reveal);
     $('btnNext').addEventListener('click', next);
+    $('btnBothOk').addEventListener('click', bothOk);
+    $('btnKnown').addEventListener('click', markKnown);
+    $('tabWrong').addEventListener('click', function () { resultView = 'wrong'; renderResultList(); });
+    $('tabAll').addEventListener('click', function () { resultView = 'all'; renderResultList(); });
     $$('.ox-btn').forEach(function (b) {
       b.addEventListener('click', function () { pick(b.dataset.t, Number(b.dataset.v)); });
     });
@@ -943,11 +1030,12 @@
 
     $('btnHowTo').addEventListener('click', function () {
       $('pasteErr').hidden = true;
+      pushNav();
       $('howToPanel').hidden = false;
     });
-    $('btnHowToClose').addEventListener('click', function () { $('howToPanel').hidden = true; });
+    $('btnHowToClose').addEventListener('click', goBack);
     $('howToPanel').addEventListener('click', function (ev) {
-      if (ev.target === $('howToPanel')) $('howToPanel').hidden = true;
+      if (ev.target === $('howToPanel')) goBack();
     });
     $('btnCopyPrompt').addEventListener('click', copyPrompt);
     $('btnPasteAdd').addEventListener('click', pasteAdd);
@@ -997,13 +1085,15 @@
     document.addEventListener('keydown', function (ev) {
       // 검색 패널이 열려 있으면 O/X 단축키가 검색어에 끼어들면 안 된다.
       if (searchOpen) {
-        if (ev.key === 'Escape') { ev.preventDefault(); closeSearch(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
         return;
       }
       if (view !== 'study') return;
       if (ev.key === 'Enter') {
         ev.preventDefault();
         if (!$('btnReveal').hidden) reveal();
+        // 아무것도 체크하지 않은 채 Enter = 둘 다 알았음. 아는 단어는 Enter 두 번이면 지나간다.
+        else if (picked.reading === null && picked.meaning === null) bothOk();
         else next();
       } else if (ev.key === '1') pick('reading', 1);
       else if (ev.key === '2') pick('reading', 0);
@@ -1016,6 +1106,7 @@
   Store.init();
   bind();
   bindSync();
+  window.addEventListener('popstate', handleBack);
   ['click', 'keydown', 'pointerdown', 'touchstart'].forEach(function (t) {
     document.addEventListener(t, markActivity, true);
   });
