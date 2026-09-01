@@ -307,16 +307,6 @@
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () {});
     });
-
-    // 새 버전이 설치되면 화면을 한 번 새로고침한다.
-    // 이게 없으면 HTML 은 새 것인데 JS 는 캐시의 옛 것이 남아,
-    // 버튼은 보이는데 눌러도 아무 일이 없는 상태가 된다.
-    var reloading = false;
-    navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (reloading) return;
-      reloading = true;
-      location.reload();
-    });
   }
 </script>
 </body>
