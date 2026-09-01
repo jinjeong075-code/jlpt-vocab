@@ -1,6 +1,6 @@
 /* 앱 셸을 캐시해 두어, 설치 후에는 서버가 꺼져 있어도 앱이 열리게 한다.
    파일을 고친 뒤에는 아래 CACHE 이름의 숫자를 올려야 새 버전이 반영된다. */
-var CACHE = 'jvocab-v11';
+var CACHE = 'jvocab-v12';
 
 var ASSETS = [
   './',
@@ -19,9 +19,15 @@ var ASSETS = [
 
 self.addEventListener('install', function (ev) {
   ev.waitUntil(
-    caches.open(CACHE)
-      .then(function (c) { return c.addAll(ASSETS); })
-      .then(function () { return self.skipWaiting(); })
+    caches.open(CACHE).then(function (c) {
+      // cache:'reload' 로 받아야 브라우저 HTTP 캐시를 거치지 않고 새 파일이 온다.
+      // 그냥 addAll 을 쓰면 옛 파일이 그대로 다시 캐시될 수 있다.
+      return Promise.all(ASSETS.map(function (url) {
+        return fetch(url, { cache: 'reload' })
+          .then(function (res) { return res.ok ? c.put(url, res) : null; })
+          .catch(function () { return null; });
+      }));
+    }).then(function () { return self.skipWaiting(); })
   );
 });
 

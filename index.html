@@ -146,9 +146,6 @@
     <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
 
     <div id="checkBox" class="check-box" hidden>
-      <button class="both-btn" id="btnBothOk">둘 다 알았음 <kbd>Enter</kbd></button>
-      <div class="check-sep"><span>하나만 맞았으면 따로 체크</span></div>
-
       <div class="check-row">
         <span class="check-label">읽는 법을 알았나요?</span>
         <div class="ox">
@@ -163,10 +160,19 @@
           <button class="ox-btn x" data-t="meaning" data-v="0">X<kbd>4</kbd></button>
         </div>
       </div>
+
+      <!-- 둘 다 맞았을 때 한 번에 찍는 버튼. 위 두 줄과 같은 O 모양으로 맞춘다. -->
+      <div class="check-row both">
+        <span class="check-label">둘 다 알았어요</span>
+        <div class="ox">
+          <button class="ox-btn o wide" id="btnBothOk">O<kbd>Enter</kbd></button>
+        </div>
+      </div>
+
       <button class="next-btn" id="btnNext" disabled>다음 <kbd>Enter</kbd></button>
 
       <!-- 확실히 아는 단어를 복습 목록에서 빼는 버튼. 실수로 누르지 않도록 떨어뜨려 둔다. -->
-      <button class="known-btn" id="btnKnown">이미 확실히 아는 단어 — 장기기억으로 보내기</button>
+      <button class="known-btn" id="btnKnown">아는 단어</button>
     </div>
   </div>
 </section>
@@ -270,6 +276,7 @@
     <div id="syncIn" class="sheet-body" hidden>
       <div class="sync-row"><span class="sync-k">계정</span><span class="sync-v" id="syncWho"></span></div>
       <div class="sync-row"><span class="sync-k">마지막 동기화</span><span class="sync-v" id="syncLast"></span></div>
+      <div class="sync-row"><span class="sync-k">앱 버전</span><span class="sync-v" id="syncBuild"></span></div>
       <p class="sheet-err" id="syncErr2" hidden></p>
       <button class="sheet-go" id="btnSyncNow">지금 동기화</button>
       <button class="sheet-sub" id="btnSignOut">로그아웃</button>
@@ -299,6 +306,16 @@
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+
+    // 새 버전이 설치되면 화면을 한 번 새로고침한다.
+    // 이게 없으면 HTML 은 새 것인데 JS 는 캐시의 옛 것이 남아,
+    // 버튼은 보이는데 눌러도 아무 일이 없는 상태가 된다.
+    var reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
     });
   }
 </script>

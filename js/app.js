@@ -15,6 +15,10 @@
   var resultAll = [], resultWrong = [], resultView = 'wrong';  // 결과 화면 탭
   var navLock = false;      // 뒤로가기 처리 중에는 히스토리를 쌓지 않는다
 
+  // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
+  // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
+  var BUILD = 'v12';
+
   /* ---------------- 화면 ---------------- */
 
   /* ---------------- 안드로이드 뒤로가기 ---------------- */
@@ -604,6 +608,7 @@
 
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
+    $('syncBuild').textContent = BUILD;
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
