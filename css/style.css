@@ -450,6 +450,74 @@ kbd {
 }
 .ox-btn kbd { display: block; margin: 2px 0 0; background: transparent; opacity: .5; }
 
+/* ---------- 폰에서 학습 카드를 한 화면에 담기 ----------
+   단어 + 정답 + 예문 + 체크 3줄 + 다음 + 아는 단어가 스크롤 없이 들어가야
+   손가락만 움직여 학습할 수 있다. 세로가 짧은 기기까지 고려해 값을 줄인다. */
+@media (max-width: 520px) {
+  .progress-wrap { padding: 10px 2px 6px; }
+  .progress-text { font-size: 11px; margin-top: 5px; }
+
+  .card { padding: 14px 14px 14px; margin-top: 8px; border-radius: 15px; }
+  .jp-word { font-size: clamp(36px, 11vw, 50px); padding: 14px 0 12px; }
+
+  .answer-box { padding-top: 10px; margin-bottom: 4px; }
+  .ans-row { padding: 4px 0; }
+  .ans-value { font-size: 17px; }
+
+  .detail-box.quiz { margin-bottom: 10px; }
+  .detail-box.quiz .ex { padding: 9px 0 2px; }
+  .ex-jp { font-size: 15px; line-height: 1.6; }
+
+  .check-box { gap: 7px; }
+  .check-row { padding: 7px 11px; border-radius: 10px; }
+  .check-label { font-size: 13px; }
+  .ox-btn { min-width: 50px; padding: 7px 0; font-size: 14px; }
+  .ox-btn.wide { min-width: 104px; }
+  .ox-btn kbd { display: none; }          /* 폰에서는 단축키 표시가 자리만 차지한다 */
+
+  .next-btn { padding: 11px; font-size: 14px; }
+  .next-btn kbd { display: none; }
+  .known-btn { margin-top: 6px; padding: 8px; font-size: 12px; }
+}
+
+/* 예문은 길이가 제각각이라 레이아웃을 가장 크게 밀어낸다.
+   화면 높이에 비례해 상한을 두고, 넘치면 예문 안에서만 스크롤한다.
+   이러면 아래 버튼들의 위치가 예문 길이와 상관없이 고정된다.
+   정답을 보면 quiz 클래스가 빠지고 해석·문형까지 붙으므로,
+   상한은 .detail-box 전체에 걸어야 한다. */
+@media (max-width: 520px) {
+  .detail-box { max-height: 22vh; overflow-y: auto; }
+}
+
+/* 세로가 특히 짧은 기기에서 한 번 더 줄인다 */
+@media (max-width: 520px) and (max-height: 740px) {
+  main { padding-top: 8px; }
+  .progress-wrap { padding: 6px 2px 4px; }
+  .progress-text { margin-top: 3px; }
+
+  .card { padding: 11px 12px; margin-top: 6px; }
+  .jp-word { font-size: clamp(30px, 9vw, 40px); padding: 6px 0 6px; letter-spacing: 1px; }
+
+  .answer-box { padding-top: 8px; margin-bottom: 2px; }
+  .ans-row { padding: 2px 0; }
+  .ans-value { font-size: 16px; }
+  .ans-label { flex-basis: 52px; }
+
+  .detail-box { max-height: 13vh; }
+  .detail-box.quiz { margin-bottom: 6px; }
+  .detail-box.quiz .ex { padding: 5px 0 2px; }
+  .ex-jp { font-size: 13px; line-height: 1.45; }
+  .card-meta { font-size: 10px; }
+  .badge { padding: 2px 7px; }
+
+  .check-box { gap: 5px; }
+  .check-row { padding: 5px 10px; }
+  .check-label { font-size: 12px; }
+  .ox-btn { padding: 6px 0; }
+  .next-btn { padding: 9px; }
+  .known-btn { margin-top: 4px; padding: 7px; }
+}
+
 /* ---------- 동기화 ---------- */
 .icon-btn.on { color: var(--ok); }
 .icon-btn.spin { animation: spin 1s linear infinite; }
