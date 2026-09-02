@@ -26,8 +26,30 @@
 
 <main>
 
-<!-- ============ 홈 ============ -->
-<section id="viewHome" class="view active">
+<!-- ============ 첫 화면: 단어 / 문법 ============ -->
+<section id="viewPick" class="view active">
+  <div class="pick">
+    <button class="pk" id="pkVocab">
+      <span class="em" lang="ja">語</span>
+      <span class="tx">
+        <span class="t">단어</span>
+        <span class="s" id="pkVocabSub">해커스 JLPT 기출 단어장</span>
+      </span>
+      <span class="pct" id="pkVocabPct">0%</span>
+    </button>
+    <button class="pk" id="pkGram">
+      <span class="em" lang="ja">文</span>
+      <span class="tx">
+        <span class="t">문법</span>
+        <span class="s" id="pkGramSub">JLPT 문법사전 N5~N1</span>
+      </span>
+      <span class="pct" id="pkGramPct">0%</span>
+    </button>
+  </div>
+</section>
+
+<!-- ============ 단어 홈 ============ -->
+<section id="viewHome" class="view">
   <div class="prog-card">
     <div class="prog-top">
       <div>
@@ -196,6 +218,60 @@
   </div>
 </section>
 
+<!-- ============ 문법 홈 ============ -->
+<section id="viewGram" class="view">
+  <div class="prog-card">
+    <div class="prog-top">
+      <div>
+        <div class="prog-label">장기기억으로 외운 문형</div>
+        <div class="prog-count"><b id="gProgLong">0</b> <span id="gProgTotal">/ 0 문형</span></div>
+      </div>
+      <div class="prog-pct" id="gProgPct">0<i>%</i></div>
+    </div>
+    <div class="prog-bar" id="gProgSeg"></div>
+  </div>
+
+  <div class="stat-grid" id="gStats"></div>
+
+  <p class="secto">무엇을 할까요</p>
+  <div class="pick">
+    <button class="pk" id="gmLearn">
+      <span class="em">📖</span>
+      <span class="tx"><span class="t">내용 보기</span>
+        <span class="s">문형·의미·접속·예문을 읽습니다. 채점하지 않습니다.</span></span>
+      <span class="pct">›</span>
+    </button>
+    <button class="pk" id="gmCloze">
+      <span class="em">✏️</span>
+      <span class="tx"><span class="t">빈칸 채우기</span>
+        <span class="s">예문의 문형 자리를 비웁니다. 직접 입력해 확인합니다.</span></span>
+      <span class="pct" id="gmClozeN"></span>
+    </button>
+    <button class="pk" id="gmChoice">
+      <span class="em">🔀</span>
+      <span class="tx"><span class="t">4지선다</span>
+        <span class="s">헷갈리는 문형 중에서 고릅니다. 시험 문제와 같은 형태.</span></span>
+      <span class="pct" id="gmChoiceN"></span>
+    </button>
+  </div>
+  <p class="empty-note" id="gEmptyNote" hidden>문법 데이터가 아직 없습니다.</p>
+</section>
+
+<!-- ============ 문법: 챕터 고르기 (내용 보기용) ============ -->
+<section id="viewGramCh" class="view">
+  <div class="section-head"><h2 id="gChTitle">챕터 선택</h2></div>
+  <div id="gChList" class="ch-list"></div>
+</section>
+
+<!-- ============ 문법 학습 ============ -->
+<section id="viewGramStudy" class="view">
+  <div class="progress-wrap">
+    <div class="progress-bar"><i id="gFill"></i></div>
+    <div class="progress-text"><span id="gCount">0 / 0</span><span id="gLabel"></span></div>
+  </div>
+  <div id="gStage"></div>
+</section>
+
 <!-- ============ 공부 시간 ============ -->
 <section id="viewTime" class="view">
   <div class="time-top">
@@ -298,6 +374,7 @@
 </div>
 
 <script src="data/vocab.js"></script>
+<script src="data/grammar.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>

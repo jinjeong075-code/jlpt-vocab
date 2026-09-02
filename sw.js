@@ -1,6 +1,6 @@
 ﻿/* 앱 셸을 캐시해 두어, 설치 후에는 서버가 꺼져 있어도 앱이 열리게 한다.
    파일을 고친 뒤에는 아래 CACHE 이름의 숫자를 올려야 새 버전이 반영된다. */
-var CACHE = 'jvocab-v18';
+var CACHE = 'jvocab-v19';
 
 var ASSETS = [
   './',

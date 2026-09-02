@@ -3,6 +3,7 @@
   'use strict';
 
   var VOCAB_KEY = 'jvocab.vocab.v1';
+  var GRAM_KEY  = 'jvocab.grammar.v1';
   var PROG_KEY  = 'jvocab.progress.v1';
   var TIME_KEY  = 'jvocab.time.v1';
   var SESS_KEY  = 'jvocab.session.v1';
@@ -35,12 +36,187 @@
   }
 
   var days = {};      // { "26": {day, title, words:[...]} }
-  var progress = {};  // { "26-1552": {level, due, seen, rO, rX, mO, mX, last} }
+  var gram = {};      // { "N3-2": {level, section, sectionTitle, items:[...]} }
+  var progress = {};  // { "26-1552": {...}, "g:N3-41-1": {...} }  단어와 문법이 한 곳에
   var timeLog = {};   // { "2026-08-27": { 기기id: 초 } }
   var deviceId = '';  // 이 기기를 구분하는 값. PC와 폰의 공부 시간을 따로 세는 데 쓴다.
 
   function keyOf(day, word) {
     return day + '-' + (word.no != null ? word.no : word.word);
+  }
+
+  // 문법은 'g:' 를 붙여 단어와 절대 겹치지 않게 한다.
+  // 그래서 진도 저장소가 하나로 유지되고 동기화도 그대로 동작한다.
+  function gKeyOf(item) {
+    return 'g:' + item.level + '-' + item.no + (item.sub ? '-' + item.sub : '');
+  }
+
+  /* ---------- 문법 데이터 ---------- */
+
+  function normalizeGramItem(x) {
+    if (!x || !x.pattern) return null;
+    var exs = [];
+    (Array.isArray(x.examples) ? x.examples : []).forEach(function (e) {
+      if (!e || !e.jp) return;
+      exs.push({
+        jp: String(e.jp).trim(),
+        ko: String(e.ko == null ? '' : e.ko).trim(),
+        type: String(e.type == null ? '' : e.type).trim()
+      });
+    });
+    return {
+      no: x.no != null ? Number(x.no) : null,
+      sub: x.sub != null ? Number(x.sub) : null,
+      group: String(x.group == null ? '' : x.group).trim(),
+      pattern: String(x.pattern).trim(),
+      ko: String(x.ko == null ? '' : x.ko).trim(),
+      meaning: String(x.meaning == null ? '' : x.meaning).trim(),
+      connect: String(x.connect == null ? '' : x.connect).trim(),
+      examples: exs
+    };
+  }
+
+  function normalizeGram(obj) {
+    if (!obj || !obj.level || !Array.isArray(obj.items)) return null;
+    var items = [];
+    obj.items.forEach(function (x) {
+      var it = normalizeGramItem(x);
+      if (it) { it.level = String(obj.level).trim(); it.section = Number(obj.section) || 0; items.push(it); }
+    });
+    if (!items.length) return null;
+    return {
+      level: String(obj.level).trim(),
+      section: Number(obj.section) || 0,
+      sectionTitle: String(obj.sectionTitle || '').trim(),
+      items: items
+    };
+  }
+
+  function gramFileKey(g) { return g.level + '-' + g.section; }
+
+  function loadGram(list) {
+    var n = 0;
+    (Array.isArray(list) ? list : [list]).forEach(function (o) {
+      var g = normalizeGram(o);
+      if (g) { gram[gramFileKey(g)] = g; n++; }
+    });
+    if (n) write(GRAM_KEY, gram);
+    return n;
+  }
+
+  // 책의 레벨 순서대로 정렬한다.
+  var LEVEL_ORDER = ['N5+N4', 'N5', 'N4', 'N3', 'N2', 'N1'];
+  function levelRank(l) {
+    var i = LEVEL_ORDER.indexOf(l);
+    return i < 0 ? 99 : i;
+  }
+
+  function gramSections() {
+    return Object.keys(gram).map(function (k) { return gram[k]; })
+      .sort(function (a, b) {
+        return levelRank(a.level) - levelRank(b.level) || a.section - b.section;
+      });
+  }
+
+  function gramLevels() {
+    var seen = {}, out = [];
+    gramSections().forEach(function (g) {
+      if (!seen[g.level]) { seen[g.level] = { level: g.level, items: [], sections: [] }; out.push(seen[g.level]); }
+      seen[g.level].sections.push(g);
+      seen[g.level].items = seen[g.level].items.concat(g.items);
+    });
+    return out;
+  }
+
+  function allGram() {
+    var out = [];
+    gramSections().forEach(function (g) {
+      g.items.forEach(function (it) { out.push(it); });
+    });
+    return out;
+  }
+
+  function gRecOf(item) {
+    return progress[gKeyOf(item)] ||
+      { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+  }
+
+  function gStageFor(item) {
+    var r = gRecOf(item);
+    return stageOf(r.level, r.seen);
+  }
+
+  function gIsDue(item) {
+    var r = gRecOf(item);
+    if (!r.seen) return true;
+    return r.due <= today();
+  }
+
+  // 채점은 단어와 같은 규칙을 쓴다.
+  //   patternOk = 문형을 떠올렸나, connectOk = 접속이 정확했나
+  function gGrade(item, patternOk, connectOk) {
+    var k = gKeyOf(item);
+    var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    var t = today();
+
+    if (patternOk) r.rO++; else r.rX++;
+    if (connectOk) r.mO++; else r.mX++;
+
+    if (patternOk && connectOk) {
+      r.level = Math.min(MAX_LEVEL, r.level + 1);
+      r.due = t + INTERVALS[r.level];
+    } else if (patternOk || connectOk) {
+      r.level = Math.min(r.level, LONG_LEVEL - 1);
+      r.due = t + 1;
+    } else {
+      r.level = Math.max(0, r.level - 2);
+      r.due = t;
+    }
+    r.seen++;
+    r.last = Date.now();
+    progress[k] = r;
+    write(PROG_KEY, progress);
+    return r;
+  }
+
+  function gSummarize(items) {
+    var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
+    items.forEach(function (it) { s.total++; s[gStageFor(it)]++; });
+    return s;
+  }
+
+  function gSummarizeAll() { return gSummarize(allGram()); }
+
+  // 4지선다 보기. 같은 묶음(group)을 우선 쓰고, 모자라면 접속이 비슷한 것에서 채운다.
+  function gChoices(item, n) {
+    n = n || 4;
+    var all = allGram();
+    var same = function (a, b) { return gKeyOf(a) === gKeyOf(b); };
+    var pool = all.filter(function (d) {
+      return !same(d, item) && item.group && d.group === item.group && d.level === item.level;
+    });
+    if (pool.length < n - 1) {
+      var more = all.filter(function (d) {
+        return !same(d, item) && pool.indexOf(d) < 0 &&
+               d.connect.charAt(0) === item.connect.charAt(0);
+      });
+      pool = pool.concat(shuffleArr(more));
+    }
+    if (pool.length < n - 1) {
+      var rest = all.filter(function (d) { return !same(d, item) && pool.indexOf(d) < 0; });
+      pool = pool.concat(shuffleArr(rest));
+    }
+    var opts = pool.slice(0, n - 1).concat([item]);
+    return shuffleArr(opts);
+  }
+
+  function shuffleArr(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)), t = a[i];
+      a[i] = a[j]; a[j] = t;
+    }
+    return a;
   }
 
   /* ---------- 데이터 적재 ---------- */
@@ -395,6 +571,7 @@
       device: deviceId,                // 어느 기기에서 나온 백업인지
       exportedAt: new Date().toISOString(),
       vocab: days,
+      grammar: gram,
       progress: progress,
       time: timeLog
     };
@@ -417,6 +594,14 @@
         if (d) { days[d.day] = d; stat.days++; }
       });
       write(VOCAB_KEY, days);
+    }
+
+    if (obj.grammar) {
+      Object.keys(obj.grammar).forEach(function (k) {
+        var g = normalizeGram(obj.grammar[k]);
+        if (g) { gram[gramFileKey(g)] = g; stat.gram = (stat.gram || 0) + 1; }
+      });
+      write(GRAM_KEY, gram);
     }
 
     if (obj.progress) {
@@ -472,6 +657,10 @@
 
   function init() {
     days = read(VOCAB_KEY, {});
+    gram = read(GRAM_KEY, {});
+    if (!Object.keys(gram).length && window.DEFAULT_GRAMMAR) {
+      loadGram(window.DEFAULT_GRAMMAR);
+    }
     progress = read(PROG_KEY, {});
     timeLog = read(TIME_KEY, {});
     deviceId = ensureDeviceId();
@@ -517,6 +706,22 @@
     weakList: weakList,
     resetProgress: resetProgress,
     markKnown: markKnown,
+
+    // 문법
+    loadGram: loadGram,
+    gramSections: gramSections,
+    gramLevels: gramLevels,
+    allGram: allGram,
+    gKeyOf: gKeyOf,
+    gRecOf: gRecOf,
+    gStageFor: gStageFor,
+    gIsDue: gIsDue,
+    gGrade: gGrade,
+    gSummarize: gSummarize,
+    gSummarizeAll: gSummarizeAll,
+    gChoices: gChoices,
+    shuffleArr: shuffleArr,
+
     exportAll: exportAll,
     isBackup: isBackup,
     importBackup: importBackup,

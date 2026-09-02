@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v18';
+  var BUILD = 'v19';
 
   /* ---------------- 화면 ---------------- */
 
@@ -37,27 +37,59 @@
     try { history.back(); } catch (e) {}
   }
 
+  // 뒤로가기가 돌아갈 화면. 문법 안에서는 문법 홈으로, 그다음이 첫 화면이다.
+  var BACK_TO = {
+    home: 'pick', gram: 'pick',
+    day: 'home', study: 'home', result: 'home', time: 'home',
+    gramCh: 'gram', gramStudy: 'gram'
+  };
+
   function handleBack() {
     navLock = true;
     try {
       if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
       else if (!$('howToPanel').hidden) $('howToPanel').hidden = true;
       else if (searchOpen) closeSearch();
-      else if (view !== 'home') { renderHome(); show('home'); }
+      else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
     } finally {
       navLock = false;
     }
   }
 
+  // 화면으로 이동하면서 필요한 것을 다시 그린다.
+  function goView(v) {
+    if (v === 'pick')      { renderPick(); show('pick'); }
+    else if (v === 'home') { renderHome(); show('home'); }
+    else if (v === 'gram') { renderGramHome(); show('gram'); }
+    else if (v === 'time') { renderTime(); show('time'); }
+    else show(v);
+  }
+
+  function renderPick() {
+    var v = Store.summarizeAll();
+    var g = Store.gSummarizeAll();
+    var pct = function (s) { return s.total ? Math.round(s.long / s.total * 100) : 0; };
+    $('pkVocabSub').textContent = '해커스 JLPT 기출 단어장 · ' + v.total + '단어';
+    $('pkGramSub').textContent  = 'JLPT 문법사전 N5~N1 · ' + g.total + '문형';
+    $('pkVocabPct').textContent = pct(v) + '%';
+    $('pkGramPct').textContent  = pct(g) + '%';
+  }
+
+  var VIEW_TITLE = {
+    pick: '일본어 학습', home: '단어', gram: '문법',
+    gramCh: '내용 보기', gramStudy: '문법'
+  };
+
   function show(name) {
-    if (name !== 'home' && name !== view) pushNav();
+    if (name !== 'pick' && name !== view) pushNav();
     view = name;
     $$('.view').forEach(function (v) { v.classList.remove('active'); });
     $('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
-    $('btnHome').hidden = (name === 'home');
-    $('btnTimeTop').hidden = (name === 'time' || name === 'study');
+    $('btnHome').hidden = (name === 'pick');
+    $('btnTimeTop').hidden = (name === 'study' || name === 'gramStudy' || name === 'time');
     $('selBar').hidden = !(name === 'home' && selected.length);
     document.body.classList.toggle('has-selbar', name === 'home' && !!selected.length);
+    $('topTitle').textContent = VIEW_TITLE[name] || '일본어 단어 장기기억';
     window.scrollTo(0, 0);
   }
 
@@ -516,7 +548,7 @@
 
   function startClock() {
     setInterval(function () {
-      if (view !== 'study') return;
+      if (view !== 'study' && view !== 'gramStudy') return;   // 문법 학습도 공부 시간에 넣는다
       if (document.hidden) return;
       if (Date.now() - lastActivity > IDLE_MS) return;
       Store.addTime(TICK_MS / 1000);
@@ -803,6 +835,283 @@
     alert(msg);
   }
 
+  /* ================= 문법 ================= */
+
+  var gMode = null;        // 'learn' | 'cloze' | 'choice'
+  var gQueue = [], gIdx = 0;
+  var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
+
+  var G_NAME = { learn: '내용 보기', cloze: '빈칸 채우기', choice: '4지선다' };
+
+  // 빈칸의 정답 = {{ }} 안의 내용에서 후리가나를 뺀 것.
+  // 문형 이름(~をもとに)이 아니라 그 문장에 실제로 들어간 형태를 답으로 본다.
+  function answerOf(ex) {
+    var m = ex.jp.match(/\{\{([\s\S]*?)\}\}/);
+    return m ? m[1].replace(/\[[^\]]*\]/g, '') : '';
+  }
+
+  // 비교 전 다듬기: 후리가나·물결표·공백을 빼고 전각/반각을 통일한다.
+  function normAns(s) {
+    s = String(s).replace(/\[[^\]]*\]/g, '').replace(/[~～]/g, '').replace(/\s+/g, '');
+    try { s = s.normalize('NFKC'); } catch (e) {}
+    return s;
+  }
+
+  // 예문 렌더링. 후리가나는 漢字[かな], 문형 자리는 {{ }} 로 표시돼 있다.
+  function gJP(jp, opt) {
+    opt = opt || {};
+    var out = '', i = 0, re = /\{\{([\s\S]*?)\}\}/g, m;
+    var seg = function (t) {
+      var s = '', last = 0, r = /([一-龯々〆ヶ]+)\[([^\]]*)\]/g, x;
+      while ((x = r.exec(t)) !== null) {
+        s += esc(t.slice(last, x.index));
+        s += (opt.ruby && x[2]) ? '<ruby>' + esc(x[1]) + '<rt>' + esc(x[2]) + '</rt></ruby>' : esc(x[1]);
+        last = x.index + x[0].length;
+      }
+      return s + esc(t.slice(last));
+    };
+    while ((m = re.exec(jp)) !== null) {
+      out += seg(jp.slice(i, m.index));
+      if (opt.blank)       out += '<span class="gblank">?</span>';
+      else if (opt.reveal) out += '<span class="gblank filled">' + seg(m[1]) + '</span>';
+      else                 out += '<mark>' + seg(m[1]) + '</mark>';
+      i = m.index + m[0].length;
+    }
+    return out + seg(jp.slice(i));
+  }
+
+  function renderGramHome() {
+    var s = Store.gSummarizeAll();
+    var pct = s.total ? (s.long / s.total * 100) : 0;
+    $('gProgLong').textContent = s.long;
+    $('gProgTotal').textContent = '/ ' + s.total + ' 문형';
+    $('gProgPct').innerHTML = (pct < 10 && pct > 0 ? pct.toFixed(1) : Math.round(pct)) + '<i>%</i>';
+
+    var t = s.total || 1;
+    var seg = function (n, c) {
+      return n ? '<i class="' + c + '" style="width:' + (n / t * 100).toFixed(3) + '%"></i>' : '';
+    };
+    $('gProgSeg').innerHTML =
+      seg(s.long, 'long') + seg(s.short, 'short') + seg(s.unknown, 'unknown') + seg(s['new'], 'new');
+    $('gStats').innerHTML = statHTML(s);
+
+    var all = Store.allGram();
+    var due = all.filter(function (it) { return Store.gIsDue(it); });
+    $('gmClozeN').textContent = due.length + '개';
+    $('gmChoiceN').textContent = due.length + '개';
+    $('gEmptyNote').hidden = all.length > 0;
+  }
+
+  // 내용 보기는 챕터(레벨·섹션)를 먼저 고른다.
+  function renderGramChapters() {
+    var secs = Store.gramSections();
+    $('gChList').innerHTML = secs.map(function (g) {
+      var s = Store.gSummarize(g.items);
+      var pct = s.total ? Math.round(s.long / s.total * 100) : 0;
+      var nums = g.items.map(function (i) { return i.no; });
+      var range = nums.length ? Math.min.apply(null, nums) + '~' + Math.max.apply(null, nums) : '';
+      return '<button class="ch" data-k="' + esc(g.level + '-' + g.section) + '">' +
+        '<span class="ch-lv">' + esc(g.level) + '</span>' +
+        '<span class="ch-tx">' +
+          '<span class="ch-t">' + String(g.section).padStart(2, '0') + '. ' + esc(g.sectionTitle) + '</span>' +
+          '<span class="ch-s">' + g.items.length + '개 · ' + range + '번</span>' +
+        '</span>' +
+        '<span class="ch-n">' + pct + '%</span></button>';
+    }).join('');
+    show('gramCh');
+  }
+
+  function startGram(mode, items, label) {
+    if (!items.length) return;
+    gMode = mode;
+    gQueue = Store.shuffleArr(items);
+    if (mode === 'learn') {
+      // 읽는 순서는 섞지 않는다. 책 순서대로 보는 게 자연스럽다.
+      gQueue = items.slice();
+    }
+    gIdx = 0; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    $('gLabel').textContent = label || G_NAME[mode];
+    show('gramStudy');
+    renderGramCard();
+  }
+
+  function renderGramCard() {
+    if (gIdx >= gQueue.length) { renderGramDone(); return; }
+    var it = gQueue[gIdx], h = '';
+
+    $('gCount').textContent = (gIdx + 1) + ' / ' + gQueue.length;
+    $('gFill').style.width = (gIdx / gQueue.length * 100) + '%';
+
+    var st = Store.gStageFor(it);
+    h += '<div class="card">';
+    h += '<div class="card-meta">' +
+         '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
+         '<span class="card-no">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-(' + it.sub + ')' : '') +
+           (it.group ? ' · <span lang="ja">' + esc(it.group) + '</span>' : '') + '</span></div>';
+
+    if (gMode === 'learn') {
+      h += '<div class="gpat" lang="ja">' + esc(it.pattern) + '</div>';
+      h += '<div class="gpatko">' + esc(it.ko) + '</div>';
+      h += grow('의미', esc(it.meaning), '');
+      h += grow('접속', esc(it.connect), 'cn');
+      h += '<div class="detail-box">';
+      it.examples.forEach(function (e) {
+        h += '<div class="ex ruby"><p class="ex-jp" lang="ja">' + gJP(e.jp, { ruby: true }) + '</p>' +
+             '<p class="ex-ko">' + esc(e.ko) + (e.type ? '<span class="gtag">' + esc(e.type) + '</span>' : '') + '</p></div>';
+      });
+      h += '</div><button class="next-btn" id="gNext">다음</button>';
+    }
+
+    if (gMode === 'cloze') {
+      var e0 = it.examples[0];
+      h += '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, gGraded ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>';
+      h += '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>';
+      if (!gGraded) {
+        h += '<input class="ginp" id="gAns" lang="ja" placeholder="빈칸에 들어갈 말" ' +
+             'autocomplete="off" autocapitalize="off" spellcheck="false">';
+        h += '<button class="next-btn" id="gSubmit">확인</button>';
+        h += '<button class="known-btn" id="gSkip">모르겠어요 · 정답 보기</button>';
+      } else {
+        var ok = (gGraded === 'right');
+        h += '<div class="gjudge ' + (gGraded === 'skip' ? 'skip' : (ok ? 'right' : 'wrong')) + '">' +
+             (gGraded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다')) + '</div>';
+        if (gGraded === 'wrong' && gTyped)
+          h += '<div class="gcmp"><span class="cl">입력</span><span class="cv bad" lang="ja">' + esc(gTyped) + '</span></div>';
+        h += '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerOf(e0)) + '</span></div>';
+        h += grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn');
+        h += grow('접속', esc(it.connect), 'cn');
+        h += grow('의미', esc(it.meaning), 'dim');
+        h += '<div class="check-box" style="margin-top:12px">' +
+          gcheck('문형을 떠올렸나요?', 'pat') +
+          gcheck('접속도 정확했나요?', 'con') +
+          '</div>';
+        h += '<button class="next-btn" id="gNext" disabled>다음</button>';
+        if (gGraded === 'wrong')
+          h += '<button class="known-btn" id="gOverride">이것도 맞는 표현이에요 · 정답 처리</button>';
+      }
+    }
+
+    if (gMode === 'choice') {
+      var e1 = it.examples[0];
+      if (!gOpts) gOpts = Store.gChoices(it, 4);
+      h += '<p class="ex-jp gq" lang="ja">' + gJP(e1.jp, { blank: true, ruby: true }) + '</p>';
+      h += '<p class="ex-ko gqko">' + esc(e1.ko) + '</p>';
+      h += '<div class="gopts">';
+      gOpts.forEach(function (d, i) {
+        var cls = '';
+        if (gPicked !== null) cls = (Store.gKeyOf(d) === Store.gKeyOf(it)) ? ' right' : (i === gPicked ? ' wrong' : '');
+        var why = (gPicked !== null)
+          ? '<span class="why">' + esc(d.ko) + ' · ' + esc(d.connect) + '</span>' : '';
+        h += '<button class="gopt' + cls + '" data-i="' + i + '"><span lang="ja">' + esc(d.pattern) + '</span>' + why + '</button>';
+      });
+      h += '</div>';
+      if (gPicked !== null) h += '<button class="next-btn" id="gNext">다음</button>';
+    }
+
+    h += '</div>';
+    $('gStage').innerHTML = h;
+    bindGramCard();
+  }
+
+  function grow(k, v, cls) {
+    return '<div class="grow"><span class="k">' + k + '</span><span class="v ' + (cls || '') + '">' + v + '</span></div>';
+  }
+  function gcheck(label, t) {
+    return '<div class="check-row"><span class="check-label">' + label + '</span><div class="ox">' +
+      '<button class="ox-btn o" data-g="' + t + '" data-v="1">O</button>' +
+      '<button class="ox-btn x" data-g="' + t + '" data-v="0">X</button></div></div>';
+  }
+
+  var gPick = { pat: null, con: null };
+
+  function bindGramCard() {
+    var inp = $('gAns');
+    if (inp) {
+      inp.focus();
+      inp.addEventListener('keydown', function (ev) {
+        // 일본어 IME 로 변환 중인 엔터는 확정용이므로 제출로 받으면 안 된다.
+        if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); gSubmit(false); }
+      });
+    }
+    if ($('gSubmit')) $('gSubmit').addEventListener('click', function () { gSubmit(false); });
+    if ($('gSkip'))   $('gSkip').addEventListener('click', function () { gSubmit(true); });
+    if ($('gOverride')) $('gOverride').addEventListener('click', function () {
+      gGraded = 'right'; gPick.pat = 1; renderGramCard();
+      $$('.ox-btn[data-g="pat"]').forEach(function (b) { b.classList.toggle('sel', b.dataset.v === '1'); });
+      refreshGNext();
+    });
+    if ($('gNext')) $('gNext').addEventListener('click', gNext);
+
+    $$('#gStage .ox-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        gPick[b.dataset.g] = Number(b.dataset.v);
+        $$('#gStage .ox-btn[data-g="' + b.dataset.g + '"]').forEach(function (x) {
+          x.classList.toggle('sel', x === b);
+        });
+        refreshGNext();
+      });
+    });
+    $$('#gStage .gopt').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (gPicked !== null) return;
+        gPicked = Number(b.dataset.i);
+        var it = gQueue[gIdx];
+        var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
+        Store.gGrade(it, ok, ok);
+        if (global_Sync()) Sync.touch();
+        renderGramCard();
+      });
+    });
+  }
+
+  function refreshGNext() {
+    var b = $('gNext');
+    if (b) b.disabled = (gPick.pat === null || gPick.con === null);
+  }
+
+  function gSubmit(skip) {
+    var it = gQueue[gIdx], e0 = it.examples[0];
+    var el = $('gAns');
+    gTyped = el ? el.value.trim() : '';
+    if (skip) gGraded = 'skip';
+    else if (!gTyped) { if (el) el.focus(); return; }
+    else gGraded = (normAns(gTyped) === normAns(answerOf(e0))) ? 'right' : 'wrong';
+
+    // 자동 채점 결과를 체크칸에 미리 반영해 두고, 필요하면 사용자가 바꾼다.
+    gPick.pat = (gGraded === 'right') ? 1 : 0;
+    gPick.con = null;
+    renderGramCard();
+    $$('.ox-btn[data-g="pat"]').forEach(function (b) {
+      b.classList.toggle('sel', Number(b.dataset.v) === gPick.pat);
+    });
+    refreshGNext();
+  }
+
+  function gNext() {
+    var it = gQueue[gIdx];
+    if (gMode === 'cloze') {
+      if (gPick.pat === null || gPick.con === null) return;
+      Store.gGrade(it, gPick.pat === 1, gPick.con === 1);
+      if (global_Sync()) Sync.touch();
+    }
+    gIdx++; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    gPick.pat = null; gPick.con = null;
+    renderGramCard();
+  }
+
+  function renderGramDone() {
+    $('gFill').style.width = '100%';
+    $('gCount').textContent = gQueue.length + ' / ' + gQueue.length;
+    $('gStage').innerHTML =
+      '<div class="card gdone">' +
+      '<div class="gdone-em">🎉</div>' +
+      '<div class="gdone-t">' + G_NAME[gMode] + ' 끝</div>' +
+      '<div class="gdone-s">' + gQueue.length + '개를 봤습니다</div>' +
+      '<button class="next-btn" id="gHomeBtn">문법 홈으로</button></div>';
+    $('gHomeBtn').addEventListener('click', function () { renderGramHome(); show('gram'); });
+    if (global_Sync()) Sync.sync().catch(function () {});
+  }
+
   /* ---------------- 백업 내보내기 ---------------- */
 
   function exportBackup() {
@@ -938,7 +1247,7 @@
   /* ---------------- 이벤트 ---------------- */
 
   function bind() {
-    $('btnHome').addEventListener('click', function () { renderHome(); show('home'); });
+    $('btnHome').addEventListener('click', function () { goBack(); });
     $('btnSearchTop').addEventListener('click', openSearch);
     $('btnSearchClose').addEventListener('click', goBack);
 
@@ -1032,6 +1341,27 @@
       startSession(session.wrong, '틀린 단어 다시');
     });
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
+
+    /* ----- 첫 화면 · 문법 ----- */
+    $('pkVocab').addEventListener('click', function () { renderHome(); show('home'); });
+    $('pkGram').addEventListener('click', function () { renderGramHome(); show('gram'); });
+
+    $('gmLearn').addEventListener('click', renderGramChapters);
+    $('gmCloze').addEventListener('click', function () {
+      startGram('cloze', Store.allGram().filter(function (it) { return Store.gIsDue(it); }));
+    });
+    $('gmChoice').addEventListener('click', function () {
+      startGram('choice', Store.allGram().filter(function (it) { return Store.gIsDue(it); }));
+    });
+
+    $('gChList').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.ch');
+      if (!b) return;
+      var g = Store.gramSections().filter(function (x) {
+        return x.level + '-' + x.section === b.dataset.k;
+      })[0];
+      if (g) startGram('learn', g.items, g.level + ' · ' + String(g.section).padStart(2, '0'));
+    });
 
     $('searchInput').addEventListener('input', runSearch);
 
@@ -1127,6 +1457,6 @@
   });
   document.addEventListener('visibilitychange', markActivity);
   startClock();
-  renderHome();
-  show('home');
+  renderPick();
+  show('pick');
 })();
