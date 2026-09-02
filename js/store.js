@@ -743,6 +743,7 @@
     weakList: weakList,
     resetProgress: resetProgress,
     markKnown: markKnown,
+    dueMs: dueMs,
 
     // 문법
     loadGram: loadGram,

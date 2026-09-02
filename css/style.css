@@ -164,6 +164,15 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 }
 .stat .n { display: block; font-size: 20px; font-weight: 700; }
 .stat .l { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
+/* 누를 수 있는 칸 */
+.stat.tap { cursor: pointer; font-family: inherit; transition: border-color .12s; }
+.stat.tap:hover { border-color: var(--accent); }
+.stat.tap::after {
+  content: "학습"; display: block; font-size: 9px; color: var(--dim);
+  margin-top: 3px; opacity: 0; transition: opacity .12s;
+}
+.stat.tap:hover::after { opacity: 1; }
+
 .stat.unknown .n { color: var(--no); }
 .stat.short   .n { color: var(--warn); }
 .stat.long    .n { color: var(--ok); }
@@ -388,6 +397,21 @@ body.has-selbar main { padding-bottom: 96px; }
 .sel-go:disabled { background: var(--panel2); color: var(--dim); cursor: not-allowed; }
 .sel-go.alt { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
 .sel-go.alt:disabled { border-color: var(--line); background: transparent; }
+
+/* 버튼이 네 개라 좁은 화면에서 글자가 세로로 쪼개진다. 줄바꿈을 막고 여백을 줄인다. */
+.sel-bar .mini-btn, .sel-bar .sel-go { white-space: nowrap; }
+@media (max-width: 520px) {
+  .sel-bar { padding: 10px 12px; gap: 8px; }
+  .sel-info b { font-size: 13px; }
+  .sel-info span { font-size: 11px; }
+  .sel-actions { gap: 5px; }
+  .sel-bar .mini-btn { padding: 8px 8px; font-size: 12px; }
+  .sel-bar .sel-go { padding: 9px 11px; font-size: 13px; }
+}
+@media (max-width: 400px) {
+  .sel-bar .mini-btn { padding: 7px 6px; font-size: 11px; }
+  .sel-bar .sel-go { padding: 8px 9px; font-size: 12px; }
+}
 .day-cell .dn { display: block; font-size: 14px; font-weight: 700; }
 .day-cell .dt { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .day-cell .dbar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 8px; background: var(--panel2); }

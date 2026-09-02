@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v20';
+  var BUILD = 'v21';
 
   /* ---------------- 화면 ---------------- */
 
@@ -113,25 +113,64 @@
     document.body.classList.remove('no-scroll');
   }
 
-  function statHTML(s) {
-    return [
-      '<div class="stat total"><span class="n">' + s.total + '</span><span class="l">전체</span></div>',
-      '<div class="stat unknown"><span class="n">' + (s.unknown + s['new']) + '</span><span class="l">모름 · 미학습</span></div>',
-      '<div class="stat short"><span class="n">' + s.short + '</span><span class="l">단기기억</span></div>',
-      '<div class="stat long"><span class="n">' + s.long + '</span><span class="l">장기기억</span></div>'
-    ].join('');
+  // 각 칸을 눌러 그 단계의 단어만 골라 학습할 수 있다.
+  // 복습일이 안 됐어도 원할 때 시험 볼 수 있게 하려는 것.
+  function statHTML(s, tappable) {
+    var cell = function (cls, n, label, stage) {
+      var on = tappable && n > 0;
+      return '<' + (on ? 'button' : 'div') + ' class="stat ' + cls + (on ? ' tap' : '') + '"' +
+        (on ? ' data-stage="' + stage + '"' : '') + '>' +
+        '<span class="n">' + n + '</span><span class="l">' + label + '</span></' + (on ? 'button' : 'div') + '>';
+    };
+    return cell('total', s.total, '전체', 'all') +
+           cell('unknown', s.unknown + s['new'], '모름 · 미학습', 'unknown') +
+           cell('short', s.short, '단기기억', 'short') +
+           cell('long', s.long, '장기기억', 'long');
+  }
+
+  var STAGE_NAME = { all: '전체', unknown: '모름 · 미학습', short: '단기기억', long: '장기기억' };
+
+  // 다음 복습이 언제인지. 대기가 0일 때 보여준다.
+  function nextDueText() {
+    var next = 0;
+    Store.allWords().forEach(function (e) {
+      var r = Store.recOf(e.day, e.w);
+      if (!r.seen) return;
+      var d = Store.dueMs(r);
+      if (!next || d < next) next = d;
+    });
+    if (!next) return '0개 대기';
+
+    var ms = next - Date.now();
+    if (ms <= 0) return '0개 대기';
+    if (ms < 3600000)  return '다음 복습 ' + Math.max(1, Math.round(ms / 60000)) + '분 뒤';
+    if (ms < 86400000) return '다음 복습 ' + Math.round(ms / 3600000) + '시간 뒤';
+    return '다음 복습 ' + Math.round(ms / 86400000) + '일 뒤';
+  }
+
+  // 해당 단계의 단어만 모은다. entries 를 주면 그 안에서만 고른다.
+  function byStage(stage, entries) {
+    var src = entries || Store.allWords();
+    if (stage === 'all') return src;
+    return src.filter(function (e) {
+      var st = Store.stageFor(e.day, e.w);
+      return stage === 'unknown' ? (st === 'unknown' || st === 'new') : st === stage;
+    });
   }
 
   /* ---------------- 홈 ---------------- */
 
   function renderHome() {
     var s = Store.summarizeAll();
-    $('globalStats').innerHTML = statHTML(s);
+    $('globalStats').innerHTML = statHTML(s, true);
     renderProgress(s);
     renderResume();
 
     var due = Store.dueList(), weak = Store.weakList();
-    $('reviewCount').textContent = due.length + '개 대기';
+    // 대기가 0이면 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
+    $('reviewCount').textContent = due.length
+      ? due.length + '개 대기'
+      : nextDueText();
     $('weakCount').textContent = weak.length + '개';
     $('btnReviewToday').disabled = !due.length;
     $('btnWeakStudy').disabled = !weak.length;
@@ -235,7 +274,7 @@
 
     var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
     entries.forEach(function (e) { s.total++; s[Store.stageFor(e.day, e.w)]++; });
-    $('dayStats').innerHTML = statHTML(s);
+    $('dayStats').innerHTML = statHTML(s, true);
 
     var due = entries.filter(function (e) { return Store.isDue(e.day, e.w); });
     $('dayAllCount').textContent = entries.length + '개';
@@ -1341,6 +1380,20 @@
       startSession(session.wrong, '틀린 단어 다시');
     });
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
+
+    // 통계 칸을 눌러 그 단계의 단어만 학습한다. 복습일과 상관없이 원할 때 볼 수 있다.
+    $('globalStats').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.stat.tap');
+      if (!b) return;
+      var st = b.dataset.stage;
+      startSession(byStage(st), STAGE_NAME[st]);
+    });
+    $('dayStats').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.stat.tap');
+      if (!b) return;
+      var st = b.dataset.stage;
+      startSession(byStage(st, wordsOf(currentDays)), dayLabel(currentDays) + ' · ' + STAGE_NAME[st]);
+    });
 
     /* ----- 첫 화면 · 문법 ----- */
     $('pkVocab').addEventListener('click', function () { renderHome(); show('home'); });
