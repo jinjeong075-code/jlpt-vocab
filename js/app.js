@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v23';
+  var BUILD = 'v24';
 
   /* ---------------- 화면 ---------------- */
 
@@ -438,6 +438,10 @@
     if (!$('btnReveal').hidden) {
       $('btnReveal').hidden = true;
       $('answerBox').hidden = false;
+      // 정답을 봤으니 예문을 후리가나까지 붙여 다시 그린다.
+      // 문제를 푸는 동안에는 읽는 법이 새면 안 되므로 한자만 보여줬다.
+      var e = session.queue[session.index];
+      $('detailBox').innerHTML = detailHTML(e.w, true);
       $('detailBox').className = 'detail-box'; // 해석·문형 공개
       $('checkBox').hidden = false;
     }

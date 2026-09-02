@@ -614,7 +614,9 @@ kbd {
    정답을 보면 quiz 클래스가 빠지고 해석·문형까지 붙으므로,
    상한은 .detail-box 전체에 걸어야 한다. */
 @media (max-width: 520px) {
-  .detail-box { max-height: 22vh; overflow-y: auto; }
+  .detail-box { max-height: 20vh; overflow-y: auto; }
+  /* 정답을 본 뒤에는 후리가나가 붙어 줄 높이가 커진다. 조금 조여 준다. */
+  .detail-box .ex.ruby .ex-jp { line-height: 2.2; }
 }
 
 /* 세로가 특히 짧은 기기에서 한 번 더 줄인다 */
