@@ -9,13 +9,24 @@
   var SESS_KEY  = 'jvocab.session.v1';
   var DEV_KEY   = 'jvocab.device.v1';
 
+  var DAY_MS = 86400000;
+  var HOUR_MS = 3600000;
+
   // 레벨별 다음 복습까지의 간격(일). 레벨이 오를수록 간격이 벌어지면서
   // 단기기억 → 장기기억으로 넘어간다.
-  var INTERVALS = [0, 1, 3, 7, 16, 35];
+  //
+  // 2026년 12월 시험에 맞춘 값이다. Cepeda 외(2008)에 따르면 최적 간격은
+  // 시험까지 남은 기간의 10~20% 이고, 9월 기준 약 95일 남았으므로 10~19일이다.
+  // 그래서 최고 간격을 21일로 두었다. 시험이 멀어지면 이 값을 늘리면 된다.
+  var INTERVALS = [0, 1, 3, 7, 14, 21];
   var MAX_LEVEL = INTERVALS.length - 1;
   var LONG_LEVEL = 4; // 이 레벨부터 장기기억
 
-  var DAY_MS = 86400000;
+  // 둘 다 틀렸을 때 다시 만나는 간격. 연속으로 틀리면 조금씩 벌어진다.
+  //   1회 1시간 → 2회 4시간 → 3회 이상 다음날
+  // 맞힌 단어에는 쓰지 않는다. 짧은 간격 반복은 같은 노력 대비 덜 남기 때문에,
+  // 아직 기억에 자국이 안 난 단어에만 쓰는 것이 연구에 맞다.
+  var RETRY_MS = [1 * HOUR_MS, 4 * HOUR_MS, DAY_MS];
 
   // 책에 쓰이는 품사 표기. CSV에서 품사 칸을 알아보는 데 쓴다.
   var POS_RE = /^(명|동|い형|な형|부|접속|감|연체|조수|접두|접미|명·동|형)$/;
@@ -24,6 +35,16 @@
     var d = new Date();
     return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
   }
+
+  // 다음 복습 시각. 예전에는 날짜 번호(2만 남짓)로 저장했는데
+  // 시간 단위 복습을 넣으면서 밀리초 시각으로 바꿨다.
+  // 예전 기록은 숫자가 작으므로 그것으로 구분해 변환한다.
+  function dueMs(r) {
+    var d = r.due || 0;
+    return d < 1e9 ? d * DAY_MS : d;
+  }
+
+  function nextAt(days) { return Date.now() + days * DAY_MS; }
 
   function read(key, fallback) {
     try {
@@ -149,7 +170,7 @@
   function gIsDue(item) {
     var r = gRecOf(item);
     if (!r.seen) return true;
-    return r.due <= today();
+    return dueMs(r) <= Date.now();
   }
 
   // 채점은 단어와 같은 규칙을 쓴다.
@@ -157,20 +178,22 @@
   function gGrade(item, patternOk, connectOk) {
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
-    var t = today();
 
     if (patternOk) r.rO++; else r.rX++;
     if (connectOk) r.mO++; else r.mX++;
 
     if (patternOk && connectOk) {
       r.level = Math.min(MAX_LEVEL, r.level + 1);
-      r.due = t + INTERVALS[r.level];
+      r.miss = 0;
+      r.due = nextAt(INTERVALS[r.level]);
     } else if (patternOk || connectOk) {
       r.level = Math.min(r.level, LONG_LEVEL - 1);
-      r.due = t + 1;
+      r.miss = 0;
+      r.due = nextAt(1);
     } else {
       r.level = Math.max(0, r.level - 2);
-      r.due = t;
+      r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
+      r.due = Date.now() + RETRY_MS[r.miss - 1];
     }
     r.seen++;
     r.last = Date.now();
@@ -330,7 +353,7 @@
   /* ---------- 기억 단계 ---------- */
 
   // 레벨 0 = 아직 못 맞춘 단어, 1~3 = 간격이 짧은 단기기억,
-  // 4~5 = 16일·35일 간격을 견딘 장기기억.
+  // 4~5 = 14일·21일 간격을 견딘 장기기억.
   function stageOf(level, seen) {
     if (!seen) return 'new';
     if (level === 0) return 'unknown';
@@ -352,36 +375,39 @@
   function isDue(day, word) {
     var r = recOf(day, word);
     if (!r.seen) return true;
-    return r.due <= today();
+    return dueMs(r) <= Date.now();
   }
 
   /* ---------- 채점 ---------- */
   // 읽는 법 O/X, 뜻 O/X 두 체크로 점수를 갱신한다.
   //   둘 다 O  → 레벨 +1 (간격이 늘어남 = 장기기억으로 이동)
-  //   하나만 O → 레벨 유지, 내일 다시
-  //   둘 다 X  → 레벨 -2 (0 밑으로는 안 내려감), 오늘 다시
+  //   하나만 O → 레벨을 3 이하로 내리고 내일 다시
+  //   둘 다 X  → 레벨 -2, 그리고 같은 날 다시 (1시간 → 4시간 → 다음날)
   function grade(day, word, readingOk, meaningOk) {
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
-    var t = today();
 
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
 
     if (readingOk && meaningOk) {
       r.level = Math.min(MAX_LEVEL, r.level + 1);
-      r.due = t + INTERVALS[r.level];
+      r.miss = 0;
+      r.due = nextAt(INTERVALS[r.level]);
     } else if (readingOk || meaningOk) {
       // 읽는 법과 뜻 중 하나라도 모르면 장기기억으로 인정하지 않는다.
       // 이미 장기기억이던 단어도 단기기억으로 끌어내린다.
       r.level = Math.min(r.level, LONG_LEVEL - 1);
-      r.due = t + 1;
+      r.miss = 0;
+      r.due = nextAt(1);
     } else {
-      // 둘 다 모르면 레벨을 두 단계 떨어뜨리고 오늘 다시 낸다.
+      // 둘 다 모르면 레벨을 두 단계 떨어뜨리고 같은 날 다시 낸다.
       // 장기기억(4·5)이던 단어는 단기기억(2·3)으로 재분류되고,
       // 원래 낮았던 단어만 '아예 모르는 단어'(0)로 내려간다.
+      // 연속으로 틀리면 1시간 → 4시간 → 다음날로 조금씩 벌어진다.
       r.level = Math.max(0, r.level - 2);
-      r.due = t;
+      r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
+      r.due = Date.now() + RETRY_MS[r.miss - 1];
     }
 
     r.seen++;
@@ -429,7 +455,8 @@
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     r.level = MAX_LEVEL;
-    r.due = today() + INTERVALS[MAX_LEVEL];
+    r.miss = 0;
+    r.due = nextAt(INTERVALS[MAX_LEVEL]);
     r.seen = (r.seen || 0) + 1;
     r.known = 1;
     r.last = Date.now();
@@ -664,6 +691,16 @@
     progress = read(PROG_KEY, {});
     timeLog = read(TIME_KEY, {});
     deviceId = ensureDeviceId();
+
+    // 예전에는 다음 복습일을 날짜 번호로 저장했다. 시간 단위 복습을 넣으면서
+    // 밀리초 시각으로 바꿨으므로, 옛 기록을 한 번 변환해 둔다.
+    // (변환하지 않으면 1970년으로 읽혀 전부 복습 대상이 된다)
+    var conv = false;
+    Object.keys(progress).forEach(function (k) {
+      var r = progress[k];
+      if (r && r.due && r.due < 1e9) { r.due = r.due * DAY_MS; conv = true; }
+    });
+    if (conv) write(PROG_KEY, progress);
 
     // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
     // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
