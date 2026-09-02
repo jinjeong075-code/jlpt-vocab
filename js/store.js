@@ -22,10 +22,10 @@
   var MAX_LEVEL = INTERVALS.length - 1;
   var LONG_LEVEL = 4; // 이 레벨부터 장기기억
 
-  // 둘 다 틀렸을 때 다시 만나는 간격. 연속으로 틀리면 조금씩 벌어진다.
+  // 하나라도 X 를 눌렀을 때 다시 만나는 간격. 연속으로 틀리면 조금씩 벌어진다.
   //   1회 1시간 → 2회 4시간 → 3회 이상 다음날
-  // 맞힌 단어에는 쓰지 않는다. 짧은 간격 반복은 같은 노력 대비 덜 남기 때문에,
-  // 아직 기억에 자국이 안 난 단어에만 쓰는 것이 연구에 맞다.
+  // 둘 다 맞힌 단어에는 쓰지 않는다. 짧은 간격 반복은 같은 노력 대비 덜 남기
+  // 때문에, 아직 확실히 모르는 단어에만 쓰는 것이 연구에 맞다.
   var RETRY_MS = [1 * HOUR_MS, 4 * HOUR_MS, DAY_MS];
 
   // 책에 쓰이는 품사 표기. CSV에서 품사 칸을 알아보는 데 쓴다.
@@ -186,12 +186,10 @@
       r.level = Math.min(MAX_LEVEL, r.level + 1);
       r.miss = 0;
       r.due = nextAt(INTERVALS[r.level]);
-    } else if (patternOk || connectOk) {
-      r.level = Math.min(r.level, LONG_LEVEL - 1);
-      r.miss = 0;
-      r.due = nextAt(1);
     } else {
-      r.level = Math.max(0, r.level - 2);
+      // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
+      if (patternOk || connectOk) r.level = Math.min(r.level, LONG_LEVEL - 1);
+      else                        r.level = Math.max(0, r.level - 2);
       r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
       r.due = Date.now() + RETRY_MS[r.miss - 1];
     }
@@ -394,18 +392,18 @@
       r.level = Math.min(MAX_LEVEL, r.level + 1);
       r.miss = 0;
       r.due = nextAt(INTERVALS[r.level]);
-    } else if (readingOk || meaningOk) {
-      // 읽는 법과 뜻 중 하나라도 모르면 장기기억으로 인정하지 않는다.
-      // 이미 장기기억이던 단어도 단기기억으로 끌어내린다.
-      r.level = Math.min(r.level, LONG_LEVEL - 1);
-      r.miss = 0;
-      r.due = nextAt(1);
     } else {
-      // 둘 다 모르면 레벨을 두 단계 떨어뜨리고 같은 날 다시 낸다.
-      // 장기기억(4·5)이던 단어는 단기기억(2·3)으로 재분류되고,
-      // 원래 낮았던 단어만 '아예 모르는 단어'(0)로 내려간다.
-      // 연속으로 틀리면 1시간 → 4시간 → 다음날로 조금씩 벌어진다.
-      r.level = Math.max(0, r.level - 2);
+      // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
+      if (readingOk || meaningOk) {
+        // 하나만 모르면 장기기억으로 인정하지 않는다.
+        // 이미 장기기억이던 단어도 단기기억으로 끌어내린다.
+        r.level = Math.min(r.level, LONG_LEVEL - 1);
+      } else {
+        // 둘 다 모르면 레벨을 두 단계 떨어뜨린다.
+        // 장기기억(4·5)이던 단어는 단기기억(2·3)으로 재분류되고,
+        // 원래 낮았던 단어만 '아예 모르는 단어'(0)로 내려간다.
+        r.level = Math.max(0, r.level - 2);
+      }
       r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
       r.due = Date.now() + RETRY_MS[r.miss - 1];
     }
