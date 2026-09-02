@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v24';
+  var BUILD = 'v25';
 
   /* ---------------- 화면 ---------------- */
 
@@ -232,12 +232,19 @@
     if (!selected.length) return;
     var all = wordsOf(selected);
     var due = all.filter(function (e) { return Store.isDue(e.day, e.w); });
+    // 모름·단기기억은 복습일과 상관없이 언제든 더 볼 수 있게 따로 뽑는다.
+    var unk = byStage('unknown', all);
+    var sht = byStage('short', all);
     $('selDays').textContent = dayLabel(selected);
     $('selWords').textContent = all.length + '단어 · 복습할 것 ' + due.length + '개';
-    $('btnSelStudy').textContent = '전체 ' + all.length;
+    $('btnSelUnknown').textContent = '모름 ' + unk.length;
+    $('btnSelShort').textContent = '단기 ' + sht.length;
     $('btnSelDue').textContent = '복습 ' + due.length;
-    $('btnSelStudy').disabled = !all.length;
+    $('btnSelStudy').textContent = '전체 ' + all.length;
+    $('btnSelUnknown').disabled = !unk.length;
+    $('btnSelShort').disabled = !sht.length;
     $('btnSelDue').disabled = !due.length;
+    $('btnSelStudy').disabled = !all.length;
   }
 
   // 홈 상단의 진도 카드. '외웠다'의 기준은 장기기억이다.
@@ -1336,6 +1343,12 @@
       renderHome();
     });
     $('btnSelView').addEventListener('click', function () { renderDays(selected); });
+    $('btnSelUnknown').addEventListener('click', function () {
+      startSession(byStage('unknown', wordsOf(selected)), dayLabel(selected) + ' · 모름');
+    });
+    $('btnSelShort').addEventListener('click', function () {
+      startSession(byStage('short', wordsOf(selected)), dayLabel(selected) + ' · 단기기억');
+    });
     $('btnSelStudy').addEventListener('click', function () {
       startSession(entriesOfDays(selected, false), dayLabel(selected));
     });

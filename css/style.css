@@ -379,14 +379,18 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 .day-cell.locked { opacity: .3; cursor: not-allowed; }
 
 /* ---------- 선택 바 ---------- */
-body.has-selbar main { padding-bottom: 96px; }
+body.has-selbar main { padding-bottom: 156px; }
 .sel-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
   max-width: 720px; margin: 0 auto; padding: 12px 16px;
   background: rgba(23,26,35,.96); backdrop-filter: blur(10px);
   border-top: 1px solid var(--line);
 }
+.sel-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 학습 버튼은 네 개를 같은 너비로 깔아 좁은 화면에서도 한 줄에 들어가게 한다. */
+.sel-runs { display: flex; gap: 6px; }
+.sel-runs .sel-go { flex: 1 1 0; min-width: 0; padding: 11px 4px; text-align: center; }
 .sel-info b { display: block; font-size: 14px; }
 .sel-info span { font-size: 12px; color: var(--dim); }
 .sel-actions { display: flex; align-items: center; gap: 6px; }
@@ -398,19 +402,21 @@ body.has-selbar main { padding-bottom: 96px; }
 .sel-go.alt { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
 .sel-go.alt:disabled { border-color: var(--line); background: transparent; }
 
-/* 버튼이 네 개라 좁은 화면에서 글자가 세로로 쪼개진다. 줄바꿈을 막고 여백을 줄인다. */
+/* 좁은 화면에서 글자가 세로로 쪼개진다. 줄바꿈을 막고 여백을 줄인다. */
 .sel-bar .mini-btn, .sel-bar .sel-go { white-space: nowrap; }
 @media (max-width: 520px) {
+  body.has-selbar main { padding-bottom: 142px; }
   .sel-bar { padding: 10px 12px; gap: 8px; }
   .sel-info b { font-size: 13px; }
   .sel-info span { font-size: 11px; }
   .sel-actions { gap: 5px; }
   .sel-bar .mini-btn { padding: 8px 8px; font-size: 12px; }
-  .sel-bar .sel-go { padding: 9px 11px; font-size: 13px; }
+  .sel-runs .sel-go { padding: 10px 4px; font-size: 13px; }
 }
 @media (max-width: 400px) {
   .sel-bar .mini-btn { padding: 7px 6px; font-size: 11px; }
-  .sel-bar .sel-go { padding: 8px 9px; font-size: 12px; }
+  .sel-runs { gap: 5px; }
+  .sel-runs .sel-go { padding: 10px 2px; font-size: 12px; }
 }
 .day-cell .dn { display: block; font-size: 14px; font-weight: 700; }
 .day-cell .dt { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

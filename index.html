@@ -114,13 +114,19 @@
 </section>
 
 <div id="selBar" class="sel-bar" hidden>
-  <div class="sel-info">
-    <b id="selDays"></b>
-    <span id="selWords"></span>
+  <div class="sel-top">
+    <div class="sel-info">
+      <b id="selDays"></b>
+      <span id="selWords"></span>
+    </div>
+    <div class="sel-actions">
+      <button class="mini-btn" id="btnSelClear">해제</button>
+      <button class="mini-btn" id="btnSelView">목록</button>
+    </div>
   </div>
-  <div class="sel-actions">
-    <button class="mini-btn" id="btnSelClear">해제</button>
-    <button class="mini-btn" id="btnSelView">목록</button>
+  <div class="sel-runs">
+    <button class="sel-go alt" id="btnSelUnknown">모름</button>
+    <button class="sel-go alt" id="btnSelShort">단기</button>
     <button class="sel-go alt" id="btnSelDue">복습</button>
     <button class="sel-go" id="btnSelStudy">전체</button>
   </div>
