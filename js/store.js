@@ -638,16 +638,23 @@
   }
 
   // 다른 기기의 백업을 현재 기기 기록과 합친다.
-  //  - 단어: 같은 Day 는 들어온 쪽으로 교체
+  //  - 단어/문법: 같은 Day·단원은 내용이 더 많은 쪽을 남긴다
   //  - 진도: 단어마다 '마지막으로 학습한 시각'이 더 나중인 쪽을 채택
   //  - 시간: 날짜별로 더 큰 값을 채택 (같은 파일을 두 번 넣어도 부풀지 않도록)
+  //
+  // 내용을 줄이는 쪽으로 덮지 않는 것이 중요하다. 동기화는 '받아서 합치고 다시 올리기'라
+  // 낡은 백업이 새 자료를 덮으면 그 결과가 그대로 클라우드에 올라가 영영 사라진다.
+  // 실제로 문법 단원이 늘어난 뒤에도 옛 백업에 눌려 일부만 보이던 문제가 있었다.
   function importBackup(obj) {
     var stat = { days: 0, words: 0, mine: 0, theirs: 0, dates: 0 };
 
     if (obj.vocab) {
       Object.keys(obj.vocab).forEach(function (k) {
         var d = normalizeDay(obj.vocab[k]);
-        if (d) { days[d.day] = d; stat.days++; }
+        if (!d) return;
+        var cur = days[d.day];
+        if (cur && cur.words.length > d.words.length) return;
+        days[d.day] = d; stat.days++;
       });
       write(VOCAB_KEY, days);
     }
@@ -655,7 +662,10 @@
     if (obj.grammar) {
       Object.keys(obj.grammar).forEach(function (k) {
         var g = normalizeGram(obj.grammar[k]);
-        if (g) { gram[gramFileKey(g)] = g; stat.gram = (stat.gram || 0) + 1; }
+        if (!g) return;
+        var cur = gram[gramFileKey(g)];
+        if (cur && cur.items.length > g.items.length) return;
+        gram[gramFileKey(g)] = g; stat.gram = (stat.gram || 0) + 1;
       });
       write(GRAM_KEY, gram);
     }
