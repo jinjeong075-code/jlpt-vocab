@@ -26,7 +26,8 @@
   //   1회 1시간 → 2회 4시간 → 3회 이상 다음날
   // 둘 다 맞힌 단어에는 쓰지 않는다. 짧은 간격 반복은 같은 노력 대비 덜 남기
   // 때문에, 아직 확실히 모르는 단어에만 쓰는 것이 연구에 맞다.
-  var RETRY_MS = [1 * HOUR_MS, 4 * HOUR_MS, DAY_MS];
+  // 0 은 '시간이 아니라 다음날' 을 뜻한다 (아래 retryAt 참고).
+  var RETRY_HOURS = [1, 4, 0];
 
   // 책에 쓰이는 품사 표기. CSV에서 품사 칸을 알아보는 데 쓴다.
   var POS_RE = /^(명|동|い형|な형|부|접속|감|연체|조수|접두|접미|명·동|형)$/;
@@ -44,7 +45,21 @@
     return d < 1e9 ? d * DAY_MS : d;
   }
 
-  function nextAt(days) { return Date.now() + days * DAY_MS; }
+  // 하루 이상 간격은 그 날 0시부터 복습할 수 있게 맞춘다.
+  // 정확히 24시간 뒤로 두면 밤에 공부한 단어가 다음 날 밤에야 떠서,
+  // 아침에 앱을 열었을 때 복습할 게 없어 보인다.
+  function nextAt(days) {
+    if (days <= 0) return Date.now();
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() + days * DAY_MS;
+  }
+
+  // 틀린 횟수에 따른 다시 만날 시각. 마지막 단계는 시간이 아니라 다음날이다.
+  function retryAt(miss) {
+    var h = RETRY_HOURS[Math.min(miss, RETRY_HOURS.length) - 1];
+    return h > 0 ? Date.now() + h * HOUR_MS : nextAt(1);
+  }
 
   function read(key, fallback) {
     try {
@@ -190,8 +205,8 @@
       // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
       if (patternOk || connectOk) r.level = Math.min(r.level, LONG_LEVEL - 1);
       else                        r.level = Math.max(0, r.level - 2);
-      r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
-      r.due = Date.now() + RETRY_MS[r.miss - 1];
+      r.miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
+      r.due = retryAt(r.miss);
     }
     r.seen++;
     r.last = Date.now();
@@ -404,8 +419,8 @@
         // 원래 낮았던 단어만 '아예 모르는 단어'(0)로 내려간다.
         r.level = Math.max(0, r.level - 2);
       }
-      r.miss = Math.min((r.miss || 0) + 1, RETRY_MS.length);
-      r.due = Date.now() + RETRY_MS[r.miss - 1];
+      r.miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
+      r.due = retryAt(r.miss);
     }
 
     r.seen++;
@@ -696,7 +711,18 @@
     var conv = false;
     Object.keys(progress).forEach(function (k) {
       var r = progress[k];
-      if (r && r.due && r.due < 1e9) { r.due = r.due * DAY_MS; conv = true; }
+      if (!r || !r.due) return;
+      if (r.due < 1e9) { r.due = r.due * DAY_MS; conv = true; return; }
+
+      // 잠깐 '정확히 24시간 뒤'로 잡히던 때가 있었다. 그러면 밤에 공부한 단어가
+      // 다음 날 밤에야 떠서 아침에 복습할 게 없어 보인다.
+      // 하루 이상 남은 복습은 그 날 0시로 당겨 준다.
+      var d = new Date(r.due);
+      if (r.due - Date.now() > 12 * HOUR_MS && (d.getHours() || d.getMinutes())) {
+        d.setHours(0, 0, 0, 0);
+        r.due = d.getTime();
+        conv = true;
+      }
     });
     if (conv) write(PROG_KEY, progress);
 
