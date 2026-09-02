@@ -140,6 +140,22 @@
     return n;
   }
 
+  // 내장 문법(data\grammar.js)을 저장된 것과 합친다.
+  // 추출이 진행 중이라 단원이 계속 늘고 내용도 고쳐지므로, 앱을 켤 때마다 확인한다.
+  // 문항이 줄어드는 쪽으로는 절대 덮지 않는다 - 동기화로 받은 더 많은 자료를 지우면 안 된다.
+  // 진도는 'g:' 키로 따로 저장하므로 내용을 갈아 끼워도 학습 기록은 남는다.
+  function mergeDefaultGram(list) {
+    var n = 0;
+    (Array.isArray(list) ? list : [list]).forEach(function (o) {
+      var g = normalizeGram(o);
+      if (!g) return;
+      var cur = gram[gramFileKey(g)];
+      if (!cur || cur.items.length <= g.items.length) { gram[gramFileKey(g)] = g; n++; }
+    });
+    if (n) write(GRAM_KEY, gram);
+    return n;
+  }
+
   // 책의 레벨 순서대로 정렬한다.
   var LEVEL_ORDER = ['N5+N4', 'N5', 'N4', 'N3', 'N2', 'N1'];
   function levelRank(l) {
@@ -698,9 +714,7 @@
   function init() {
     days = read(VOCAB_KEY, {});
     gram = read(GRAM_KEY, {});
-    if (!Object.keys(gram).length && window.DEFAULT_GRAMMAR) {
-      loadGram(window.DEFAULT_GRAMMAR);
-    }
+    if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
     progress = read(PROG_KEY, {});
     timeLog = read(TIME_KEY, {});
     deviceId = ensureDeviceId();
