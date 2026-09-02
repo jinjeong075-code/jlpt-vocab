@@ -1,4 +1,4 @@
-/* 화면 전환 · 학습 진행 · 검색 */
+﻿/* 화면 전환 · 학습 진행 · 검색 */
 (function () {
   'use strict';
 
@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v14';
+  var BUILD = 'v18';
 
   /* ---------------- 화면 ---------------- */
 
@@ -225,7 +225,7 @@
       '<div class="wl-head">' +
         '<span class="wl-dot dot-' + st + '"></span>' +
         '<span class="wl-main">' +
-          '<span class="wl-word">' + dictHTML(w.word) +
+          '<span class="wl-word" lang="ja">' + dictHTML(w.word) +
             '<span class="wl-reading">' + esc(w.reading) + '</span>' + posHTML(w.pos) +
           '</span>' +
           '<div class="wl-meaning">' + esc(w.meaning) + '</div>' +
@@ -389,6 +389,14 @@
     next();
   }
 
+  // 읽는 법도 뜻도 모를 때. 둘 다 X 로 찍고 넘어간다.
+  function bothNo() {
+    if ($('checkBox').hidden) return;
+    pick('reading', 0);
+    pick('meaning', 0);
+    next();
+  }
+
   // 확실히 아는 단어를 복습 목록에서 빼고 장기기억으로 보낸다.
   function markKnown() {
     if ($('checkBox').hidden) return;
@@ -452,7 +460,7 @@
       '<div class="wl-head">' +
         '<span class="wl-dot dot-' + st + '"></span>' +
         '<span class="wl-main">' +
-          '<span class="wl-word">' + dictHTML(x.w.word) +
+          '<span class="wl-word" lang="ja">' + dictHTML(x.w.word) +
             '<span class="wl-reading">' + esc(x.w.reading) + '</span>' + posHTML(x.w.pos) +
           '</span>' +
           '<div class="wl-meaning">' + esc(x.w.meaning) + '</div>' +
@@ -893,7 +901,7 @@
     (w.examples || []).forEach(function (ex) {
       parts.push(
         '<div class="ex' + (withRuby ? ' ruby' : '') + '">' +
-          '<p class="ex-jp">' + renderJP(ex.jp, w.word, withRuby) + '</p>' +
+          '<p class="ex-jp" lang="ja">' + renderJP(ex.jp, w.word, withRuby) + '</p>' +
           (ex.ko ? '<p class="ex-ko">' + esc(ex.ko) + '</p>' : '') +
         '</div>'
       );
@@ -910,7 +918,7 @@
     if ((w.related || []).length) {
       parts.push('<div class="gram"><span class="gram-tag rel">관련어</span><div class="gram-list">' +
         w.related.map(function (r) {
-          return '<div class="gram-row"><span class="gram-form">' + dictHTML(r.word) +
+          return '<div class="gram-row"><span class="gram-form" lang="ja">' + dictHTML(r.word) +
             (r.reading ? ' <i>' + esc(r.reading) + '</i>' : '') + '</span>' +
             '<span class="gram-mean">' + posHTML(r.pos) + esc(r.meaning) + '</span></div>';
         }).join('') + '</div></div>');
@@ -1012,6 +1020,7 @@
     $('btnReveal').addEventListener('click', reveal);
     $('btnNext').addEventListener('click', next);
     $('btnBothOk').addEventListener('click', bothOk);
+    $('btnBothNo').addEventListener('click', bothNo);
     $('btnKnown').addEventListener('click', markKnown);
     $('tabWrong').addEventListener('click', function () { resultView = 'wrong'; renderResultList(); });
     $('tabAll').addEventListener('click', function () { resultView = 'all'; renderResultList(); });
@@ -1104,6 +1113,7 @@
       else if (ev.key === '2') pick('reading', 0);
       else if (ev.key === '3') pick('meaning', 1);
       else if (ev.key === '4') pick('meaning', 0);
+      else if (ev.key === '0') { ev.preventDefault(); bothNo(); }
       else if (ev.key === ' ') { ev.preventDefault(); reveal(); }
     });
   }

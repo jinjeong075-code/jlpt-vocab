@@ -15,6 +15,21 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 
+/* 일본어 전용 글꼴.
+   한중일 한자는 코드포인트가 같아도 나라마다 자형이 다르다. 한국어 글꼴로 그리면
+   일본 신자체가 한국 한자처럼 보인다(直/画/骨 등). 그래서 한국어 폰트
+   (Malgun Gothic, Apple SD Gothic Neo, Pretendard)는 이 목록에 절대 넣지 않는다.
+   일본어가 나오는 자리에는 반드시 이 변수를 쓸 것. */
+:root {
+  --jp: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic",
+        "Meiryo", "MS Gothic", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+}
+/* 일본어를 보여주는 모든 요소 */
+.jp-word, .ex-jp, .wl-word, .wl-reading, .ans-value.reading, .gram-form,
+[lang="ja"] {
+  font-family: var(--jp);
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -156,13 +171,14 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 
 /* ---------- 둘 다 알았어요 / 아는 단어 ---------- */
 .check-row.both { border-color: rgba(74,222,128,.4); }
-.ox-btn.wide {
-  min-width: 112px;
-  background: rgba(74,222,128,.16);
-  border-color: rgba(74,222,128,.5);
-  color: var(--ok);
+.ox-btn.o.wide {
+  background: rgba(74,222,128,.16); border-color: rgba(74,222,128,.5); color: var(--ok);
 }
-.ox-btn.wide:hover { background: rgba(74,222,128,.28); }
+.ox-btn.o.wide:hover { background: rgba(74,222,128,.28); }
+.ox-btn.x.wide {
+  background: rgba(248,113,113,.14); border-color: rgba(248,113,113,.45); color: var(--no);
+}
+.ox-btn.x.wide:hover { background: rgba(248,113,113,.26); }
 
 .known-btn {
   width: 100%; margin-top: 12px; padding: 10px;
@@ -326,7 +342,7 @@ body.has-selbar main { padding-bottom: 96px; }
 .ex + .ex { border-top: 1px dashed var(--line); }
 .ex-jp {
   margin: 0; font-size: 17px; line-height: 1.85;
-  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Malgun Gothic", sans-serif;
+  font-family: var(--jp);
 }
 .ex.ruby .ex-jp { font-size: 19px; line-height: 2.6; }
 .ex-jp mark { background: transparent; color: var(--accent); font-weight: 700; }
@@ -397,7 +413,7 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .jp-word {
   font-size: clamp(40px, 12vw, 62px); font-weight: 700; text-align: center;
   padding: 34px 0 26px; letter-spacing: 2px; word-break: keep-all;
-  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Malgun Gothic", sans-serif;
+  font-family: var(--jp);
 }
 
 .answer-box { border-top: 1px solid var(--line); padding-top: 14px; margin-bottom: 6px; }
@@ -472,7 +488,6 @@ kbd {
   .check-row { padding: 7px 11px; border-radius: 10px; }
   .check-label { font-size: 13px; }
   .ox-btn { min-width: 50px; padding: 7px 0; font-size: 14px; }
-  .ox-btn.wide { min-width: 104px; }
   .ox-btn kbd { display: none; }          /* 폰에서는 단축키 표시가 자리만 차지한다 */
 
   .next-btn { padding: 11px; font-size: 14px; }
