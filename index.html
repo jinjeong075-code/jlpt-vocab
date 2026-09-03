@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>일본어 단어 장기기억</title>
-<meta name="theme-color" content="#0f1117">
+<meta name="theme-color" content="#0a0b0e">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,11 +17,11 @@
 <body>
 
 <header id="topbar">
-  <button class="icon-btn" id="btnHome" title="홈">←</button>
-  <div id="topTitle">일본어 단어 장기기억</div>
-  <button class="icon-btn" id="btnSyncTop" title="동기화" hidden>☁</button>
-  <button class="icon-btn" id="btnTimeTop" title="공부 시간">📅</button>
-  <button class="icon-btn" id="btnSearchTop" title="검색">🔍</button>
+  <button class="icon-btn" id="btnHome" title="홈" aria-label="홈"><svg viewBox="0 0 20 20"><path d="M12 4 6 10l6 6"/></svg></button>
+  <div id="topTitle">일본어</div>
+  <button class="icon-btn" id="btnSyncTop" title="동기화" aria-label="동기화" hidden><svg viewBox="0 0 20 20"><path d="M5.5 13.5a3 3 0 0 1 .4-6 4.2 4.2 0 0 1 8 .6 2.7 2.7 0 0 1-.4 5.4z"/></svg></button>
+  <button class="icon-btn" id="btnTimeTop" title="공부 시간" aria-label="공부 시간"><svg viewBox="0 0 20 20"><rect x="3.5" y="4.5" width="13" height="12" rx="2"/><path d="M3.5 8h13M7 3v3M13 3v3"/></svg></button>
+  <button class="icon-btn" id="btnSearchTop" title="검색" aria-label="검색"><svg viewBox="0 0 20 20"><circle cx="9" cy="9" r="4.6"/><path d="M12.4 12.4 16.5 16.5"/></svg></button>
 </header>
 
 <main>
@@ -33,7 +33,7 @@
       <span class="em" lang="ja">語</span>
       <span class="tx">
         <span class="t">단어</span>
-        <span class="s" id="pkVocabSub">해커스 JLPT 기출 단어장</span>
+        <span class="s" id="pkVocabSub"></span>
       </span>
       <span class="pct" id="pkVocabPct">0%</span>
     </button>
@@ -41,7 +41,7 @@
       <span class="em" lang="ja">文</span>
       <span class="tx">
         <span class="t">문법</span>
-        <span class="s" id="pkGramSub">JLPT 문법사전 N5~N1</span>
+        <span class="s" id="pkGramSub"></span>
       </span>
       <span class="pct" id="pkGramPct">0%</span>
     </button>
@@ -239,24 +239,17 @@
 
   <div class="stat-grid" id="gStats"></div>
 
-  <p class="secto">무엇을 할까요</p>
   <div class="pick">
     <button class="pk" id="gmLearn">
-      <span class="em">📖</span>
-      <span class="tx"><span class="t">내용 보기</span>
-        <span class="s">문형·의미·접속·예문을 읽습니다. 채점하지 않습니다.</span></span>
+      <span class="tx"><span class="t">내용 보기</span></span>
       <span class="pct">›</span>
     </button>
     <button class="pk" id="gmCloze">
-      <span class="em">✏️</span>
-      <span class="tx"><span class="t">빈칸 채우기</span>
-        <span class="s">예문의 문형 자리를 비웁니다. 직접 입력해 확인합니다.</span></span>
+      <span class="tx"><span class="t">빈칸 채우기</span></span>
       <span class="pct" id="gmClozeN"></span>
     </button>
     <button class="pk" id="gmChoice">
-      <span class="em">🔀</span>
-      <span class="tx"><span class="t">4지선다</span>
-        <span class="s">헷갈리는 문형 중에서 고릅니다. 시험 문제와 같은 형태.</span></span>
+      <span class="tx"><span class="t">4지선다</span></span>
       <span class="pct" id="gmChoiceN"></span>
     </button>
   </div>
@@ -311,7 +304,7 @@
   <div class="sheet-box wide">
     <div class="sheet-head">
       <span class="sheet-title">단어 만드는 법</span>
-      <button class="icon-btn" id="btnHowToClose" title="닫기">✕</button>
+      <button class="icon-btn" id="btnHowToClose" title="닫기" aria-label="닫기"><svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
     </div>
 
     <div class="sheet-body">
@@ -344,7 +337,7 @@
   <div class="sheet-box">
     <div class="sheet-head">
       <span class="sheet-title">동기화</span>
-      <button class="icon-btn" id="btnSyncClose" title="닫기">✕</button>
+      <button class="icon-btn" id="btnSyncClose" title="닫기" aria-label="닫기"><svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
     </div>
 
     <div id="syncOut" class="sheet-body">
@@ -371,7 +364,7 @@
 <div id="searchPanel" class="search-panel" hidden>
   <div class="sp-head">
     <input type="search" id="searchInput" placeholder="한자 · 히라가나 · 한글 뜻으로 검색" autocomplete="off">
-    <button class="icon-btn" id="btnSearchClose" title="닫기">✕</button>
+    <button class="icon-btn" id="btnSearchClose" title="닫기" aria-label="닫기"><svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
   </div>
   <div class="sp-body">
     <p class="search-hint" id="searchHint"></p>

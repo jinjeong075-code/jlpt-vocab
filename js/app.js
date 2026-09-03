@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v27';
+  var BUILD = 'v28';
 
   /* ---------------- 화면 ---------------- */
 
@@ -69,14 +69,14 @@
     var v = Store.summarizeAll();
     var g = Store.gSummarizeAll();
     var pct = function (s) { return s.total ? Math.round(s.long / s.total * 100) : 0; };
-    $('pkVocabSub').textContent = '해커스 JLPT 기출 단어장 · ' + v.total + '단어';
-    $('pkGramSub').textContent  = 'JLPT 문법사전 N5~N1 · ' + g.total + '문형';
+    $('pkVocabSub').textContent = v.total + '단어';
+    $('pkGramSub').textContent  = g.total + '문형';
     $('pkVocabPct').textContent = pct(v) + '%';
     $('pkGramPct').textContent  = pct(g) + '%';
   }
 
   var VIEW_TITLE = {
-    pick: '일본어 학습', home: '단어', gram: '문법',
+    pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', time: '공부 시간',
     gramCh: '내용 보기', gramStudy: '문법'
   };
 
@@ -89,7 +89,7 @@
     $('btnTimeTop').hidden = (name === 'study' || name === 'gramStudy' || name === 'time');
     $('selBar').hidden = !(name === 'home' && selected.length);
     document.body.classList.toggle('has-selbar', name === 'home' && !!selected.length);
-    $('topTitle').textContent = VIEW_TITLE[name] || '일본어 단어 장기기억';
+    $('topTitle').textContent = VIEW_TITLE[name] || '일본어';
     window.scrollTo(0, 0);
   }
 
@@ -892,27 +892,45 @@
   var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
 
   var G_NAME = { learn: '내용 보기', cloze: '빈칸 채우기', choice: '4지선다' };
+  // 단계 이름은 단어와 같지만 세는 단위가 다르다. 문법에서 '모르는 단어'는 말이 안 된다.
+  var G_STAGE_LABEL = { 'new': '미학습', unknown: '모르는 문형', short: '단기기억', long: '장기기억' };
+
+  // 후리가나 표기(漢字[かんじ]) 에서 읽는 법 앞에 올 수 있는 글자.
+  // 한자만이 아니다. 숫자와 로마자에도 읽는 법이 붙는다: N1[いち], 1[いっ]か月[げつ]
+  // 한자만 받으면 그 대괄호가 화면에 그대로 나온다.
+  var RUBY_BASE = '[一-龯々〆ヶ0-9０-９A-Za-zＡ-Ｚａ-ｚ]+';
+  function rubyRe() { return new RegExp('(' + RUBY_BASE + ')\\[([^\\]]*)\\]', 'g'); }
 
   // 빈칸의 정답 = {{ }} 안의 내용에서 후리가나를 뺀 것.
   // 문형 이름(~をもとに)이 아니라 그 문장에 실제로 들어간 형태를 답으로 본다.
-  function answerOf(ex) {
-    var m = ex.jp.match(/\{\{([\s\S]*?)\}\}/);
-    return m ? m[1].replace(/\[[^\]]*\]/g, '') : '';
+  // ~たり~たりする 처럼 한 문형이 문장 안에서 두 자리로 갈라지기도 한다.
+  // 그때는 빈칸이 여러 개이므로 조각을 모두 모아야 정답이 된다.
+  function answerParts(ex) {
+    var out = [], re = /\{\{([\s\S]*?)\}\}/g, m;
+    while ((m = re.exec(ex.jp)) !== null) out.push(m[1].replace(/\[[^\]]*\]/g, ''));
+    return out;
   }
+  function answerOf(ex) { return answerParts(ex).join(''); }
+  function answerText(ex) { return answerParts(ex).join(' + '); }
 
   // 비교 전 다듬기: 후리가나·물결표·공백을 빼고 전각/반각을 통일한다.
   function normAns(s) {
-    s = String(s).replace(/\[[^\]]*\]/g, '').replace(/[~～]/g, '').replace(/\s+/g, '');
+    // 빈칸이 여러 개면 조각을 이어서 답한다. 사이에 넣은 +, /, 공백은 없는 셈 친다.
+    s = String(s).replace(/\[[^\]]*\]/g, '').replace(/[~～+＋/／･・]/g, '').replace(/\s+/g, '');
     try { s = s.normalize('NFKC'); } catch (e) {}
     return s;
   }
 
   // 예문 렌더링. 후리가나는 漢字[かな], 문형 자리는 {{ }} 로 표시돼 있다.
+  var BLANK_NO = ['①', '②', '③', '④'];
+
   function gJP(jp, opt) {
     opt = opt || {};
-    var out = '', i = 0, re = /\{\{([\s\S]*?)\}\}/g, m;
+    var out = '', i = 0, re = /\{\{([\s\S]*?)\}\}/g, m, n = 0;
+    // 빈칸이 둘 이상이면 번호를 붙인다. 어디를 몇 번째로 채우는지 알아야 한다.
+    var many = (jp.match(/\{\{/g) || []).length > 1;
     var seg = function (t) {
-      var s = '', last = 0, r = /([一-龯々〆ヶ]+)\[([^\]]*)\]/g, x;
+      var s = '', last = 0, r = rubyRe(), x;
       while ((x = r.exec(t)) !== null) {
         s += esc(t.slice(last, x.index));
         s += (opt.ruby && x[2]) ? '<ruby>' + esc(x[1]) + '<rt>' + esc(x[2]) + '</rt></ruby>' : esc(x[1]);
@@ -922,10 +940,12 @@
     };
     while ((m = re.exec(jp)) !== null) {
       out += seg(jp.slice(i, m.index));
-      if (opt.blank)       out += '<span class="gblank">?</span>';
+      var tag = many ? (BLANK_NO[n] || (n + 1)) : '';
+      if (opt.blank)       out += '<span class="gblank">' + (tag || '?') + '</span>';
       else if (opt.reveal) out += '<span class="gblank filled">' + seg(m[1]) + '</span>';
       else                 out += '<mark>' + seg(m[1]) + '</mark>';
       i = m.index + m[0].length;
+      n++;
     }
     return out + seg(jp.slice(i));
   }
@@ -995,8 +1015,8 @@
     var st = Store.gStageFor(it);
     h += '<div class="card">';
     h += '<div class="card-meta">' +
-         '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-         '<span class="card-no">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-(' + it.sub + ')' : '') +
+         '<span class="badge ' + st + '">' + G_STAGE_LABEL[st] + '</span>' +
+         '<span class="card-no">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-' + it.sub : '') +
            (it.group ? ' · <span lang="ja">' + esc(it.group) + '</span>' : '') + '</span></div>';
 
     if (gMode === 'learn') {
@@ -1017,7 +1037,9 @@
       h += '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, gGraded ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>';
       h += '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>';
       if (!gGraded) {
-        h += '<input class="ginp" id="gAns" lang="ja" placeholder="빈칸에 들어갈 말" ' +
+        var np = answerParts(e0).length;
+        h += '<input class="ginp" id="gAns" lang="ja" placeholder="' +
+             (np > 1 ? BLANK_NO.slice(0, np).join(' ') + ' 순서대로' : '빈칸에 들어갈 말') + '" ' +
              'autocomplete="off" autocapitalize="off" spellcheck="false">';
         h += '<button class="next-btn" id="gSubmit">확인</button>';
         h += '<button class="known-btn" id="gSkip">모르겠어요 · 정답 보기</button>';
@@ -1027,7 +1049,7 @@
              (gGraded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다')) + '</div>';
         if (gGraded === 'wrong' && gTyped)
           h += '<div class="gcmp"><span class="cl">입력</span><span class="cv bad" lang="ja">' + esc(gTyped) + '</span></div>';
-        h += '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerOf(e0)) + '</span></div>';
+        h += '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerText(e0)) + '</span></div>';
         h += grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn');
         h += grow('접속', esc(it.connect), 'cn');
         h += grow('의미', esc(it.meaning), 'dim');
@@ -1235,7 +1257,7 @@
   // 예문은 `漢字[かんじ]` 표기로 저장한다.
   //   withRuby=false → 한자만 (문제 풀 때: 읽는 법이 보이면 안 됨)
   //   withRuby=true  → 한자 위에 읽는 법 (책 지면 그대로: 검색·목록에서 볼 때)
-  var RUBY_RE = /([一-龯々〆ヶ]+)\[([^\]]*)\]/g;
+  var RUBY_RE = rubyRe();
 
   function renderJP(jp, word, withRuby) {
     var stem = stemOf(word);
