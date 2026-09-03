@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v31';
+  var BUILD = 'v32';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1525,7 +1525,7 @@
     $('btnShakyStudy').addEventListener('click', function () {
       var list = Store.shakyList();
       currentDays = [];
-      renderSet(list, '흔들리는 단어', list.length + '단어 · 맞았다 틀렸다 하는 것', true);
+      renderSet(list, '흔들리는 단어', list.length + '단어 · 2번 이상 학습 · 한 번이라도 틀림', true);
     });
 
     $('randCounts').addEventListener('click', function (ev) {

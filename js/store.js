@@ -414,11 +414,11 @@
     return (r.lapse || 0) * 3 + (r.fails || 0);
   }
 
-  // 흔들리는 단어 = 맞았다 틀렸다 하는 단어.
-  //   ① 장기기억까지 갔다가 다시 틀린 적이 있다
-  //   ② 두 번 넘게 틀렸다
+  // 흔들리는 단어 = 두 번 이상 봤는데 한 번이라도 틀린 단어.
+  // lapse 는 따로 본다. '아는 단어'로 바로 올린 뒤 한 번 만에 틀린 경우는
+  // 시험 횟수가 1이라 위 조건에 안 걸리지만, 이건 확실히 흔들리는 단어다.
   function isShaky(r) {
-    return !!r.seen && ((r.lapse || 0) >= 1 || (r.fails || 0) >= 2);
+    return !!r.seen && (((r.tries || 0) >= 2 && (r.fails || 0) >= 1) || (r.lapse || 0) >= 1);
   }
 
   function stageOf(level, seen) {
