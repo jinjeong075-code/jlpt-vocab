@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v30';
+  var BUILD = 'v31';
 
   /* ---------------- 화면 ---------------- */
 
@@ -176,6 +176,10 @@
     $('btnReviewToday').disabled = !due.length;
     $('btnWeakStudy').disabled = !weak.length;
 
+    var shaky = Store.shakyList();
+    $('shakyCount').textContent = shaky.length ? shaky.length + '개' : '아직 없음';
+    $('btnShakyStudy').disabled = !shaky.length;
+
     $('randPool').textContent = '전체 ' + s.total + '단어';
     $('btnRandStudy').disabled = !s.total;
     $('btnRandStudy').textContent =
@@ -333,10 +337,23 @@
     }).join('');
   }
 
+  // 시험 기록. 왼쪽이 오래된 것, 오른쪽이 최근 것이다.
+  //   ● 둘 다 맞음 · ◐ 하나만 맞음 · ○ 둘 다 틀림
+  function histHTML(r) {
+    if (!r.tries) return '';
+    var marks = (r.hist || '').split('').map(function (c) {
+      return '<i class="hm h' + c + '"></i>';
+    }).join('');
+    var txt = [r.tries + '번 중 ' + (r.tries - (r.fails || 0)) + '번 정답'];
+    if (r.lapse) txt.push('장기기억에서 ' + r.lapse + '번 떨어짐');
+    return '<div class="hist">' + marks +
+      '<span class="hist-txt">' + txt.join(' · ') + '</span></div>';
+  }
+
   function itemHTML(day, w, showDay) {
     var st = Store.stageFor(day, w);
     var r = Store.recOf(day, w);
-    var detail = detailHTML(w, true);
+    var detail = histHTML(r) + detailHTML(w, true);
     return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
         (detail ? ' role="button" tabindex="0"' : '') + '>' +
       '<div class="wl-head">' +
@@ -391,7 +408,7 @@
   function renderBrowseCard() {
     var e = browse.list[browse.index];
     var st = Store.stageFor(e.day, e.w);
-    var detail = detailHTML(e.w, true);
+    var detail = histHTML(Store.recOf(e.day, e.w)) + detailHTML(e.w, true);
 
     $('brStage').innerHTML =
       '<div class="card">' +
@@ -1503,6 +1520,12 @@
     });
     $('btnWeakStudy').addEventListener('click', function () {
       startSession(Store.weakList(), '모르는 단어');
+    });
+    // 목록을 먼저 보여준다. 많이 흔들린 것부터 나오니 무엇이 문제인지 눈에 들어온다.
+    $('btnShakyStudy').addEventListener('click', function () {
+      var list = Store.shakyList();
+      currentDays = [];
+      renderSet(list, '흔들리는 단어', list.length + '단어 · 맞았다 틀렸다 하는 것', true);
     });
 
     $('randCounts').addEventListener('click', function (ev) {

@@ -209,6 +209,7 @@
   function gGrade(item, patternOk, connectOk) {
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    var wasLong = isLong(r);
 
     if (patternOk) r.rO++; else r.rX++;
     if (connectOk) r.mO++; else r.mX++;
@@ -224,11 +225,17 @@
       r.miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
       r.due = retryAt(r.miss);
     }
+    logAttempt(r, wasLong, patternOk && connectOk, patternOk || connectOk);
     r.seen++;
     r.last = Date.now();
     progress[k] = r;
     write(PROG_KEY, progress);
     return r;
+  }
+
+  function gShakyList() {
+    return allGram().filter(function (it) { return isShaky(gRecOf(it)); })
+      .sort(function (a, b) { return shakyScore(gRecOf(b)) - shakyScore(gRecOf(a)); });
   }
 
   function gSummarize(items) {
@@ -383,6 +390,37 @@
 
   // 레벨 0 = 아직 못 맞춘 단어, 1~3 = 간격이 짧은 단기기억,
   // 4~5 = 14일·21일 간격을 견딘 장기기억.
+  /* ---------- 채점 기록 ---------- */
+  // 지금 레벨만 보면 '한 번도 안 틀리고 올라온 단어'와 '올라갔다 떨어지기를
+  // 반복한 단어'가 똑같아 보인다. 그래서 시험 결과를 따로 남긴다.
+  // 기기 사이로 동기화되므로 짧게. 최근 12번만 남긴다.
+  //   '2' 둘 다 정답 · '1' 하나만 정답 · '0' 둘 다 오답
+  var HIST_MAX = 12;
+
+  function logAttempt(r, wasLong, bothOk, oneOk) {
+    r.tries = (r.tries || 0) + 1;
+    if (!bothOk) {
+      r.fails = (r.fails || 0) + 1;
+      // 장기기억까지 갔다가 다시 틀렸다. '안다고 생각했는데 틀리는' 단어의 표시.
+      if (wasLong) r.lapse = (r.lapse || 0) + 1;
+    }
+    r.hist = ((r.hist || '') + (bothOk ? '2' : (oneOk ? '1' : '0'))).slice(-HIST_MAX);
+  }
+
+  function isLong(r) { return !!r.seen && r.level >= LONG_LEVEL; }
+
+  // 흔들리는 정도. 장기기억에서 떨어진 적이 있으면 훨씬 무겁게 본다.
+  function shakyScore(r) {
+    return (r.lapse || 0) * 3 + (r.fails || 0);
+  }
+
+  // 흔들리는 단어 = 맞았다 틀렸다 하는 단어.
+  //   ① 장기기억까지 갔다가 다시 틀린 적이 있다
+  //   ② 두 번 넘게 틀렸다
+  function isShaky(r) {
+    return !!r.seen && ((r.lapse || 0) >= 1 || (r.fails || 0) >= 2);
+  }
+
   function stageOf(level, seen) {
     if (!seen) return 'new';
     if (level === 0) return 'unknown';
@@ -415,6 +453,8 @@
   function grade(day, word, readingOk, meaningOk) {
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    // 레벨을 손대기 전에 장기기억이었는지 기억해 둔다.
+    var wasLong = isLong(r);
 
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
@@ -439,6 +479,7 @@
       r.due = retryAt(r.miss);
     }
 
+    logAttempt(r, wasLong, readingOk && meaningOk, readingOk || meaningOk);
     r.seen++;
     r.last = Date.now();
     progress[k] = r;
@@ -503,6 +544,15 @@
       var st = stageFor(e.day, e.w);
       return st === 'unknown' || st === 'new';
     });
+  }
+
+  // 흔들리는 단어. 많이 흔들린 것부터 앞에 온다.
+  // 장기기억에 있어 복습 대상이 아닌 단어도 여기에는 들어온다. 그게 요점이다.
+  function shakyList() {
+    return allWords().filter(function (e) { return isShaky(recOf(e.day, e.w)); })
+      .sort(function (a, b) {
+        return shakyScore(recOf(b.day, b.w)) - shakyScore(recOf(a.day, a.w));
+      });
   }
 
   function search(q) {
@@ -789,6 +839,8 @@
     summarizeAll: summarizeAll,
     dueList: dueList,
     weakList: weakList,
+    shakyList: shakyList,
+    shakyScore: shakyScore,
     resetProgress: resetProgress,
     markKnown: markKnown,
     dueMs: dueMs,
@@ -803,6 +855,7 @@
     gStageFor: gStageFor,
     gIsDue: gIsDue,
     gGrade: gGrade,
+    gShakyList: gShakyList,
     gSummarize: gSummarize,
     gSummarizeAll: gSummarizeAll,
     gChoices: gChoices,
