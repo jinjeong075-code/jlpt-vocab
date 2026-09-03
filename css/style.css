@@ -464,10 +464,10 @@ body.has-selbar main { padding-bottom: 156px; }
   background: var(--panel2); color: var(--dim);
 }
 .pos-noun  { background: rgba(125,159,232,.14); color: var(--accent); }
-.pos-verb  { background: rgba(95,201,141,.16);  color: #6ee79a; }
-.pos-i-adj { background: rgba(217,164,65,.16);  color: #fbbf24; }
-.pos-na-adj{ background: rgba(192,132,252,.18); color: #c4a2fb; }
-.pos-adv   { background: rgba(244,114,182,.16); color: #f9a8d4; }
+.pos-verb  { background: rgba(95,201,141,.16);  color: var(--ok); }
+.pos-i-adj { background: rgba(217,164,65,.16);  color: var(--warn); }
+.pos-na-adj{ background: rgba(183,156,240,.15); color: #b79cf0; }
+.pos-adv   { background: rgba(224,143,190,.15); color: #e08fbe; }
 
 /* ---------- 예문 · 문형 ---------- */
 .ex { padding: 10px 0; }
@@ -595,6 +595,14 @@ mark ruby rt { color: var(--accent); opacity: .8; }
   font-size: 14px; font-weight: 600; font-family: inherit;
 }
 .next-btn:disabled { background: var(--panel2); color: var(--dim); cursor: not-allowed; }
+
+/* ---------- 품사별 칩 ---------- */
+#posChips { margin: 0 0 24px; }
+/* 칩은 단어 옆에 붙는 품사 배지(.pos-*)와 같은 색을 그대로 쓴다.
+   목록에서 본 색이 여기서도 같아야 눈으로 바로 이어진다. */
+.pos-chip { flex: 0 1 auto; padding: 9px 12px; display: inline-flex; align-items: baseline; gap: 7px; }
+.pos-chip i { font-style: normal; font-size: 11px; opacity: .7; }
+.pos-chip:hover { border-color: currentColor; filter: brightness(1.25); }
 
 /* ---------- 넘기며 보기 ---------- */
 .br-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 12px; }

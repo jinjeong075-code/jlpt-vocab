@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v29';
+  var BUILD = 'v30';
 
   /* ---------------- 화면 ---------------- */
 
@@ -165,6 +165,7 @@
     $('globalStats').innerHTML = statHTML(s, true);
     renderProgress(s);
     renderResume();
+    renderPosChips();
 
     var due = Store.dueList(), weak = Store.weakList();
     // 대기가 0이면 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
@@ -265,19 +266,16 @@
 
   /* ---------------- Day 상세 ---------------- */
 
-  function renderDays(dayNums) {
-    var entries = wordsOf(dayNums);
+  // 목록 화면은 Day 뿐 아니라 품사처럼 다른 기준으로 모은 묶음도 그대로 보여준다.
+  // 그래서 화면을 하나 더 만들지 않고, 무엇을 담았는지만 currentSet 에 기억해 둔다.
+  var currentSet = { entries: [], label: '' };
+
+  function renderSet(entries, title, sub, showDay) {
     if (!entries.length) return;
-    currentDays = dayNums.slice();
+    currentSet = { entries: entries.slice(), label: title };
 
-    var titles = dayNums.map(function (n) {
-      var d = Store.getDay(n);
-      return d && d.title ? d.title : '';
-    }).filter(Boolean);
-
-    $('dayHeadTitle').textContent = dayLabel(dayNums);
-    $('dayHeadSub').textContent =
-      (titles.length ? titles.join(' · ') + ' · ' : '') + entries.length + '단어';
+    $('dayHeadTitle').textContent = title;
+    $('dayHeadSub').textContent = sub;
 
     var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
     entries.forEach(function (e) { s.total++; s[Store.stageFor(e.day, e.w)]++; });
@@ -289,9 +287,50 @@
     $('btnStudyDue').disabled = !due.length;
 
     $('dayWordList').innerHTML = entries.map(function (e) {
-      return itemHTML(e.day, e.w, dayNums.length > 1);
+      return itemHTML(e.day, e.w, showDay);
     }).join('');
     show('day');
+  }
+
+  function renderDays(dayNums) {
+    var entries = wordsOf(dayNums);
+    if (!entries.length) return;
+    currentDays = dayNums.slice();
+
+    var titles = dayNums.map(function (n) {
+      var d = Store.getDay(n);
+      return d && d.title ? d.title : '';
+    }).filter(Boolean);
+
+    renderSet(entries, dayLabel(dayNums),
+      (titles.length ? titles.join(' · ') + ' · ' : '') + entries.length + '단어',
+      dayNums.length > 1);
+  }
+
+  /* ---------------- 품사별 모아 보기 ---------------- */
+  // 부사처럼 흩어져 있으면 헷갈리는 품사를 Day 와 상관없이 한자리에 모은다.
+  // '명/부' 처럼 두 품사를 겸하는 단어는 양쪽에 다 들어가야 한다. 그래서 포함 여부로 본다.
+  var POS_GROUPS = [
+    { key: 'noun',  label: '명사',    has: '명' },
+    { key: 'verb',  label: '동사',    has: '동' },
+    { key: 'i-adj', label: 'い형용사', has: 'い형' },
+    { key: 'na-adj',label: 'な형용사', has: 'な형' },
+    { key: 'adv',   label: '부사',    has: '부' }
+  ];
+
+  function wordsOfPos(has) {
+    return Store.allWords().filter(function (e) {
+      return (e.w.pos || '').indexOf(has) > -1;
+    });
+  }
+
+  function renderPosChips() {
+    $('posChips').innerHTML = POS_GROUPS.map(function (g) {
+      var n = wordsOfPos(g.has).length;
+      if (!n) return '';
+      return '<button class="chip pos-chip pos-' + g.key + '" data-has="' + esc(g.has) + '">' +
+        esc(g.label) + '<i>' + n + '</i></button>';
+    }).join('');
   }
 
   function itemHTML(day, w, showDay) {
@@ -304,7 +343,7 @@
         '<span class="wl-dot dot-' + st + '"></span>' +
         '<span class="wl-main">' +
           '<span class="wl-word" lang="ja">' + dictHTML(w.word) +
-            '<span class="wl-reading">' + esc(w.reading) + '</span>' + posHTML(w.pos) +
+            (readingOf(w) ? '<span class="wl-reading">' + esc(readingOf(w)) + '</span>' : '') + posHTML(w.pos) +
           '</span>' +
           '<div class="wl-meaning">' + esc(w.meaning) + '</div>' +
         '</span>' +
@@ -363,7 +402,7 @@
         '<div class="jp-word" lang="ja">' + dictHTML(e.w.word, 'big') + '</div>' +
         '<div class="answer-box">' +
           '<div class="ans-row"><span class="ans-label">읽는 법</span>' +
-            '<span class="ans-value reading" lang="ja">' + esc(e.w.reading) + '</span></div>' +
+            '<span class="ans-value reading" lang="ja">' + esc(readingOf(e.w) || e.w.word) + '</span></div>' +
           '<div class="ans-row"><span class="ans-label">뜻</span>' +
             '<span class="ans-value">' + posHTML(e.w.pos) + esc(e.w.meaning) + '</span></div>' +
         '</div>' +
@@ -472,7 +511,7 @@
     $('cardBadge').className = 'badge ' + st;
     $('cardNo').textContent = 'DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '');
     $('jpWord').innerHTML = dictHTML(e.w.word, 'big');
-    $('ansReading').textContent = e.w.reading;
+    $('ansReading').textContent = readingOf(e.w) || e.w.word;
     $('ansMeaning').innerHTML = posHTML(e.w.pos) + esc(e.w.meaning);
     // 문제를 푸는 중에는 예문에 읽는 법이 보이면 안 되므로 한자 그대로 둔다.
     // 예문 자체는 힌트로 계속 보여주고, 해석·문형만 quiz 클래스로 가린다.
@@ -595,7 +634,7 @@
         '<span class="wl-dot dot-' + st + '"></span>' +
         '<span class="wl-main">' +
           '<span class="wl-word" lang="ja">' + dictHTML(x.w.word) +
-            '<span class="wl-reading">' + esc(x.w.reading) + '</span>' + posHTML(x.w.pos) +
+            (readingOf(x.w) ? '<span class="wl-reading">' + esc(readingOf(x.w)) + '</span>' : '') + posHTML(x.w.pos) +
           '</span>' +
           '<div class="wl-meaning">' + esc(x.w.meaning) + '</div>' +
         '</span>' +
@@ -1276,6 +1315,13 @@
     return '<span class="pos pos-' + posClass(pos) + '">' + esc(pos) + '</span>';
   }
 
+  // 가나로만 된 단어는 책에 읽는 법이 '-' 로 적혀 있다. 단어 자체가 읽는 법이라 그렇다.
+  // 그대로 찍으면 목록에 뜻 없는 작대기만 남으므로, 따로 보여줄 읽는 법이 없다고 본다.
+  function readingOf(w) {
+    var r = (w.reading || '').trim();
+    return (!r || r === '-' || r === '―' || r === w.word) ? '' : r;
+  }
+
   function posClass(pos) {
     if (pos.indexOf('い형') === 0) return 'i-adj';
     if (pos.indexOf('な형') === 0) return 'na-adj';
@@ -1407,6 +1453,16 @@
       renderSelBar();
     });
 
+    $('posChips').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.pos-chip');
+      if (!chip) return;
+      var g = POS_GROUPS.filter(function (x) { return x.has === chip.dataset.has; })[0];
+      var list = wordsOfPos(g.has);
+      // 여러 Day 에서 모은 것이라 항목마다 어느 Day 인지 함께 보여준다.
+      currentDays = [];
+      renderSet(list, g.label, list.length + '단어 · 전체 Day', true);
+    });
+
     $('btnSelAll').addEventListener('click', function () {
       var all = Store.allDays().map(function (d) { return d.day; });
       selected = (selected.length === all.length) ? [] : all;
@@ -1431,16 +1487,16 @@
     });
 
     $('btnBrowse').addEventListener('click', function () {
-      startBrowse(wordsOf(currentDays), dayLabel(currentDays));
+      startBrowse(currentSet.entries, currentSet.label);
     });
     $('brPrev').addEventListener('click', function () { browseGo(-1); });
     $('brNext').addEventListener('click', function () { browseGo(1); });
 
     $('btnStudyAll').addEventListener('click', function () {
-      startSession(entriesOfDays(currentDays, false), dayLabel(currentDays));
+      startSession(currentSet.entries, currentSet.label);
     });
     $('btnStudyDue').addEventListener('click', function () {
-      startSession(entriesOfDays(currentDays, true), dayLabel(currentDays) + ' 복습');
+      startSession(currentSet.entries.filter(function (e) { return Store.isDue(e.day, e.w); }), currentSet.label + ' 복습');
     });
     $('btnReviewToday').addEventListener('click', function () {
       startSession(Store.dueList(), '오늘의 복습');
@@ -1489,7 +1545,7 @@
       var b = ev.target.closest('.stat.tap');
       if (!b) return;
       var st = b.dataset.stage;
-      startSession(byStage(st, wordsOf(currentDays)), dayLabel(currentDays) + ' · ' + STAGE_NAME[st]);
+      startSession(byStage(st, currentSet.entries), currentSet.label + ' · ' + STAGE_NAME[st]);
     });
 
     /* ----- 첫 화면 · 문법 ----- */
