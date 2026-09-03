@@ -147,8 +147,26 @@
       <span class="bb-title">복습할 것만</span><span class="bb-sub" id="dayDueCount"></span>
     </button>
   </div>
-  <div class="section-head"><h2>단어 목록</h2></div>
+  <div class="section-head">
+    <h2>단어 목록</h2>
+    <div class="head-actions">
+      <button class="mini-btn go" id="btnBrowse">넘기며 보기</button>
+    </div>
+  </div>
   <div id="dayWordList" class="word-list"></div>
+</section>
+
+<!-- ============ 넘기며 보기 (채점 없이 한 장씩) ============ -->
+<section id="viewBrowse" class="view">
+  <div class="progress-wrap">
+    <div class="progress-bar"><div id="brFill"></div></div>
+    <div class="progress-text"><span id="brCount">0 / 0</span><span id="brLabel"></span></div>
+  </div>
+  <div id="brStage"></div>
+  <div class="br-nav">
+    <button class="br-btn" id="brPrev">이전</button>
+    <button class="br-btn primary" id="brNext">다음</button>
+  </div>
 </section>
 
 <!-- ============ 학습 ============ -->

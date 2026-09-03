@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v28';
+  var BUILD = 'v29';
 
   /* ---------------- 화면 ---------------- */
 
@@ -40,7 +40,7 @@
   // 뒤로가기가 돌아갈 화면. 문법 안에서는 문법 홈으로, 그다음이 첫 화면이다.
   var BACK_TO = {
     home: 'pick', gram: 'pick',
-    day: 'home', study: 'home', result: 'home', time: 'home',
+    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day',
     gramCh: 'gram', gramStudy: 'gram'
   };
 
@@ -76,7 +76,7 @@
   }
 
   var VIEW_TITLE = {
-    pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', time: '공부 시간',
+    pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
     gramCh: '내용 보기', gramStudy: '문법'
   };
 
@@ -334,6 +334,58 @@
       ev.preventDefault();
       item.click();
     });
+  }
+
+  /* ---------------- 넘기며 보기 ---------------- */
+  // 목록을 훑는 대신 한 단어씩 넘겨 가며 읽는 화면. 채점하지 않고 진도도 건드리지 않는다.
+  // 시험이 아니므로 순서는 섞지 않고 책 순서 그대로 두고, 읽는 법과 예문을 처음부터 보여준다.
+
+  var browse = null;   // { list, index, label }
+
+  function startBrowse(entries, label) {
+    if (!entries.length) return;
+    browse = { list: entries.slice(), index: 0, label: label };
+    show('browse');
+    renderBrowseCard();
+  }
+
+  function renderBrowseCard() {
+    var e = browse.list[browse.index];
+    var st = Store.stageFor(e.day, e.w);
+    var detail = detailHTML(e.w, true);
+
+    $('brStage').innerHTML =
+      '<div class="card">' +
+        '<div class="card-meta">' +
+          '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
+          '<span class="card-no">DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '') + '</span>' +
+        '</div>' +
+        '<div class="jp-word" lang="ja">' + dictHTML(e.w.word, 'big') + '</div>' +
+        '<div class="answer-box">' +
+          '<div class="ans-row"><span class="ans-label">읽는 법</span>' +
+            '<span class="ans-value reading" lang="ja">' + esc(e.w.reading) + '</span></div>' +
+          '<div class="ans-row"><span class="ans-label">뜻</span>' +
+            '<span class="ans-value">' + posHTML(e.w.pos) + esc(e.w.meaning) + '</span></div>' +
+        '</div>' +
+        (detail ? '<div class="detail-box">' + detail + '</div>' : '') +
+      '</div>';
+
+    var n = browse.list.length;
+    $('brCount').textContent = (browse.index + 1) + ' / ' + n;
+    $('brLabel').textContent = browse.label;
+    $('brFill').style.width = ((browse.index + 1) / n * 100) + '%';
+    $('brPrev').disabled = browse.index === 0;
+    $('brNext').textContent = (browse.index === n - 1) ? '목록으로' : '다음';
+    window.scrollTo(0, 0);
+  }
+
+  function browseGo(step) {
+    if (!browse) return;
+    var i = browse.index + step;
+    if (i < 0) return;
+    if (i >= browse.list.length) { goView('day'); return; }
+    browse.index = i;
+    renderBrowseCard();
   }
 
   /* ---------------- 학습 ---------------- */
@@ -1378,6 +1430,12 @@
       startSession(entriesOfDays(selected, true), dayLabel(selected) + ' 복습');
     });
 
+    $('btnBrowse').addEventListener('click', function () {
+      startBrowse(wordsOf(currentDays), dayLabel(currentDays));
+    });
+    $('brPrev').addEventListener('click', function () { browseGo(-1); });
+    $('brNext').addEventListener('click', function () { browseGo(1); });
+
     $('btnStudyAll').addEventListener('click', function () {
       startSession(entriesOfDays(currentDays, false), dayLabel(currentDays));
     });
@@ -1522,6 +1580,13 @@
       // 검색 패널이 열려 있으면 O/X 단축키가 검색어에 끼어들면 안 된다.
       if (searchOpen) {
         if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
+        return;
+      }
+      // 넘기며 보기는 채점이 없으니 좌우 화살표와 Enter 로만 넘긴다.
+      if (view === 'browse') {
+        if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault(); browseGo(1);
+        } else if (ev.key === 'ArrowLeft') { ev.preventDefault(); browseGo(-1); }
         return;
       }
       if (view !== 'study') return;
