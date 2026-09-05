@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v34';
+  var BUILD = 'v35';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1155,7 +1155,12 @@
         h += '<div class="ex ruby"><p class="ex-jp" lang="ja">' + gJP(e.jp, { ruby: true }) + '</p>' +
              '<p class="ex-ko">' + esc(e.ko) + (e.type ? '<span class="gtag">' + esc(e.type) + '</span>' : '') + '</p></div>';
       });
-      h += '</div><button class="next-btn" id="gNext">다음</button>';
+      // 읽기만 하는 화면이라 앞뒤로 자유롭게 넘긴다.
+      h += '</div><div class="br-nav">' +
+        '<button class="br-btn" id="gPrev"' + (gIdx === 0 ? ' disabled' : '') + '>이전</button>' +
+        '<button class="br-btn primary" id="gNext">' +
+          (gIdx === gQueue.length - 1 ? '끝내기' : '다음') + '</button>' +
+        '</div>';
     }
 
     if (gMode === 'cloze') {
@@ -1239,6 +1244,7 @@
       refreshGNext();
     });
     if ($('gNext')) $('gNext').addEventListener('click', gNext);
+    if ($('gPrev')) $('gPrev').addEventListener('click', gPrev);
 
     $$('#gStage .ox-btn').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1294,6 +1300,13 @@
     }
     gIdx++; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
     gPick.pat = null; gPick.con = null;
+    renderGramCard();
+  }
+
+  // 뒤로 넘기는 건 내용 보기에서만. 채점하는 모드는 답을 이미 매겼으므로 되돌리지 않는다.
+  function gPrev() {
+    if (gMode !== 'learn' || gIdx === 0) return;
+    gIdx--;
     renderGramCard();
   }
 
@@ -1683,6 +1696,14 @@
       // 검색 패널이 열려 있으면 O/X 단축키가 검색어에 끼어들면 안 된다.
       if (searchOpen) {
         if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
+        return;
+      }
+      // 문법 내용 보기도 채점이 없다. 같은 키로 앞뒤로 넘긴다.
+      // 빈칸 채우기·4지선다는 입력과 채점이 있어 건드리지 않는다.
+      if (view === 'gramStudy' && gMode === 'learn' && gIdx < gQueue.length) {
+        if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault(); gNext();
+        } else if (ev.key === 'ArrowLeft') { ev.preventDefault(); gPrev(); }
         return;
       }
       // 넘기며 보기는 채점이 없으니 좌우 화살표와 Enter 로만 넘긴다.
