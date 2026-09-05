@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v32';
+  var BUILD = 'v33';
 
   /* ---------------- 화면 ---------------- */
 
@@ -50,6 +50,8 @@
       if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
       else if (!$('howToPanel').hidden) $('howToPanel').hidden = true;
       else if (searchOpen) closeSearch();
+      // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
+      else if (view === 'day' && setStack.length) applySet(setStack.pop());
       else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
     } finally {
       navLock = false;
@@ -273,13 +275,26 @@
   // 목록 화면은 Day 뿐 아니라 품사처럼 다른 기준으로 모은 묶음도 그대로 보여준다.
   // 그래서 화면을 하나 더 만들지 않고, 무엇을 담았는지만 currentSet 에 기억해 둔다.
   var currentSet = { entries: [], label: '' };
+  var setDesc = null;    // 지금 보고 있는 묶음
+  var setStack = [];     // 목록에서 더 좁혀 들어오기 전의 묶음들. 뒤로가기가 한 단계씩 되돌린다.
 
   function renderSet(entries, title, sub, showDay) {
     if (!entries.length) return;
-    currentSet = { entries: entries.slice(), label: title };
+    var d = { entries: entries.slice(), title: title, sub: sub, showDay: !!showDay };
+    // 같은 화면에서 더 좁혀 들어가는 경우(DAY 20 → 단기기억)에는
+    // 화면이 바뀌지 않아 show() 가 히스토리를 쌓지 않는다. 직접 쌓아 둔다.
+    if (view === 'day' && setDesc) { setStack.push(setDesc); pushNav(); }
+    else setStack = [];
+    applySet(d);
+  }
 
-    $('dayHeadTitle').textContent = title;
-    $('dayHeadSub').textContent = sub;
+  function applySet(d) {
+    var entries = d.entries, showDay = d.showDay;
+    currentSet = { entries: entries.slice(), label: d.title };
+    setDesc = d;
+
+    $('dayHeadTitle').textContent = d.title;
+    $('dayHeadSub').textContent = d.sub;
 
     var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
     entries.forEach(function (e) { s.total++; s[Store.stageFor(e.day, e.w)]++; });
@@ -1558,17 +1573,23 @@
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
 
     // 통계 칸을 눌러 그 단계의 단어만 학습한다. 복습일과 상관없이 원할 때 볼 수 있다.
+    // 통계 칸을 누르면 바로 시험이 아니라 그 단계만 모은 목록으로 간다.
+    // 목록을 훑을지, 시험을 볼지, 넘기며 볼지는 거기서 고른다.
     $('globalStats').addEventListener('click', function (ev) {
       var b = ev.target.closest('.stat.tap');
       if (!b) return;
       var st = b.dataset.stage;
-      startSession(byStage(st), STAGE_NAME[st]);
+      var list = byStage(st);
+      currentDays = [];
+      renderSet(list, STAGE_NAME[st], list.length + '단어 · 전체 Day', true);
     });
     $('dayStats').addEventListener('click', function (ev) {
       var b = ev.target.closest('.stat.tap');
       if (!b) return;
       var st = b.dataset.stage;
-      startSession(byStage(st, currentSet.entries), currentSet.label + ' · ' + STAGE_NAME[st]);
+      var list = byStage(st, currentSet.entries);
+      renderSet(list, currentSet.label + ' · ' + STAGE_NAME[st],
+        list.length + '단어', setDesc ? setDesc.showDay : true);
     });
 
     /* ----- 첫 화면 · 문법 ----- */
