@@ -224,7 +224,12 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
   border-radius: var(--radius); cursor: pointer; text-align: left; font-family: inherit;
   background: var(--panel); border: 1px solid var(--hair); color: var(--text);
 }
-.ch:hover { background: var(--panel2); }
+.ch:hover:not(:disabled) { background: var(--panel2); }
+.ch:disabled { opacity: .4; cursor: not-allowed; }
+/* '전체(오늘의 복습)' 줄은 챕터 목록과 성격이 달라 살짝 띄워 둔다. */
+.ch[data-k="__all"] { border-color: var(--line); margin-bottom: 8px; }
+.ch[data-k="__all"] .ch-lv { color: var(--accent); }
+.ch[data-k="__all"] .ch-n { color: var(--accent); }
 .ch-lv {
   flex: 0 0 34px; font-size: 11px; font-weight: 600; color: var(--dim);
 }

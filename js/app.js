@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v35';
+  var BUILD = 'v36';
 
   /* ---------------- 화면 ---------------- */
 
@@ -41,7 +41,7 @@
   var BACK_TO = {
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day',
-    gramCh: 'gram', gramStudy: 'gram'
+    gramCh: 'gram', gramStudy: 'gramCh'
   };
 
   function handleBack() {
@@ -79,7 +79,7 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '내용 보기', gramStudy: '문법'
+    gramCh: '문법', gramStudy: '문법'
   };
 
   function show(name) {
@@ -1098,10 +1098,26 @@
     $('gEmptyNote').hidden = all.length > 0;
   }
 
-  // 내용 보기는 챕터(레벨·섹션)를 먼저 고른다.
-  function renderGramChapters() {
+  // 세 모드 모두 챕터(레벨·섹션)를 먼저 고른다.
+  var gPickMode = 'learn';
+
+  function renderGramChapters(mode) {
+    gPickMode = mode || 'learn';
     var secs = Store.gramSections();
-    $('gChList').innerHTML = secs.map(function (g) {
+    var h = '';
+
+    // 채점하는 모드는 '전체' 로 복습일이 된 것만 한 번에 푸는 길을 남겨 둔다.
+    // 매일 하는 복습은 챕터를 고를 일이 아니다.
+    if (gPickMode !== 'learn') {
+      var due = Store.allGram().filter(function (it) { return Store.gIsDue(it); });
+      h += '<button class="ch" data-k="__all"' + (due.length ? '' : ' disabled') + '>' +
+        '<span class="ch-lv">전체</span>' +
+        '<span class="ch-tx"><span class="ch-t">오늘의 복습</span>' +
+          '<span class="ch-s">복습일이 된 문형</span></span>' +
+        '<span class="ch-n">' + due.length + '개</span></button>';
+    }
+
+    h += secs.map(function (g) {
       var s = Store.gSummarize(g.items);
       var pct = s.total ? Math.round(s.long / s.total * 100) : 0;
       var nums = g.items.map(function (i) { return i.no; });
@@ -1114,6 +1130,9 @@
         '</span>' +
         '<span class="ch-n">' + pct + '%</span></button>';
     }).join('');
+
+    $('gChList').innerHTML = h;
+    $('gChTitle').textContent = G_NAME[gPickMode] + ' · 챕터 선택';
     show('gramCh');
   }
 
@@ -1612,21 +1631,23 @@
     $('pkVocab').addEventListener('click', function () { renderHome(); show('home'); });
     $('pkGram').addEventListener('click', function () { renderGramHome(); show('gram'); });
 
-    $('gmLearn').addEventListener('click', renderGramChapters);
-    $('gmCloze').addEventListener('click', function () {
-      startGram('cloze', Store.allGram().filter(function (it) { return Store.gIsDue(it); }));
-    });
-    $('gmChoice').addEventListener('click', function () {
-      startGram('choice', Store.allGram().filter(function (it) { return Store.gIsDue(it); }));
-    });
+    $('gmLearn').addEventListener('click', function () { renderGramChapters('learn'); });
+    $('gmCloze').addEventListener('click', function () { renderGramChapters('cloze'); });
+    $('gmChoice').addEventListener('click', function () { renderGramChapters('choice'); });
 
     $('gChList').addEventListener('click', function (ev) {
       var b = ev.target.closest('.ch');
       if (!b) return;
+      if (b.dataset.k === '__all') {
+        startGram(gPickMode, Store.allGram().filter(function (it) { return Store.gIsDue(it); }),
+          G_NAME[gPickMode]);
+        return;
+      }
       var g = Store.gramSections().filter(function (x) {
         return x.level + '-' + x.section === b.dataset.k;
       })[0];
-      if (g) startGram('learn', g.items, g.level + ' · ' + String(g.section).padStart(2, '0'));
+      // 챕터를 직접 골랐으면 복습일과 상관없이 그 챕터를 통째로 낸다.
+      if (g) startGram(gPickMode, g.items, g.level + ' · ' + String(g.section).padStart(2, '0'));
     });
 
     $('searchInput').addEventListener('input', runSearch);
