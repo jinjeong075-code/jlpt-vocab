@@ -262,7 +262,43 @@
     <div class="prog-bar" id="gProgSeg"></div>
   </div>
 
+  <button class="resume-btn" id="btnGResume" hidden>
+    <span class="rs-main">
+      <span class="rs-label">이어서 학습</span>
+      <span class="rs-info" id="gResumeInfo"></span>
+    </span>
+    <span class="rs-go">▶</span>
+  </button>
+
   <div class="stat-grid" id="gStats"></div>
+
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnGReview">
+      <span class="bb-title">오늘의 복습</span><span class="bb-sub" id="gReviewCount">0개</span>
+    </button>
+    <button class="big-btn" id="btnGWeak">
+      <span class="bb-title">모르는 문형만</span><span class="bb-sub" id="gWeakCount">0개</span>
+    </button>
+    <button class="big-btn" id="btnGShaky">
+      <span class="bb-title">흔들리는 문형</span><span class="bb-sub" id="gShakyCount">0개</span>
+    </button>
+  </div>
+
+  <div class="rand-card">
+    <div class="rand-row">
+      <span class="rand-title">전체에서 랜덤</span>
+      <span class="rand-pool" id="gRandPool"></span>
+    </div>
+    <div class="chips" id="gRandCounts">
+      <button class="chip" data-n="10">10</button>
+      <button class="chip" data-n="15">15</button>
+      <button class="chip sel" data-n="20">20</button>
+      <button class="chip" data-n="25">25</button>
+      <button class="chip" data-n="30">30</button>
+      <button class="chip" data-n="0">전체</button>
+    </div>
+    <button class="rand-go" id="btnGRand">랜덤 뽑기</button>
+  </div>
 
   <div class="pick">
     <button class="pk" id="gmLearn">
@@ -285,6 +321,28 @@
 <section id="viewGramCh" class="view">
   <div class="section-head"><h2 id="gChTitle">챕터 선택</h2></div>
   <div id="gChList" class="ch-list"></div>
+</section>
+
+<!-- ============ 문법: 문형 묶음 목록 ============ -->
+<section id="viewGramList" class="view">
+  <div class="day-head">
+    <h1 id="gListTitle">문형</h1>
+    <p class="sub" id="gListSub"></p>
+  </div>
+  <div class="stat-grid" id="gListStats"></div>
+  <div class="row-btns">
+    <button class="big-btn primary" id="gListCloze">
+      <span class="bb-title">빈칸 채우기</span><span class="bb-sub" id="gListClozeN"></span>
+    </button>
+    <button class="big-btn" id="gListChoice">
+      <span class="bb-title">4지선다</span><span class="bb-sub" id="gListChoiceN"></span>
+    </button>
+    <button class="big-btn" id="gListLearn">
+      <span class="bb-title">내용 보기</span><span class="bb-sub" id="gListLearnN"></span>
+    </button>
+  </div>
+  <div class="section-head"><h2>문형 목록</h2></div>
+  <div id="gListItems" class="word-list"></div>
 </section>
 
 <!-- ============ 문법 학습 ============ -->

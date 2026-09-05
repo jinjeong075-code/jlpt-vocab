@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v36';
+  var BUILD = 'v37';
 
   /* ---------------- 화면 ---------------- */
 
@@ -41,7 +41,7 @@
   var BACK_TO = {
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day',
-    gramCh: 'gram', gramStudy: 'gramCh'
+    gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
   function handleBack() {
@@ -52,6 +52,9 @@
       else if (searchOpen) closeSearch();
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
+      else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
+      // 문법 학습은 챕터에서 왔는지 묶음 목록에서 왔는지에 따라 돌아갈 곳이 다르다.
+      else if (view === 'gramStudy') goView(gStudyFrom || 'gramCh');
       else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
     } finally {
       navLock = false;
@@ -79,7 +82,7 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '문법', gramStudy: '문법'
+    gramCh: '문법', gramStudy: '문법', gramList: '문법'
   };
 
   function show(name) {
@@ -706,10 +709,16 @@
       $('searchResults').innerHTML = '';
       return;
     }
-    $('searchHint').textContent = hits.length + '개';
-    $('searchResults').innerHTML = hits.slice(0, 300).map(function (e) {
-      return itemHTML(e.day, e.w, true);
-    }).join('');
+    // 단어와 문법을 한 번에 찾는다. 찾는 사람은 그게 단어인지 문형인지 미리 모른다.
+    var gHits = Store.gSearch(q);
+    $('searchHint').textContent = hits.length + '개' +
+      (gHits.length ? ' · 문형 ' + gHits.length + '개' : '');
+    $('searchResults').innerHTML =
+      hits.slice(0, 300).map(function (e) { return itemHTML(e.day, e.w, true); }).join('') +
+      (gHits.length
+        ? '<div class="section-head"><h2>문형 ' + gHits.length + '</h2></div>' +
+          gHits.slice(0, 200).map(gItemHTML).join('')
+        : '');
   }
 
   /* ---------------- 공부 시간 측정 ---------------- */
@@ -1016,6 +1025,16 @@
   var gMode = null;        // 'learn' | 'cloze' | 'choice'
   var gQueue = [], gIdx = 0;
   var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
+  var gWrong = [];         // 이번 학습에서 틀린 문형
+  var gRandCount = 20;     // 전체에서 랜덤으로 뽑을 개수 (0 = 전체)
+
+  function gByStage(stage, items) {
+    if (stage === 'all') return items;
+    return items.filter(function (it) {
+      var st = Store.gStageFor(it);
+      return stage === 'unknown' ? (st === 'unknown' || st === 'new') : st === stage;
+    });
+  }
 
   var G_NAME = { learn: '내용 보기', cloze: '빈칸 채우기', choice: '4지선다' };
   // 단계 이름은 단어와 같지만 세는 단위가 다르다. 문법에서 '모르는 단어'는 말이 안 된다.
@@ -1089,13 +1108,122 @@
     };
     $('gProgSeg').innerHTML =
       seg(s.long, 'long') + seg(s.short, 'short') + seg(s.unknown, 'unknown') + seg(s['new'], 'new');
-    $('gStats').innerHTML = statHTML(s);
+    $('gStats').innerHTML = statHTML(s, true);
+    renderGResume();
 
     var all = Store.allGram();
     var due = all.filter(function (it) { return Store.gIsDue(it); });
     $('gmClozeN').textContent = due.length + '개';
     $('gmChoiceN').textContent = due.length + '개';
     $('gEmptyNote').hidden = all.length > 0;
+
+    var today = Store.gDueList(), weak = Store.gWeakList(), shaky = Store.gShakyList();
+    $('gReviewCount').textContent = today.length ? today.length + '개 대기' : gNextDueText();
+    $('gWeakCount').textContent = weak.length + '개';
+    $('gShakyCount').textContent = shaky.length ? shaky.length + '개' : '아직 없음';
+    $('btnGReview').disabled = !today.length;
+    $('btnGWeak').disabled = !weak.length;
+    $('btnGShaky').disabled = !shaky.length;
+
+    $('gRandPool').textContent = '전체 ' + s.total + '문형';
+    $('btnGRand').disabled = !s.total;
+    $('btnGRand').textContent =
+      gRandCount && gRandCount < s.total ? gRandCount + '개 뽑기' : '전체 뽑기';
+  }
+
+  // 대기가 0일 때 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
+  function gNextDueText() {
+    var next = 0;
+    Store.allGram().forEach(function (it) {
+      var r = Store.gRecOf(it);
+      if (!r.seen) return;
+      var d = Store.dueMs(r);
+      if (!next || d < next) next = d;
+    });
+    if (!next) return '0개 대기';
+    var ms = next - Date.now();
+    if (ms <= 0) return '0개 대기';
+    if (ms < 3600000)  return '다음 복습 ' + Math.max(1, Math.round(ms / 60000)) + '분 뒤';
+    if (ms < 86400000) return '다음 복습 ' + Math.round(ms / 3600000) + '시간 뒤';
+    return '다음 복습 ' + Math.round(ms / 86400000) + '일 뒤';
+  }
+
+  function renderGResume() {
+    var s = Store.loadGSession();
+    var ok = s && s.queue && s.index < s.queue.length;
+    $('btnGResume').hidden = !ok;
+    if (ok) {
+      $('gResumeInfo').textContent =
+        (G_NAME[s.mode] || '문법') + ' · ' + s.label + ' · ' + (s.index + 1) + ' / ' + s.queue.length;
+    }
+  }
+
+  /* ---------------- 문형 묶음 목록 ---------------- */
+  // 단어의 Day 목록과 같은 자리. 복습·모름·흔들림·랜덤·챕터를 모두 여기로 모은다.
+  // 어떤 모드로 풀지는 이 화면에서 고른다.
+
+  var gSet = { items: [], label: '' };
+  var gSetDesc = null;
+  var gSetStack = [];
+
+  function renderGSet(items, title, sub) {
+    if (!items.length) return;
+    var d = { items: items.slice(), title: title, sub: sub };
+    if (view === 'gramList' && gSetDesc) { gSetStack.push(gSetDesc); pushNav(); }
+    else gSetStack = [];
+    applyGSet(d);
+  }
+
+  function applyGSet(d) {
+    gSet = { items: d.items.slice(), label: d.title };
+    gSetDesc = d;
+
+    $('gListTitle').textContent = d.title;
+    $('gListSub').textContent = d.sub;
+
+    var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
+    d.items.forEach(function (it) { s.total++; s[Store.gStageFor(it)]++; });
+    $('gListStats').innerHTML = statHTML(s, true);
+
+    var n = d.items.length + '개';
+    $('gListClozeN').textContent = n;
+    $('gListChoiceN').textContent = n;
+    $('gListLearnN').textContent = n;
+
+    $('gListItems').innerHTML = d.items.map(gItemHTML).join('');
+    show('gramList');
+  }
+
+  // 목록 한 줄. 눌러서 펼치면 의미·접속·예문과 시험 기록이 나온다.
+  function gItemHTML(it) {
+    var st = Store.gStageFor(it);
+    var r = Store.gRecOf(it);
+    var detail = histHTML(r) + gDetailHTML(it);
+    return '<div class="wl-item has-detail" role="button" tabindex="0">' +
+      '<div class="wl-head">' +
+        '<span class="wl-dot dot-' + st + '"></span>' +
+        '<span class="wl-main">' +
+          '<span class="wl-word" lang="ja">' + esc(it.pattern) + '</span>' +
+          '<div class="wl-meaning">' + esc(it.ko) + '</div>' +
+        '</span>' +
+        '<span class="wl-side">' + G_STAGE_LABEL[st] +
+          '<span class="wl-day">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-' + it.sub : '') + '</span>' +
+        '</span>' +
+        '<span class="wl-caret">▾</span>' +
+      '</div>' +
+      '<div class="wl-detail" hidden>' + detail + '</div>' +
+    '</div>';
+  }
+
+  function gDetailHTML(it) {
+    var h = '';
+    if (it.meaning) h += grow('의미', esc(it.meaning), 'dim');
+    if (it.connect) h += grow('접속', esc(it.connect), 'cn');
+    it.examples.forEach(function (e) {
+      h += '<div class="ex ruby"><p class="ex-jp" lang="ja">' + gJP(e.jp, { ruby: true }) + '</p>' +
+        '<p class="ex-ko">' + esc(e.ko) + (e.type ? '<span class="gtag">' + esc(e.type) + '</span>' : '') + '</p></div>';
+    });
+    return h;
   }
 
   // 세 모드 모두 챕터(레벨·섹션)를 먼저 고른다.
@@ -1145,9 +1273,51 @@
       gQueue = items.slice();
     }
     gIdx = 0; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    $('gLabel').textContent = label || G_NAME[mode];
+    gWrong = [];
+    // 어디서 들어왔는지 기억해 뒀다가 뒤로가기로 그 자리에 돌려보낸다.
+    if (view === 'gramList' || view === 'gramCh') gStudyFrom = view;
+    gLabelText = label || G_NAME[mode];
+    $('gLabel').textContent = gLabelText;
+    persistGSession();
     show('gramStudy');
     renderGramCard();
+  }
+
+  /* ----- 문법 이어서 학습 ----- */
+  // 단어와 같은 방식. 문형 전체가 아니라 어느 문형인지 표시만 남긴다.
+
+  var gLabelText = '';
+  var gStudyFrom = 'gramCh';   // 학습을 시작한 화면
+
+  function gRefOf(it) { return { l: it.level, n: it.no, s: it.sub || null }; }
+
+  function persistGSession() {
+    if (!gQueue.length) return;
+    Store.saveGSession({
+      mode: gMode, label: gLabelText, index: gIdx,
+      queue: gQueue.map(gRefOf),
+      wrong: gWrong.map(gRefOf)
+    });
+  }
+
+  function restoreGSession() {
+    var s = Store.loadGSession();
+    if (!s || !s.queue) return false;
+    var q = [];
+    s.queue.forEach(function (ref) {
+      var it = Store.findGram(ref.l, ref.n, ref.s);
+      if (it) q.push(it);
+    });
+    if (!q.length || s.index >= q.length) { Store.clearGSession(); return false; }
+    gMode = s.mode; gQueue = q; gIdx = s.index;
+    gWrong = (s.wrong || []).map(function (ref) {
+      return Store.findGram(ref.l, ref.n, ref.s);
+    }).filter(Boolean);
+    gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    gPick.pat = null; gPick.con = null;
+    gLabelText = s.label || G_NAME[gMode];
+    $('gLabel').textContent = gLabelText;
+    return true;
   }
 
   function renderGramCard() {
@@ -1281,7 +1451,9 @@
         var it = gQueue[gIdx];
         var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
         Store.gGrade(it, ok, ok);
+        if (!ok) gWrong.push(it);
         if (global_Sync()) Sync.touch();
+        persistGSession();
         renderGramCard();
       });
     });
@@ -1315,10 +1487,12 @@
     if (gMode === 'cloze') {
       if (gPick.pat === null || gPick.con === null) return;
       Store.gGrade(it, gPick.pat === 1, gPick.con === 1);
+      if (gPick.pat !== 1 || gPick.con !== 1) gWrong.push(it);
       if (global_Sync()) Sync.touch();
     }
     gIdx++; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
     gPick.pat = null; gPick.con = null;
+    persistGSession();
     renderGramCard();
   }
 
@@ -1330,14 +1504,41 @@
   }
 
   function renderGramDone() {
+    Store.clearGSession();   // 다 풀었으므로 이어하기 대상이 아니다
     $('gFill').style.width = '100%';
     $('gCount').textContent = gQueue.length + ' / ' + gQueue.length;
-    $('gStage').innerHTML =
-      '<div class="card gdone">' +
-      '<div class="gdone-em">🎉</div>' +
+
+    // 같은 문형을 두 번 틀렸을 수도 있으니 한 번만 남긴다.
+    var seen = {}, wrong = [];
+    gWrong.forEach(function (it) {
+      var k = Store.gKeyOf(it);
+      if (!seen[k]) { seen[k] = 1; wrong.push(it); }
+    });
+
+    var h = '<div class="card gdone">' +
       '<div class="gdone-t">' + G_NAME[gMode] + ' 끝</div>' +
-      '<div class="gdone-s">' + gQueue.length + '개를 봤습니다</div>' +
-      '<button class="next-btn" id="gHomeBtn">문법 홈으로</button></div>';
+      '<div class="gdone-s">' + gQueue.length + '개 중 ' +
+        (gMode === 'learn' ? gQueue.length + '개를 봤습니다'
+                           : (gQueue.length - wrong.length) + '개 정답') + '</div>' +
+      '</div>';
+
+    if (wrong.length) {
+      h += '<div class="section-head"><h2>틀린 문형 ' + wrong.length + '</h2></div>' +
+        '<div class="word-list" id="gDoneList">' + wrong.map(gItemHTML).join('') + '</div>';
+    }
+    h += '<div class="row-btns">' +
+      (wrong.length
+        ? '<button class="big-btn primary" id="gRetryBtn"><span class="bb-title">틀린 것 다시</span>' +
+          '<span class="bb-sub">' + wrong.length + '개</span></button>'
+        : '') +
+      '<button class="big-btn" id="gHomeBtn"><span class="bb-title">문법 홈으로</span>' +
+      '<span class="bb-sub">&nbsp;</span></button></div>';
+
+    $('gStage').innerHTML = h;
+    if ($('gDoneList')) bindExpand($('gDoneList'));
+    if ($('gRetryBtn')) $('gRetryBtn').addEventListener('click', function () {
+      startGram(gMode, wrong, '틀린 문형 다시');
+    });
     $('gHomeBtn').addEventListener('click', function () { renderGramHome(); show('gram'); });
     if (global_Sync()) Sync.sync().catch(function () {});
   }
@@ -1634,6 +1835,58 @@
     $('gmLearn').addEventListener('click', function () { renderGramChapters('learn'); });
     $('gmCloze').addEventListener('click', function () { renderGramChapters('cloze'); });
     $('gmChoice').addEventListener('click', function () { renderGramChapters('choice'); });
+
+    /* ----- 문법 홈의 묶음 버튼 ----- */
+    $('btnGResume').addEventListener('click', function () {
+      if (!restoreGSession()) { renderGramHome(); return; }
+      show('gramStudy');
+      renderGramCard();
+    });
+    $('btnGReview').addEventListener('click', function () {
+      var l = Store.gDueList();
+      renderGSet(l, '오늘의 복습', l.length + '문형 · 복습일이 된 것');
+    });
+    $('btnGWeak').addEventListener('click', function () {
+      var l = Store.gWeakList();
+      renderGSet(l, '모르는 문형', l.length + '문형');
+    });
+    $('btnGShaky').addEventListener('click', function () {
+      var l = Store.gShakyList();
+      renderGSet(l, '흔들리는 문형', l.length + '문형 · 2번 이상 학습 · 오답률 50% 이상');
+    });
+    $('gRandCounts').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.chip');
+      if (!chip) return;
+      gRandCount = Number(chip.dataset.n);
+      $$('#gRandCounts .chip').forEach(function (c) { c.classList.toggle('sel', c === chip); });
+      renderGramHome();
+    });
+    $('btnGRand').addEventListener('click', function () {
+      var pool = Store.shuffleArr(Store.allGram().slice());
+      var n = gRandCount && gRandCount < pool.length ? gRandCount : pool.length;
+      renderGSet(pool.slice(0, n), '랜덤 ' + n + '문형', n + '문형');
+    });
+
+    /* ----- 문형 묶음 목록 ----- */
+    $('gListCloze').addEventListener('click', function () { startGram('cloze', gSet.items, gSet.label); });
+    $('gListChoice').addEventListener('click', function () { startGram('choice', gSet.items, gSet.label); });
+    $('gListLearn').addEventListener('click', function () { startGram('learn', gSet.items, gSet.label); });
+    bindExpand($('gListItems'));
+    // 통계 칸을 누르면 그 단계만 다시 모은다. 단어 쪽과 같은 동작이다.
+    $('gListStats').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.stat.tap');
+      if (!b) return;
+      var st = b.dataset.stage;
+      var l = gByStage(st, gSet.items);
+      renderGSet(l, gSet.label + ' · ' + STAGE_NAME[st], l.length + '문형');
+    });
+    $('gStats').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.stat.tap');
+      if (!b) return;
+      var st = b.dataset.stage;
+      var l = gByStage(st, Store.allGram());
+      renderGSet(l, STAGE_NAME[st], l.length + '문형 · 전체');
+    });
 
     $('gChList').addEventListener('click', function (ev) {
       var b = ev.target.closest('.ch');

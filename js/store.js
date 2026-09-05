@@ -7,6 +7,7 @@
   var PROG_KEY  = 'jvocab.progress.v1';
   var TIME_KEY  = 'jvocab.time.v1';
   var SESS_KEY  = 'jvocab.session.v1';
+  var GSESS_KEY = 'jvocab.gsession.v1';
   var DEV_KEY   = 'jvocab.device.v1';
 
   var DAY_MS = 86400000;
@@ -236,6 +237,53 @@
   function gShakyList() {
     return allGram().filter(function (it) { return isShaky(gRecOf(it)); })
       .sort(function (a, b) { return shakyScore(gRecOf(b)) - shakyScore(gRecOf(a)); });
+  }
+
+  // 단어 쪽과 같은 묶음들. 아직 한 번도 안 본 문형은 '오늘의 복습'에 넣지 않는다.
+  function gDueList() {
+    return allGram().filter(function (it) { return gRecOf(it).seen && gIsDue(it); });
+  }
+  function gWeakList() {
+    return allGram().filter(function (it) {
+      var st = gStageFor(it);
+      return st === 'unknown' || st === 'new';
+    });
+  }
+
+  // 확실히 아는 문형을 복습 목록에서 빼고 장기기억으로 보낸다.
+  function gMarkKnown(item) {
+    var k = gKeyOf(item);
+    var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    r.level = MAX_LEVEL;
+    r.miss = 0;
+    r.due = nextAt(INTERVALS[MAX_LEVEL]);
+    r.seen = (r.seen || 0) + 1;
+    r.known = 1;
+    r.last = Date.now();
+    progress[k] = r;
+    write(PROG_KEY, progress);
+    return r;
+  }
+
+  // 문형을 찾아 되살린다. 이어서 학습이 저장해 둔 표시로 다시 집어 온다.
+  function findGram(level, no, sub) {
+    var list = allGram();
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i];
+      if (it.level === level && it.no === no && (it.sub || null) === (sub || null)) return it;
+    }
+    return null;
+  }
+
+  function gSearch(q) {
+    q = String(q || '').trim().toLowerCase();
+    if (!q) return [];
+    return allGram().filter(function (it) {
+      return (it.pattern || '').toLowerCase().indexOf(q) > -1
+          || (it.ko || '').toLowerCase().indexOf(q) > -1
+          || (it.meaning || '').toLowerCase().indexOf(q) > -1
+          || (it.connect || '').toLowerCase().indexOf(q) > -1;
+    });
   }
 
   function gSummarize(items) {
@@ -661,6 +709,13 @@
     try { localStorage.removeItem(SESS_KEY); } catch (e) {}
   }
 
+  // 문법도 따로 이어하기를 둔다. 단어를 풀다 문법으로 넘어가도 둘 다 남아야 한다.
+  function saveGSession(s) { write(GSESS_KEY, s); }
+  function loadGSession() { return read(GSESS_KEY, null); }
+  function clearGSession() {
+    try { localStorage.removeItem(GSESS_KEY); } catch (e) {}
+  }
+
   // 저장해 둔 참조로 실제 단어를 되찾는다. 못 찾으면 null.
   function findWord(dayNo, no, wordText) {
     var d = days[dayNo];
@@ -865,6 +920,14 @@
     gIsDue: gIsDue,
     gGrade: gGrade,
     gShakyList: gShakyList,
+    gDueList: gDueList,
+    gWeakList: gWeakList,
+    gMarkKnown: gMarkKnown,
+    findGram: findGram,
+    gSearch: gSearch,
+    saveGSession: saveGSession,
+    loadGSession: loadGSession,
+    clearGSession: clearGSession,
     gSummarize: gSummarize,
     gSummarizeAll: gSummarizeAll,
     gChoices: gChoices,
