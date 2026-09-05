@@ -409,16 +409,24 @@
 
   function isLong(r) { return !!r.seen && r.level >= LONG_LEVEL; }
 
-  // 흔들리는 정도. 장기기억에서 떨어진 적이 있으면 훨씬 무겁게 본다.
-  function shakyScore(r) {
-    return (r.lapse || 0) * 3 + (r.fails || 0);
+  function failRate(r) {
+    var t = r.tries || 0;
+    return t ? (r.fails || 0) / t : 0;
   }
 
-  // 흔들리는 단어 = 두 번 이상 봤는데 한 번이라도 틀린 단어.
-  // lapse 는 따로 본다. '아는 단어'로 바로 올린 뒤 한 번 만에 틀린 경우는
-  // 시험 횟수가 1이라 위 조건에 안 걸리지만, 이건 확실히 흔들리는 단어다.
+  // 흔들리는 정도. 오답률이 기준이므로 오답률을 먼저 본다.
+  // 장기기억까지 갔다가 떨어진 적이 있으면 크게 더하고,
+  // 오답률이 같으면 많이 틀린 쪽이 앞에 오게 한다.
+  function shakyScore(r) {
+    return (r.lapse || 0) * 2 + failRate(r) * 3 + Math.min(r.fails || 0, 10) * 0.05;
+  }
+
+  // 흔들리는 단어 = 두 번 이상 봤는데 오답률이 50% 이상인 단어.
+  // lapse 는 따로 본다. 여러 번 맞혀서 오답률은 낮아도 장기기억에서 떨어진 적이
+  // 있으면 '안다고 생각했는데 틀리는' 단어라 여기 들어와야 한다.
+  var SHAKY_RATE = 0.5;
   function isShaky(r) {
-    return !!r.seen && (((r.tries || 0) >= 2 && (r.fails || 0) >= 1) || (r.lapse || 0) >= 1);
+    return !!r.seen && (((r.tries || 0) >= 2 && failRate(r) >= SHAKY_RATE) || (r.lapse || 0) >= 1);
   }
 
   function stageOf(level, seen) {
@@ -841,6 +849,7 @@
     weakList: weakList,
     shakyList: shakyList,
     shakyScore: shakyScore,
+    failRate: failRate,
     resetProgress: resetProgress,
     markKnown: markKnown,
     dueMs: dueMs,

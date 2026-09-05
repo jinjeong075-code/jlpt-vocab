@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v33';
+  var BUILD = 'v34';
 
   /* ---------------- 화면 ---------------- */
 
@@ -359,7 +359,10 @@
     var marks = (r.hist || '').split('').map(function (c) {
       return '<i class="hm h' + c + '"></i>';
     }).join('');
-    var txt = [r.tries + '번 중 ' + (r.tries - (r.fails || 0)) + '번 정답'];
+    // 오답률이 흔들리는 단어의 기준이므로 그대로 보여준다.
+    var txt = [(r.fails || 0)
+      ? r.tries + '번 중 ' + r.fails + '번 틀림 · 오답률 ' + Math.round(Store.failRate(r) * 100) + '%'
+      : r.tries + '번 다 맞음'];
     if (r.lapse) txt.push('장기기억에서 ' + r.lapse + '번 떨어짐');
     return '<div class="hist">' + marks +
       '<span class="hist-txt">' + txt.join(' · ') + '</span></div>';
@@ -1540,7 +1543,7 @@
     $('btnShakyStudy').addEventListener('click', function () {
       var list = Store.shakyList();
       currentDays = [];
-      renderSet(list, '흔들리는 단어', list.length + '단어 · 2번 이상 학습 · 한 번이라도 틀림', true);
+      renderSet(list, '흔들리는 단어', list.length + '단어 · 2번 이상 학습 · 오답률 50% 이상', true);
     });
 
     $('randCounts').addEventListener('click', function (ev) {
