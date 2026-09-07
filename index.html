@@ -102,6 +102,9 @@
     <button class="rand-go" id="btnRandStudy">랜덤 학습 시작</button>
   </div>
 
+  <div class="section-head"><h2>오답률</h2></div>
+  <div class="chips" id="rateChips"></div>
+
   <div class="section-head"><h2>품사별</h2></div>
   <div class="chips" id="posChips"></div>
 
@@ -243,6 +246,12 @@
   <div class="res-tabs" id="resultTabs" hidden>
     <button class="res-tab sel" id="tabWrong">틀린 단어</button>
     <button class="res-tab" id="tabAll">전체</button>
+  </div>
+  <div class="section-head">
+    <h2 id="resultListTitle">틀린 단어</h2>
+    <div class="head-actions">
+      <button class="mini-btn go" id="btnResultBrowse">넘기며 보기</button>
+    </div>
   </div>
   <p class="empty-note" id="resultEmpty" hidden></p>
   <div id="resultList" class="word-list"></div>

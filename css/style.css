@@ -532,6 +532,15 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .wl-meaning { font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wl-side { font-size: 11px; color: var(--dim); text-align: right; flex: 0 0 auto; }
 .wl-day { display: block; font-size: 10px; color: var(--accent); }
+/* 오답률. 펼치지 않아도 어느 게 문제인지 바로 보이게 한다. */
+.wl-rate { display: block; font-size: 10px; font-weight: 600; color: var(--dim); }
+.wl-rate.mid { color: var(--warn); }
+.wl-rate.hi  { color: var(--no); }
+
+.rate-chip i { font-style: normal; font-size: 11px; opacity: .7; margin-left: 6px; }
+.rate-chip:hover:not(:disabled) { border-color: var(--no); color: var(--no); }
+.rate-chip:disabled { opacity: .35; cursor: not-allowed; }
+#rateChips { margin-bottom: 24px; }
 
 /* ---------- progress ---------- */
 .progress-wrap { padding: 18px 2px 8px; }

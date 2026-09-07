@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v43';
+  var BUILD = 'v44';
 
   /* ---------------- 화면 ---------------- */
 
@@ -53,6 +53,7 @@
       // 돌아보는 중이면 학습을 나가지 말고 풀던 문제로 먼저 돌아온다.
       else if (view === 'study' && peek !== null) peekClose();
       else if (view === 'gramStudy' && gPeek !== null) gPeekClose();
+      else if (view === 'browse') goView(browseFrom);
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
       else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
@@ -174,6 +175,7 @@
     renderProgress(s);
     renderResume();
     renderPosChips();
+    renderRateChips();
 
     var due = Store.dueList(), weak = Store.weakList();
     // 대기가 0이면 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
@@ -349,6 +351,27 @@
     });
   }
 
+  // 오답률로 골라 학습한다. 어느 선부터 손볼지는 그때그때 다르다.
+  var RATE_STEPS = [10, 20, 30, 40, 50, 70];
+
+  function wordsOfRate(min) {
+    return Store.allWords().filter(function (e) {
+      var r = Store.recOf(e.day, e.w);
+      // 한 번만 본 단어는 100%든 0%든 근거가 얇다. 흔들리는 단어와 같은 기준을 쓴다.
+      return (r.tries || 0) >= 2 && Store.failRate(r) * 100 >= min;
+    }).sort(function (a, b) {
+      return Store.failRate(Store.recOf(b.day, b.w)) - Store.failRate(Store.recOf(a.day, a.w));
+    });
+  }
+
+  function renderRateChips() {
+    $('rateChips').innerHTML = RATE_STEPS.map(function (m) {
+      var n = wordsOfRate(m).length;
+      return '<button class="chip rate-chip" data-min="' + m + '"' + (n ? '' : ' disabled') + '>' +
+        m + '%↑<i>' + n + '</i></button>';
+    }).join('');
+  }
+
   function renderPosChips() {
     $('posChips').innerHTML = POS_GROUPS.map(function (g) {
       var n = wordsOfPos(g.has).length;
@@ -374,6 +397,13 @@
       '<span class="hist-txt">' + txt.join(' · ') + '</span></div>';
   }
 
+  // 목록 한 줄에 오답률을 같이 띄운다. 펼치지 않아도 어느 게 문제인지 보이게.
+  function rateHTML(r) {
+    if (!r.tries) return '';
+    var p = Math.round(Store.failRate(r) * 100);
+    return '<span class="wl-rate' + (p >= 50 ? ' hi' : (p > 0 ? ' mid' : '')) + '">' + p + '%</span>';
+  }
+
   function itemHTML(day, w, showDay) {
     var st = Store.stageFor(day, w);
     var r = Store.recOf(day, w);
@@ -388,7 +418,7 @@
           '</span>' +
           '<div class="wl-meaning">' + esc(w.meaning) + '</div>' +
         '</span>' +
-        '<span class="wl-side">' + Store.STAGE_LABEL[st] +
+        '<span class="wl-side">' + Store.STAGE_LABEL[st] + rateHTML(r) +
           (showDay ? '<span class="wl-day">DAY ' + day + '</span>' : (r.seen ? '<span class="wl-day">Lv.' + r.level + '</span>' : '')) +
         '</span>' +
         (detail ? '<span class="wl-caret">▾</span>' : '') +
@@ -422,8 +452,11 @@
 
   var browse = null;   // { list, index, label }
 
+  var browseFrom = 'day';   // 넘기며 보기를 연 화면. 뒤로가기가 그 자리로 돌아간다.
+
   function startBrowse(entries, label) {
     if (!entries.length) return;
+    browseFrom = (view === 'result') ? 'result' : 'day';
     browse = { list: entries.slice(), index: 0, label: label };
     show('browse');
     renderBrowseCard();
@@ -463,7 +496,7 @@
     if (!browse) return;
     var i = browse.index + step;
     if (i < 0) return;
-    if (i >= browse.list.length) { goView('day'); return; }
+    if (i >= browse.list.length) { goView(browseFrom); return; }
     browse.index = i;
     renderBrowseCard();
   }
@@ -792,6 +825,9 @@
     $('tabAll').textContent = '전체 ' + resultAll.length;
     $('tabWrong').classList.toggle('sel', wrongOn);
     $('tabAll').classList.toggle('sel', !wrongOn);
+
+    $('resultListTitle').textContent = (wrongOn ? '틀린 단어 ' : '전체 ') + list.length;
+    $('btnResultBrowse').hidden = !list.length;
 
     $('resultEmpty').hidden = list.length > 0;
     $('resultEmpty').textContent = '틀린 단어가 없습니다. 전부 맞혔어요.';
@@ -1325,7 +1361,7 @@
           '<span class="wl-word" lang="ja">' + esc(it.pattern) + '</span>' +
           '<div class="wl-meaning">' + esc(it.ko) + '</div>' +
         '</span>' +
-        '<span class="wl-side">' + G_STAGE_LABEL[st] +
+        '<span class="wl-side">' + G_STAGE_LABEL[st] + rateHTML(r) +
           '<span class="wl-day">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-' + it.sub : '') + '</span>' +
         '</span>' +
         '<span class="wl-caret">▾</span>' +
@@ -1941,6 +1977,15 @@
       renderSelBar();
     });
 
+    $('rateChips').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.rate-chip');
+      if (!chip) return;
+      var m = Number(chip.dataset.min);
+      var list = wordsOfRate(m);
+      currentDays = [];
+      renderSet(list, '오답률 ' + m + '% 이상', list.length + '단어 · 2번 이상 학습', true);
+    });
+
     $('posChips').addEventListener('click', function (ev) {
       var chip = ev.target.closest('.pos-chip');
       if (!chip) return;
@@ -2046,6 +2091,11 @@
       startSession(session.wrong, '틀린 단어 다시');
     });
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
+    // 결과 목록도 카드로 한 장씩 넘겨 볼 수 있다. 틀린 것을 다시 읽는 게 핵심이라.
+    $('btnResultBrowse').addEventListener('click', function () {
+      var list = (resultView === 'wrong') ? resultWrong : resultAll;
+      startBrowse(list, (resultView === 'wrong' ? '틀린 단어' : '학습한 단어'));
+    });
 
     // 통계 칸을 눌러 그 단계의 단어만 학습한다. 복습일과 상관없이 원할 때 볼 수 있다.
     // 통계 칸을 누르면 바로 시험이 아니라 그 단계만 모은 목록으로 간다.

@@ -77,6 +77,7 @@
   var progress = {};  // { "26-1552": {...}, "g:N3-41-1": {...} }  단어와 문법이 한 곳에
   var timeLog = {};   // { "2026-08-27": { 기기id: 초 } }
   var deviceId = '';  // 이 기기를 구분하는 값. PC와 폰의 공부 시간을 따로 세는 데 쓴다.
+  var lastFixCount = 0;  // 이번 실행에서 되돌린 장기기억 단어 수
 
   function keyOf(day, word) {
     return day + '-' + (word.no != null ? word.no : word.word);
@@ -215,6 +216,8 @@
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     var wasLong = isLong(r);
+    // 단어와 같다. 복습일 전에 푼 것은 맞혀도 레벨을 올리지 않는다.
+    if (!gradeDue(r)) allowPromote = false;
 
     if (patternOk) r.rO++; else r.rX++;
     if (connectOk) r.mO++; else r.mX++;
@@ -513,19 +516,32 @@
   //   둘 다 O  → 레벨 +1 (간격이 늘어남 = 장기기억으로 이동)
   //   하나만 O → 레벨을 3 이하로 내리고 내일 다시
   //   둘 다 X  → 레벨 -2, 그리고 같은 날 다시 (1시간 → 4시간 → 다음날)
+  // 복습일이 되지 않았는데 푼 것은 레벨을 올리지 않는다.
+  //   장기기억은 '시간이 지난 뒤에도 떠올랐다'는 뜻이다. 방금 본 단어를 다시 맞히는 것은
+  //   그 증거가 되지 못한다. 그래서 모름·품사별·랜덤·흔들리는 단어처럼 일정과 상관없이
+  //   여는 학습은 아무리 맞혀도 장기기억으로 넘어가지 않는다.
+  //   반대로 틀린 것은 언제 풀었든 그대로 반영한다. 모른다는 증거는 일정과 무관하다.
+  function gradeDue(r) {
+    return !r.seen || dueMs(r) <= Date.now();
+  }
+
   function grade(day, word, readingOk, meaningOk) {
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
-    // 레벨을 손대기 전에 장기기억이었는지 기억해 둔다.
+    // 레벨을 손대기 전에 장기기억이었는지, 복습일이 됐었는지 기억해 둔다.
     var wasLong = isLong(r);
+    var onTime = gradeDue(r);
 
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
 
     if (readingOk && meaningOk) {
-      r.level = Math.min(MAX_LEVEL, r.level + 1);
       r.miss = 0;
-      r.due = nextAt(INTERVALS[r.level]);
+      if (onTime) {
+        r.level = Math.min(MAX_LEVEL, r.level + 1);
+        r.due = nextAt(INTERVALS[r.level]);
+      }
+      // 복습일 전이면 레벨도 다음 복습일도 그대로 둔다. 원래 일정이 맞다.
     } else {
       // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
       if (readingOk || meaningOk) {
@@ -870,6 +886,30 @@
     });
     if (conv) write(PROG_KEY, progress);
 
+    // v43 까지는 복습일 전에 풀어도 맞히기만 하면 레벨이 올라갔다.
+    // 그래서 하루에 몰아 푼 단어가 장기기억으로 올라가 있을 수 있는데,
+    // 채점 시각을 남기지 않아 어느 것이 그렇게 올라갔는지 가릴 수가 없다.
+    // 확실한 쪽으로 간다 - 장기기억은 전부 단기기억 맨 위로 내리고 지금부터 복습 대상으로
+    // 삼는다. 진짜로 아는 단어는 일정대로 다시 올라온다. 기록(hist·tries)은 건드리지 않는다.
+    // 한 번만 돈다.
+    var FIX_KEY = 'jvocab.fix.duegate.v1';
+    var fixed = 0;
+    try {
+      if (!localStorage.getItem(FIX_KEY)) {
+        Object.keys(progress).forEach(function (k) {
+          var r = progress[k];
+          if (r && r.seen && r.level >= LONG_LEVEL) {
+            r.level = LONG_LEVEL - 1;
+            r.due = Date.now();
+            fixed++;
+          }
+        });
+        if (fixed) write(PROG_KEY, progress);
+        localStorage.setItem(FIX_KEY, String(fixed));
+      }
+    } catch (e) {}
+    lastFixCount = fixed;
+
     // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
     // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
     // 그 백업을 되넣을 때 같은 시간이 두 번 더해진다.
@@ -909,6 +949,7 @@
     summarizeAll: summarizeAll,
     dueList: dueList,
     weakList: weakList,
+    lastFix: function () { return lastFixCount; },
     shakyList: shakyList,
     shakyScore: shakyScore,
     failRate: failRate,
