@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v39';
+  var BUILD = 'v40';
 
   /* ---------------- 화면 ---------------- */
 
@@ -52,6 +52,7 @@
       else if (searchOpen) closeSearch();
       // 돌아보는 중이면 학습을 나가지 말고 풀던 문제로 먼저 돌아온다.
       else if (view === 'study' && peek !== null) peekClose();
+      else if (view === 'gramStudy' && gPeek !== null) gPeekClose();
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
       else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
@@ -1129,6 +1130,8 @@
   var gQueue = [], gIdx = 0;
   var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
   var gWrong = [];         // 이번 학습에서 틀린 문형
+  var gResults = [];       // 이번 학습에서 푼 문형과 그때의 답
+  var gPeek = null;        // 돌아보는 중이면 gResults 의 인덱스
   var gRandCount = 20;     // 전체에서 랜덤으로 뽑을 개수 (0 = 전체)
 
   function gByStage(stage, items) {
@@ -1376,7 +1379,7 @@
       gQueue = items.slice();
     }
     gIdx = 0; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    gWrong = [];
+    gWrong = []; gResults = []; gPeek = null;
     // 어디서 들어왔는지 기억해 뒀다가 뒤로가기로 그 자리에 돌려보낸다.
     if (view === 'gramList' || view === 'gramCh') gStudyFrom = view;
     gLabelText = label || G_NAME[mode];
@@ -1417,13 +1420,14 @@
       return Store.findGram(ref.l, ref.n, ref.s);
     }).filter(Boolean);
     gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    gPick.pat = null; gPick.con = null;
+    gResults = []; gPeek = null;   // 돌아보기는 이번에 푼 것만 대상이다
     gLabelText = s.label || G_NAME[gMode];
     $('gLabel').textContent = gLabelText;
     return true;
   }
 
   function renderGramCard() {
+    if (gPeek !== null) gPeekClose();
     if (gIdx >= gQueue.length) { renderGramDone(); return; }
     var it = gQueue[gIdx], h = '';
 
@@ -1476,12 +1480,9 @@
         h += grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn');
         h += grow('접속', esc(it.connect), 'cn');
         h += grow('의미', esc(it.meaning), 'dim');
-        h += '<div class="check-box" style="margin-top:12px">' +
-          gcheck('문형을 떠올렸나요?', 'pat') +
-          gcheck('접속도 정확했나요?', 'con') +
-          '</div>';
-        h += '<button class="next-btn" id="gNext" disabled>다음</button>';
-        if (gGraded === 'wrong')
+        // 입력한 답으로 이미 맞았는지 갈렸다. 다시 스스로 채점할 이유가 없다.
+        h += '<button class="next-btn" id="gNext">다음 <kbd>Enter</kbd></button>';
+        if (gGraded !== 'right')
           h += '<button class="known-btn" id="gOverride">이것도 맞는 표현이에요 · 정답 처리</button>';
       }
     }
@@ -1511,13 +1512,6 @@
   function grow(k, v, cls) {
     return '<div class="grow"><span class="k">' + k + '</span><span class="v ' + (cls || '') + '">' + v + '</span></div>';
   }
-  function gcheck(label, t) {
-    return '<div class="check-row"><span class="check-label">' + label + '</span><div class="ox">' +
-      '<button class="ox-btn o" data-g="' + t + '" data-v="1">O</button>' +
-      '<button class="ox-btn x" data-g="' + t + '" data-v="0">X</button></div></div>';
-  }
-
-  var gPick = { pat: null, con: null };
 
   function bindGramCard() {
     var inp = $('gAns');
@@ -1525,28 +1519,24 @@
       inp.focus();
       inp.addEventListener('keydown', function (ev) {
         // 일본어 IME 로 변환 중인 엔터는 확정용이므로 제출로 받으면 안 된다.
-        if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); gSubmit(false); }
+        if (ev.key === 'Enter' && !ev.isComposing) {
+          ev.preventDefault();
+          // 여기서 멈추지 않으면 문서까지 올라가 '다음'까지 눌러 버린다.
+          // 그러면 한 번의 Enter 로 제출과 넘김이 같이 일어나 정답을 못 본다.
+          ev.stopPropagation();
+          gSubmit(false);
+        }
       });
     }
     if ($('gSubmit')) $('gSubmit').addEventListener('click', function () { gSubmit(false); });
     if ($('gSkip'))   $('gSkip').addEventListener('click', function () { gSubmit(true); });
     if ($('gOverride')) $('gOverride').addEventListener('click', function () {
-      gGraded = 'right'; gPick.pat = 1; renderGramCard();
-      $$('.ox-btn[data-g="pat"]').forEach(function (b) { b.classList.toggle('sel', b.dataset.v === '1'); });
-      refreshGNext();
+      gGraded = 'right';
+      renderGramCard();
     });
     if ($('gNext')) $('gNext').addEventListener('click', gNext);
     if ($('gPrev')) $('gPrev').addEventListener('click', gPrev);
 
-    $$('#gStage .ox-btn').forEach(function (b) {
-      b.addEventListener('click', function () {
-        gPick[b.dataset.g] = Number(b.dataset.v);
-        $$('#gStage .ox-btn[data-g="' + b.dataset.g + '"]').forEach(function (x) {
-          x.classList.toggle('sel', x === b);
-        });
-        refreshGNext();
-      });
-    });
     $$('#gStage .gopt').forEach(function (b) {
       b.addEventListener('click', function () {
         if (gPicked !== null) return;
@@ -1554,17 +1544,13 @@
         var it = gQueue[gIdx];
         var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
         Store.gGrade(it, ok, ok);
+        gResults.push({ it: it, ok: ok, typed: gOpts[gPicked].pattern, skipped: false });
         if (!ok) gWrong.push(it);
         if (global_Sync()) Sync.touch();
         persistGSession();
         renderGramCard();
       });
     });
-  }
-
-  function refreshGNext() {
-    var b = $('gNext');
-    if (b) b.disabled = (gPick.pat === null || gPick.con === null);
   }
 
   function gSubmit(skip) {
@@ -1575,26 +1561,21 @@
     else if (!gTyped) { if (el) el.focus(); return; }
     else gGraded = (normAns(gTyped) === normAns(answerOf(e0))) ? 'right' : 'wrong';
 
-    // 자동 채점 결과를 체크칸에 미리 반영해 두고, 필요하면 사용자가 바꾼다.
-    gPick.pat = (gGraded === 'right') ? 1 : 0;
-    gPick.con = null;
     renderGramCard();
-    $$('.ox-btn[data-g="pat"]').forEach(function (b) {
-      b.classList.toggle('sel', Number(b.dataset.v) === gPick.pat);
-    });
-    refreshGNext();
   }
 
   function gNext() {
     var it = gQueue[gIdx];
     if (gMode === 'cloze') {
-      if (gPick.pat === null || gPick.con === null) return;
-      Store.gGrade(it, gPick.pat === 1, gPick.con === 1);
-      if (gPick.pat !== 1 || gPick.con !== 1) gWrong.push(it);
+      if (!gGraded) return;                 // 아직 확인을 안 눌렀다
+      // 입력한 답이 곧 채점 결과다. 따로 물어보지 않는다.
+      var ok = (gGraded === 'right');
+      Store.gGrade(it, ok, ok);
+      gResults.push({ it: it, ok: ok, typed: gTyped, skipped: gGraded === 'skip' });
+      if (!ok) gWrong.push(it);
       if (global_Sync()) Sync.touch();
     }
     gIdx++; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    gPick.pat = null; gPick.con = null;
     persistGSession();
     renderGramCard();
   }
@@ -1604,6 +1585,66 @@
     if (gMode !== 'learn' || gIdx === 0) return;
     gIdx--;
     renderGramCard();
+  }
+
+  /* ----- 이미 푼 문형 돌아보기 ----- */
+  // 단어 시험과 같다. 점수는 건드리지 않고 뭐라고 답했는지까지 보여만 준다.
+
+  function gPeekOpen(i) {
+    if (!gResults.length) return;
+    gPeek = Math.max(0, Math.min(i, gResults.length - 1));
+    renderGPeek();
+  }
+
+  function gPeekClose() {
+    gPeek = null;
+    $('gPeekStage').hidden = true;
+    $('gStage').hidden = false;
+    $('gCount').textContent = (gIdx + 1) + ' / ' + gQueue.length;
+  }
+
+  function gPeekGo(step) {
+    if (gPeek === null) return;
+    var i = gPeek + step;
+    if (i < 0) return;
+    if (i >= gResults.length) { gPeekClose(); return; }
+    gPeek = i;
+    renderGPeek();
+  }
+
+  function renderGPeek() {
+    var x = gResults[gPeek], it = x.it, e0 = it.examples[0];
+    var mark = x.skipped ? '정답을 봤음' : (x.ok ? '정답' : '오답');
+
+    $('gPeekStage').innerHTML =
+      '<div class="card">' +
+        '<div class="card-meta">' +
+          '<span class="badge ' + Store.gStageFor(it) + '">' + G_STAGE_LABEL[Store.gStageFor(it)] + '</span>' +
+          '<span class="card-no">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-' + it.sub : '') + '</span>' +
+        '</div>' +
+        '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, { reveal: true, ruby: true }) + '</p>' +
+        '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>' +
+        '<div class="gjudge ' + (x.skipped ? 'skip' : (x.ok ? 'right' : 'wrong')) + '">' + mark + '</div>' +
+        (x.typed && !x.ok
+          ? '<div class="gcmp"><span class="cl">내 답</span><span class="cv bad" lang="ja">' + esc(x.typed) + '</span></div>'
+          : '') +
+        '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerText(e0)) + '</span></div>' +
+        grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn') +
+        grow('접속', esc(it.connect), 'cn') +
+        grow('의미', esc(it.meaning), 'dim') +
+        '<div class="br-nav">' +
+          '<button class="br-btn" id="gPeekPrev"' + (gPeek === 0 ? ' disabled' : '') + '>이전</button>' +
+          '<button class="br-btn primary" id="gPeekNext">' +
+            (gPeek === gResults.length - 1 ? '문제로 돌아가기' : '다음') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    $('gPeekStage').hidden = false;
+    $('gStage').hidden = true;
+    $('gPeekPrev').addEventListener('click', function () { gPeekGo(-1); });
+    $('gPeekNext').addEventListener('click', function () { gPeekGo(1); });
+    $('gCount').textContent = '돌아보기 ' + (gPeek + 1) + ' / ' + gResults.length;
+    window.scrollTo(0, 0);
   }
 
   function renderGramDone() {
@@ -1868,8 +1909,15 @@
       function () { browseGo(1); },
       function () { browseGo(-1); });
     bindSwipe($('viewGramStudy'),
-      function () { if (gMode === 'learn' && gIdx < gQueue.length) gNext(); },
-      function () { if (gMode === 'learn') gPrev(); });
+      function () {
+        if (gPeek !== null) gPeekGo(1);
+        else if (gMode === 'learn' && gIdx < gQueue.length) gNext();
+      },
+      function () {
+        if (gPeek !== null) gPeekGo(-1);
+        else if (gMode === 'learn') gPrev();
+        else gPeekOpen(gResults.length - 1);
+      });
     // 학습 화면은 오른쪽으로 밀면 이미 푼 단어를 돌아본다.
     bindSwipe($('viewStudy'),
       function () { if (peek !== null) peekGo(1); },
@@ -2087,12 +2135,25 @@
         if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
         return;
       }
-      // 문법 내용 보기도 채점이 없다. 같은 키로 앞뒤로 넘긴다.
-      // 빈칸 채우기·4지선다는 입력과 채점이 있어 건드리지 않는다.
-      if (view === 'gramStudy' && gMode === 'learn' && gIdx < gQueue.length) {
-        if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault(); gNext();
-        } else if (ev.key === 'ArrowLeft') { ev.preventDefault(); gPrev(); }
+      if (view === 'gramStudy') {
+        // 돌아보는 중에는 좌우로만 움직인다.
+        if (gPeek !== null) {
+          if (ev.key === 'ArrowLeft')       { ev.preventDefault(); gPeekGo(-1); }
+          else if (ev.key === 'ArrowRight') { ev.preventDefault(); gPeekGo(1); }
+          else if (ev.key === 'Escape')     { ev.preventDefault(); gPeekClose(); }
+          return;
+        }
+        // 내용 보기는 채점이 없으니 같은 키로 앞뒤로 넘긴다.
+        if (gMode === 'learn' && gIdx < gQueue.length) {
+          if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault(); gNext();
+          } else if (ev.key === 'ArrowLeft') { ev.preventDefault(); gPrev(); }
+          return;
+        }
+        // 채점이 끝난 뒤에는 Enter 로 넘어간다. 채점 전 Enter 는 입력란이 받아 제출한다.
+        if (ev.key === 'ArrowLeft') { ev.preventDefault(); gPeekOpen(gResults.length - 1); return; }
+        var graded = (gMode === 'cloze' && gGraded) || (gMode === 'choice' && gPicked !== null);
+        if (graded && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); gNext(); }
         return;
       }
       // 넘기며 보기는 채점이 없으니 좌우 화살표와 Enter 로만 넘긴다.
