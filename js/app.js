@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v37';
+  var BUILD = 'v38';
 
   /* ---------------- 화면 ---------------- */
 
@@ -827,9 +827,14 @@
     $('btnSyncTop').hidden = !st.configured;
     if (!st.configured) return;
 
-    $('btnSyncTop').textContent = st.busy ? '⟳' : '☁';
+    // 아이콘(svg)은 그대로 두고 상태만 색으로 알린다.
+    // 예전에는 여기서 textContent 로 이모지를 넣어 svg 를 지워 버렸다.
     $('btnSyncTop').classList.toggle('spin', st.busy);
     $('btnSyncTop').classList.toggle('on', st.signedIn);
+    $('btnSyncTop').classList.toggle('off', !st.signedIn);
+    $('btnSyncTop').title = st.signedIn
+      ? '동기화 켜짐 · ' + st.email
+      : '동기화 꺼짐 — 눌러서 로그인하면 PC와 폰이 자동으로 합쳐집니다';
 
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
