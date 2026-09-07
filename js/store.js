@@ -207,7 +207,11 @@
 
   // 채점은 단어와 같은 규칙을 쓴다.
   //   patternOk = 문형을 떠올렸나, connectOk = 접속이 정확했나
-  function gGrade(item, patternOk, connectOk) {
+  // allowPromote 가 false 면 맞혀도 레벨을 올리지 않는다.
+  // 한 문형의 예문 여러 개를 한 학습에서 풀 때, 하루 만에 레벨이 몇 단계씩
+  // 뛰어 복습 간격이 무너지는 것을 막으려는 것이다. (기본값은 true)
+  function gGrade(item, patternOk, connectOk, allowPromote) {
+    if (allowPromote === undefined) allowPromote = true;
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     var wasLong = isLong(r);
@@ -216,9 +220,12 @@
     if (connectOk) r.mO++; else r.mX++;
 
     if (patternOk && connectOk) {
-      r.level = Math.min(MAX_LEVEL, r.level + 1);
       r.miss = 0;
-      r.due = nextAt(INTERVALS[r.level]);
+      if (allowPromote) {
+        r.level = Math.min(MAX_LEVEL, r.level + 1);
+        r.due = nextAt(INTERVALS[r.level]);
+      }
+      // 올리지 않을 때는 복습일도 건드리지 않는다. 첫 문제에서 정한 일정이 맞다.
     } else {
       // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
       if (patternOk || connectOk) r.level = Math.min(r.level, LONG_LEVEL - 1);

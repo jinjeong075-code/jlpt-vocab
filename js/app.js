@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v40';
+  var BUILD = 'v41';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1131,6 +1131,18 @@
   var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
   var gWrong = [];         // 이번 학습에서 틀린 문형
   var gResults = [];       // 이번 학습에서 푼 문형과 그때의 답
+  var gPromoted = {};      // 이번 학습에서 이미 레벨을 올린 문형
+
+  // 예문마다 문제를 내므로 한 문형이 한 학습에서 두세 번 나온다.
+  // 그때마다 레벨을 올리면 하루 만에 장기기억으로 올라가 복습 간격이 무너진다.
+  // 그래서 레벨은 한 학습에 한 번만 올린다. 틀린 것은 나올 때마다 그대로 반영한다.
+  function canPromote(it, ok) {
+    if (!ok) return false;              // 틀렸으면 올릴 일이 없다
+    var k = Store.gKeyOf(it);
+    if (gPromoted[k]) return false;     // 이번 학습에서 이미 올렸다
+    gPromoted[k] = 1;
+    return true;
+  }
   var gPeek = null;        // 돌아보는 중이면 gResults 의 인덱스
   var gRandCount = 20;     // 전체에서 랜덤으로 뽑을 개수 (0 = 전체)
 
@@ -1373,13 +1385,19 @@
   function startGram(mode, items, label) {
     if (!items.length) return;
     gMode = mode;
-    gQueue = Store.shuffleArr(items);
-    if (mode === 'learn') {
-      // 읽는 순서는 섞지 않는다. 책 순서대로 보는 게 자연스럽다.
-      gQueue = items.slice();
-    }
+    // 큐의 한 칸은 '어떤 문형의 몇 번째 예문' 이다.
+    // 채점하는 모드는 예문마다 한 문제씩 낸다. 문형 하나를 한 문장으로만 익히면
+    // 그 문장에서만 알아보게 된다.
+    // 내용 보기는 카드 하나에 예문을 다 펼쳐 보여주므로 문형당 한 칸이면 된다.
+    var cards = [];
+    items.forEach(function (it) {
+      if (mode === 'learn' || !it.examples.length) { cards.push({ it: it, ex: 0 }); return; }
+      it.examples.forEach(function (e, i) { cards.push({ it: it, ex: i }); });
+    });
+    // 읽는 순서는 섞지 않는다. 책 순서대로 보는 게 자연스럽다.
+    gQueue = (mode === 'learn') ? cards : Store.shuffleArr(cards);
     gIdx = 0; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    gWrong = []; gResults = []; gPeek = null;
+    gWrong = []; gResults = []; gPeek = null; gPromoted = {};
     // 어디서 들어왔는지 기억해 뒀다가 뒤로가기로 그 자리에 돌려보낸다.
     if (view === 'gramList' || view === 'gramCh') gStudyFrom = view;
     gLabelText = label || G_NAME[mode];
@@ -1395,14 +1413,15 @@
   var gLabelText = '';
   var gStudyFrom = 'gramCh';   // 학습을 시작한 화면
 
-  function gRefOf(it) { return { l: it.level, n: it.no, s: it.sub || null }; }
+  function gRefOf(c) { return { l: c.it.level, n: c.it.no, s: c.it.sub || null, x: c.ex || 0 }; }
 
   function persistGSession() {
     if (!gQueue.length) return;
     Store.saveGSession({
       mode: gMode, label: gLabelText, index: gIdx,
       queue: gQueue.map(gRefOf),
-      wrong: gWrong.map(gRefOf)
+      // 틀린 목록은 문형 단위라 예문 번호가 없다.
+      wrong: gWrong.map(function (it) { return gRefOf({ it: it, ex: 0 }); })
     });
   }
 
@@ -1412,7 +1431,8 @@
     var q = [];
     s.queue.forEach(function (ref) {
       var it = Store.findGram(ref.l, ref.n, ref.s);
-      if (it) q.push(it);
+      // 예문이 줄어든 자료를 다시 받았을 수도 있으므로 범위를 확인한다.
+      if (it && (ref.x || 0) < Math.max(1, it.examples.length)) q.push({ it: it, ex: ref.x || 0 });
     });
     if (!q.length || s.index >= q.length) { Store.clearGSession(); return false; }
     gMode = s.mode; gQueue = q; gIdx = s.index;
@@ -1420,7 +1440,7 @@
       return Store.findGram(ref.l, ref.n, ref.s);
     }).filter(Boolean);
     gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
-    gResults = []; gPeek = null;   // 돌아보기는 이번에 푼 것만 대상이다
+    gResults = []; gPeek = null; gPromoted = {};   // 돌아보기는 이번에 푼 것만 대상이다
     gLabelText = s.label || G_NAME[gMode];
     $('gLabel').textContent = gLabelText;
     return true;
@@ -1429,7 +1449,7 @@
   function renderGramCard() {
     if (gPeek !== null) gPeekClose();
     if (gIdx >= gQueue.length) { renderGramDone(); return; }
-    var it = gQueue[gIdx], h = '';
+    var cur = gQueue[gIdx], it = cur.it, h = '';
 
     $('gCount').textContent = (gIdx + 1) + ' / ' + gQueue.length;
     $('gFill').style.width = (gIdx / gQueue.length * 100) + '%';
@@ -1460,7 +1480,7 @@
     }
 
     if (gMode === 'cloze') {
-      var e0 = it.examples[0];
+      var e0 = it.examples[cur.ex];
       h += '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, gGraded ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>';
       h += '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>';
       if (!gGraded) {
@@ -1488,7 +1508,7 @@
     }
 
     if (gMode === 'choice') {
-      var e1 = it.examples[0];
+      var e1 = it.examples[cur.ex];
       if (!gOpts) gOpts = Store.gChoices(it, 4);
       h += '<p class="ex-jp gq" lang="ja">' + gJP(e1.jp, { blank: true, ruby: true }) + '</p>';
       h += '<p class="ex-ko gqko">' + esc(e1.ko) + '</p>';
@@ -1541,10 +1561,10 @@
       b.addEventListener('click', function () {
         if (gPicked !== null) return;
         gPicked = Number(b.dataset.i);
-        var it = gQueue[gIdx];
+        var it = gQueue[gIdx].it;
         var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
-        Store.gGrade(it, ok, ok);
-        gResults.push({ it: it, ok: ok, typed: gOpts[gPicked].pattern, skipped: false });
+        Store.gGrade(it, ok, ok, canPromote(it, ok));
+        gResults.push({ it: it, ex: gQueue[gIdx].ex, ok: ok, typed: gOpts[gPicked].pattern, skipped: false });
         if (!ok) gWrong.push(it);
         if (global_Sync()) Sync.touch();
         persistGSession();
@@ -1554,7 +1574,7 @@
   }
 
   function gSubmit(skip) {
-    var it = gQueue[gIdx], e0 = it.examples[0];
+    var cur = gQueue[gIdx], e0 = cur.it.examples[cur.ex];
     var el = $('gAns');
     gTyped = el ? el.value.trim() : '';
     if (skip) gGraded = 'skip';
@@ -1565,13 +1585,13 @@
   }
 
   function gNext() {
-    var it = gQueue[gIdx];
+    var it = gQueue[gIdx].it;
     if (gMode === 'cloze') {
       if (!gGraded) return;                 // 아직 확인을 안 눌렀다
       // 입력한 답이 곧 채점 결과다. 따로 물어보지 않는다.
       var ok = (gGraded === 'right');
-      Store.gGrade(it, ok, ok);
-      gResults.push({ it: it, ok: ok, typed: gTyped, skipped: gGraded === 'skip' });
+      Store.gGrade(it, ok, ok, canPromote(it, ok));
+      gResults.push({ it: it, ex: gQueue[gIdx].ex, ok: ok, typed: gTyped, skipped: gGraded === 'skip' });
       if (!ok) gWrong.push(it);
       if (global_Sync()) Sync.touch();
     }
@@ -1613,7 +1633,7 @@
   }
 
   function renderGPeek() {
-    var x = gResults[gPeek], it = x.it, e0 = it.examples[0];
+    var x = gResults[gPeek], it = x.it, e0 = it.examples[x.ex || 0];
     var mark = x.skipped ? '정답을 봤음' : (x.ok ? '정답' : '오답');
 
     $('gPeekStage').innerHTML =
