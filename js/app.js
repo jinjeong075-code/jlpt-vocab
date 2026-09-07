@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v38';
+  var BUILD = 'v39';
 
   /* ---------------- 화면 ---------------- */
 
@@ -50,6 +50,8 @@
       if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
       else if (!$('howToPanel').hidden) $('howToPanel').hidden = true;
       else if (searchOpen) closeSearch();
+      // 돌아보는 중이면 학습을 나가지 말고 풀던 문제로 먼저 돌아온다.
+      else if (view === 'study' && peek !== null) peekClose();
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
       else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
@@ -542,6 +544,7 @@
   var picked = { reading: null, meaning: null };
 
   function renderCard() {
+    if (peek !== null) peekClose();
     var e = session.queue[session.index];
     var st = Store.stageFor(e.day, e.w);
 
@@ -615,6 +618,101 @@
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
     advance();
+  }
+
+  /* ---------------- 이미 푼 단어 돌아보기 ---------------- */
+  // 다음으로 넘어가면 방금 본 단어를 다시 못 봐서 답답하다는 요청.
+  // 채점은 이미 끝났으므로 여기서는 점수를 건드리지 않고 보여주기만 한다.
+
+  var peek = null;   // 돌아보는 중이면 session.results 의 인덱스
+
+  function peekOpen(i) {
+    if (!session || !session.results.length) return;
+    peek = Math.max(0, Math.min(i, session.results.length - 1));
+    renderPeek();
+  }
+
+  function peekClose() {
+    peek = null;
+    $('peekStage').hidden = true;
+    $('card').hidden = false;
+    renderProgressText();
+  }
+
+  // 뒤로 가면 더 예전 단어, 앞으로 가면 결국 풀던 문제로 돌아온다.
+  function peekGo(step) {
+    if (peek === null) return;
+    var i = peek + step;
+    if (i < 0) return;
+    if (i >= session.results.length) { peekClose(); return; }
+    peek = i;
+    renderPeek();
+  }
+
+  function renderPeek() {
+    var x = session.results[peek];
+    var st = Store.stageFor(x.day, x.w);
+    var mark = x.known ? '아는 단어로 넘김'
+      : '읽는 법 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X');
+    var detail = detailHTML(x.w, true);
+
+    $('peekStage').innerHTML =
+      '<div class="card">' +
+        '<div class="card-meta">' +
+          '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
+          '<span class="card-no">DAY ' + x.day + (x.w.no ? ' · ' + x.w.no : '') + '</span>' +
+        '</div>' +
+        '<div class="jp-word" lang="ja">' + dictHTML(x.w.word, 'big') + '</div>' +
+        '<div class="answer-box">' +
+          '<div class="ans-row"><span class="ans-label">읽는 법</span>' +
+            '<span class="ans-value reading" lang="ja">' + esc(readingOf(x.w) || x.w.word) + '</span></div>' +
+          '<div class="ans-row"><span class="ans-label">뜻</span>' +
+            '<span class="ans-value">' + posHTML(x.w.pos) + esc(x.w.meaning) + '</span></div>' +
+          '<div class="ans-row"><span class="ans-label">내 답</span>' +
+            '<span class="peek-mark' + (x.r && x.m ? ' ok' : ' no') + '">' + mark + '</span></div>' +
+        '</div>' +
+        (detail ? '<div class="detail-box">' + detail + '</div>' : '') +
+        '<div class="br-nav">' +
+          '<button class="br-btn" id="peekPrev"' + (peek === 0 ? ' disabled' : '') + '>이전</button>' +
+          '<button class="br-btn primary" id="peekNext">' +
+            (peek === session.results.length - 1 ? '문제로 돌아가기' : '다음') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    $('peekStage').hidden = false;
+    $('card').hidden = true;
+    $('peekPrev').addEventListener('click', function () { peekGo(-1); });
+    $('peekNext').addEventListener('click', function () { peekGo(1); });
+
+    $('progressText').textContent = '돌아보기 ' + (peek + 1) + ' / ' + session.results.length;
+    window.scrollTo(0, 0);
+  }
+
+  function renderProgressText() {
+    if (!session) return;
+    $('progressText').textContent = (session.index + 1) + ' / ' + session.queue.length;
+  }
+
+  /* ---------------- 좌우로 밀어서 넘기기 ---------------- */
+  // 폰에서 버튼을 찾아 누르는 것보다 미는 게 빠르다.
+  // 세로로 더 움직였으면 화면을 스크롤하려는 것이므로 넘기지 않는다.
+  function bindSwipe(el, onLeft, onRight) {
+    var x0 = 0, y0 = 0, t0 = 0, live = false;
+    el.addEventListener('touchstart', function (ev) {
+      live = (ev.touches.length === 1);
+      if (!live) return;
+      x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY; t0 = Date.now();
+    }, { passive: true });
+    el.addEventListener('touchend', function (ev) {
+      if (!live) return;
+      live = false;
+      var t = ev.changedTouches[0];
+      var dx = t.clientX - x0, dy = t.clientY - y0;
+      if (Date.now() - t0 > 800) return;              // 오래 끌었으면 스크롤이나 길게 누르기
+      if (Math.abs(dx) < 60) return;                  // 짧으면 탭
+      if (Math.abs(dx) < Math.abs(dy) * 1.5) return;  // 세로가 더 크면 스크롤
+      if (dx < 0) onLeft(); else onRight();
+    }, { passive: true });
   }
 
   function next() {
@@ -1765,6 +1863,18 @@
     $('brPrev').addEventListener('click', function () { browseGo(-1); });
     $('brNext').addEventListener('click', function () { browseGo(1); });
 
+    // 폰에서 좌우로 밀어 넘긴다. 왼쪽으로 밀면 다음, 오른쪽으로 밀면 이전.
+    bindSwipe($('viewBrowse'),
+      function () { browseGo(1); },
+      function () { browseGo(-1); });
+    bindSwipe($('viewGramStudy'),
+      function () { if (gMode === 'learn' && gIdx < gQueue.length) gNext(); },
+      function () { if (gMode === 'learn') gPrev(); });
+    // 학습 화면은 오른쪽으로 밀면 이미 푼 단어를 돌아본다.
+    bindSwipe($('viewStudy'),
+      function () { if (peek !== null) peekGo(1); },
+      function () { peek === null ? peekOpen(session.results.length - 1) : peekGo(-1); });
+
     $('btnStudyAll').addEventListener('click', function () {
       startSession(currentSet.entries, currentSet.label);
     });
@@ -1993,6 +2103,16 @@
         return;
       }
       if (view !== 'study') return;
+      // 돌아보는 중에는 채점 키가 먹으면 안 된다. 좌우로만 움직인다.
+      if (peek !== null) {
+        if (ev.key === 'ArrowLeft')  { ev.preventDefault(); peekGo(-1); }
+        else if (ev.key === 'ArrowRight') { ev.preventDefault(); peekGo(1); }
+        else if (ev.key === 'Escape')     { ev.preventDefault(); peekClose(); }
+        return;
+      }
+      if (ev.key === 'ArrowLeft') {
+        ev.preventDefault(); peekOpen(session.results.length - 1); return;
+      }
       if (ev.key === 'Enter') {
         ev.preventDefault();
         if (!$('btnReveal').hidden) reveal();

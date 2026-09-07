@@ -621,6 +621,11 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .pos-chip i { font-style: normal; font-size: 11px; opacity: .7; }
 .pos-chip:hover { border-color: currentColor; filter: brightness(1.25); }
 
+/* ---------- 이미 푼 단어 돌아보기 ---------- */
+.peek-mark { font-size: 14px; font-weight: 600; }
+.peek-mark.ok { color: var(--ok); }
+.peek-mark.no { color: var(--no); }
+
 /* ---------- 넘기며 보기 ---------- */
 .br-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 12px; }
 .br-btn {
