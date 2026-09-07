@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v41';
+  var BUILD = 'v42';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1146,6 +1146,14 @@
   var gPeek = null;        // 돌아보는 중이면 gResults 의 인덱스
   var gRandCount = 20;     // 전체에서 랜덤으로 뽑을 개수 (0 = 전체)
 
+  // 채점하는 모드는 예문마다 한 문제라 문형 수와 문제 수가 다르다.
+  // 버튼에 문형 수를 적어 두면 눌렀을 때 숫자가 갑자기 늘어 헷갈린다.
+  function exCount(items) {
+    var n = 0;
+    items.forEach(function (it) { n += Math.max(1, it.examples.length); });
+    return n;
+  }
+
   function gByStage(stage, items) {
     if (stage === 'all') return items;
     return items.filter(function (it) {
@@ -1231,8 +1239,8 @@
 
     var all = Store.allGram();
     var due = all.filter(function (it) { return Store.gIsDue(it); });
-    $('gmClozeN').textContent = due.length + '개';
-    $('gmChoiceN').textContent = due.length + '개';
+    $('gmClozeN').textContent = exCount(due) + '문제';
+    $('gmChoiceN').textContent = exCount(due) + '문제';
     $('gEmptyNote').hidden = all.length > 0;
 
     var today = Store.gDueList(), weak = Store.gWeakList(), shaky = Store.gShakyList();
@@ -1303,10 +1311,10 @@
     d.items.forEach(function (it) { s.total++; s[Store.gStageFor(it)]++; });
     $('gListStats').innerHTML = statHTML(s, true);
 
-    var n = d.items.length + '개';
-    $('gListClozeN').textContent = n;
-    $('gListChoiceN').textContent = n;
-    $('gListLearnN').textContent = n;
+    var q = exCount(d.items) + '문제';
+    $('gListClozeN').textContent = q;
+    $('gListChoiceN').textContent = q;
+    $('gListLearnN').textContent = d.items.length + '문형';
 
     $('gListItems').innerHTML = d.items.map(gItemHTML).join('');
     show('gramList');
@@ -1359,8 +1367,8 @@
       h += '<button class="ch" data-k="__all"' + (due.length ? '' : ' disabled') + '>' +
         '<span class="ch-lv">전체</span>' +
         '<span class="ch-tx"><span class="ch-t">오늘의 복습</span>' +
-          '<span class="ch-s">복습일이 된 문형</span></span>' +
-        '<span class="ch-n">' + due.length + '개</span></button>';
+          '<span class="ch-s">복습일이 된 ' + due.length + '문형</span></span>' +
+        '<span class="ch-n">' + exCount(due) + '문제</span></button>';
     }
 
     h += secs.map(function (g) {
@@ -1372,7 +1380,8 @@
         '<span class="ch-lv">' + esc(g.level) + '</span>' +
         '<span class="ch-tx">' +
           '<span class="ch-t">' + String(g.section).padStart(2, '0') + '. ' + esc(g.sectionTitle) + '</span>' +
-          '<span class="ch-s">' + g.items.length + '개 · ' + range + '번</span>' +
+          '<span class="ch-s">' + g.items.length + '문형 · ' + range + '번' +
+            (gPickMode === 'learn' ? '' : ' · ' + exCount(g.items) + '문제') + '</span>' +
         '</span>' +
         '<span class="ch-n">' + pct + '%</span></button>';
     }).join('');
