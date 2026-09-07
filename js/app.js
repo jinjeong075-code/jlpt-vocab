@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v42';
+  var BUILD = 'v43';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1129,6 +1129,7 @@
   var gMode = null;        // 'learn' | 'cloze' | 'choice'
   var gQueue = [], gIdx = 0;
   var gTyped = '', gGraded = null, gPicked = null, gOpts = null;
+  var gTypedAll = [];      // 예문별로 입력한 답
   var gWrong = [];         // 이번 학습에서 틀린 문형
   var gResults = [];       // 이번 학습에서 푼 문형과 그때의 답
   var gPromoted = {};      // 이번 학습에서 이미 레벨을 올린 문형
@@ -1145,14 +1146,6 @@
   }
   var gPeek = null;        // 돌아보는 중이면 gResults 의 인덱스
   var gRandCount = 20;     // 전체에서 랜덤으로 뽑을 개수 (0 = 전체)
-
-  // 채점하는 모드는 예문마다 한 문제라 문형 수와 문제 수가 다르다.
-  // 버튼에 문형 수를 적어 두면 눌렀을 때 숫자가 갑자기 늘어 헷갈린다.
-  function exCount(items) {
-    var n = 0;
-    items.forEach(function (it) { n += Math.max(1, it.examples.length); });
-    return n;
-  }
 
   function gByStage(stage, items) {
     if (stage === 'all') return items;
@@ -1239,8 +1232,8 @@
 
     var all = Store.allGram();
     var due = all.filter(function (it) { return Store.gIsDue(it); });
-    $('gmClozeN').textContent = exCount(due) + '문제';
-    $('gmChoiceN').textContent = exCount(due) + '문제';
+    $('gmClozeN').textContent = due.length + '문형';
+    $('gmChoiceN').textContent = due.length + '문형';
     $('gEmptyNote').hidden = all.length > 0;
 
     var today = Store.gDueList(), weak = Store.gWeakList(), shaky = Store.gShakyList();
@@ -1311,7 +1304,7 @@
     d.items.forEach(function (it) { s.total++; s[Store.gStageFor(it)]++; });
     $('gListStats').innerHTML = statHTML(s, true);
 
-    var q = exCount(d.items) + '문제';
+    var q = d.items.length + '문형';
     $('gListClozeN').textContent = q;
     $('gListChoiceN').textContent = q;
     $('gListLearnN').textContent = d.items.length + '문형';
@@ -1368,7 +1361,7 @@
         '<span class="ch-lv">전체</span>' +
         '<span class="ch-tx"><span class="ch-t">오늘의 복습</span>' +
           '<span class="ch-s">복습일이 된 ' + due.length + '문형</span></span>' +
-        '<span class="ch-n">' + exCount(due) + '문제</span></button>';
+        '<span class="ch-n">' + due.length + '문형</span></button>';
     }
 
     h += secs.map(function (g) {
@@ -1381,7 +1374,7 @@
         '<span class="ch-tx">' +
           '<span class="ch-t">' + String(g.section).padStart(2, '0') + '. ' + esc(g.sectionTitle) + '</span>' +
           '<span class="ch-s">' + g.items.length + '문형 · ' + range + '번' +
-            (gPickMode === 'learn' ? '' : ' · ' + exCount(g.items) + '문제') + '</span>' +
+            '</span>' +
         '</span>' +
         '<span class="ch-n">' + pct + '%</span></button>';
     }).join('');
@@ -1394,18 +1387,11 @@
   function startGram(mode, items, label) {
     if (!items.length) return;
     gMode = mode;
-    // 큐의 한 칸은 '어떤 문형의 몇 번째 예문' 이다.
-    // 채점하는 모드는 예문마다 한 문제씩 낸다. 문형 하나를 한 문장으로만 익히면
-    // 그 문장에서만 알아보게 된다.
-    // 내용 보기는 카드 하나에 예문을 다 펼쳐 보여주므로 문형당 한 칸이면 된다.
-    var cards = [];
-    items.forEach(function (it) {
-      if (mode === 'learn' || !it.examples.length) { cards.push({ it: it, ex: 0 }); return; }
-      it.examples.forEach(function (e, i) { cards.push({ it: it, ex: i }); });
-    });
+    // 한 칸이 문형 하나다. 카드에는 그 문형의 예문을 책에 있는 대로 다 싣는다.
+    var cards = items.map(function (it) { return { it: it, ex: 0 }; });
     // 읽는 순서는 섞지 않는다. 책 순서대로 보는 게 자연스럽다.
     gQueue = (mode === 'learn') ? cards : Store.shuffleArr(cards);
-    gIdx = 0; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    gIdx = 0; gTyped = ''; gTypedAll = []; gGraded = null; gPicked = null; gOpts = null;
     gWrong = []; gResults = []; gPeek = null; gPromoted = {};
     // 어디서 들어왔는지 기억해 뒀다가 뒤로가기로 그 자리에 돌려보낸다.
     if (view === 'gramList' || view === 'gramCh') gStudyFrom = view;
@@ -1448,7 +1434,7 @@
     gWrong = (s.wrong || []).map(function (ref) {
       return Store.findGram(ref.l, ref.n, ref.s);
     }).filter(Boolean);
-    gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    gTyped = ''; gTypedAll = []; gGraded = null; gPicked = null; gOpts = null;
     gResults = []; gPeek = null; gPromoted = {};   // 돌아보기는 이번에 푼 것만 대상이다
     gLabelText = s.label || G_NAME[gMode];
     $('gLabel').textContent = gLabelText;
@@ -1489,23 +1475,43 @@
     }
 
     if (gMode === 'cloze') {
-      var e0 = it.examples[cur.ex];
-      h += '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, gGraded ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>';
-      h += '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>';
+      // 책에 있는 예문을 다 낸다. 한 문장으로만 익히면 그 문장에서만 알아본다.
+      it.examples.forEach(function (e, i) {
+        var many = it.examples.length > 1;
+        h += '<div class="qex">';
+        if (many) h += '<span class="qno">' + (i + 1) + '</span>';
+        h += '<div class="qbody">' +
+          '<p class="ex-jp gq" lang="ja">' +
+            gJP(e.jp, gGraded ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>' +
+          '<p class="ex-ko gqko">' + esc(e.ko) + '</p>';
+        if (!gGraded) {
+          var np = answerParts(e).length;
+          h += '<input class="ginp" data-i="' + i + '" lang="ja" placeholder="' +
+               (np > 1 ? BLANK_NO.slice(0, np).join(' ') + ' 순서대로' : '빈칸에 들어갈 말') + '" ' +
+               'autocomplete="off" autocapitalize="off" spellcheck="false">';
+        } else {
+          var mine = gTypedAll[i] || '';
+          var eok = normAns(mine) === normAns(answerOf(e));
+          if (!eok && mine)
+            h += '<div class="gcmp"><span class="cl">내 답</span>' +
+                 '<span class="cv bad" lang="ja">' + esc(mine) + '</span></div>';
+          h += '<div class="gcmp"><span class="cl">정답</span>' +
+               '<span class="cv good" lang="ja">' + esc(answerText(e)) + '</span>' +
+               '<span class="qok ' + (eok ? 'y' : 'n') + '">' + (eok ? 'O' : 'X') + '</span></div>';
+        }
+        h += '</div></div>';
+      });
+
       if (!gGraded) {
-        var np = answerParts(e0).length;
-        h += '<input class="ginp" id="gAns" lang="ja" placeholder="' +
-             (np > 1 ? BLANK_NO.slice(0, np).join(' ') + ' 순서대로' : '빈칸에 들어갈 말') + '" ' +
-             'autocomplete="off" autocapitalize="off" spellcheck="false">';
         h += '<button class="next-btn" id="gSubmit">확인</button>';
         h += '<button class="known-btn" id="gSkip">모르겠어요 · 정답 보기</button>';
       } else {
+        var right = gRightCount(it), total = it.examples.length;
         var ok = (gGraded === 'right');
         h += '<div class="gjudge ' + (gGraded === 'skip' ? 'skip' : (ok ? 'right' : 'wrong')) + '">' +
-             (gGraded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다')) + '</div>';
-        if (gGraded === 'wrong' && gTyped)
-          h += '<div class="gcmp"><span class="cl">입력</span><span class="cv bad" lang="ja">' + esc(gTyped) + '</span></div>';
-        h += '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerText(e0)) + '</span></div>';
+             (gGraded === 'skip' ? '정답을 확인하세요'
+               : (total > 1 ? total + '개 중 ' + right + '개 정답' : (ok ? '정답입니다' : '틀렸습니다'))) +
+             '</div>';
         h += grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn');
         h += grow('접속', esc(it.connect), 'cn');
         h += grow('의미', esc(it.meaning), 'dim');
@@ -1517,10 +1523,17 @@
     }
 
     if (gMode === 'choice') {
-      var e1 = it.examples[cur.ex];
       if (!gOpts) gOpts = Store.gChoices(it, 4);
-      h += '<p class="ex-jp gq" lang="ja">' + gJP(e1.jp, { blank: true, ruby: true }) + '</p>';
-      h += '<p class="ex-ko gqko">' + esc(e1.ko) + '</p>';
+      // 같은 문형이 쓰인 문장을 다 보여준다. 고르는 답은 하나다.
+      it.examples.forEach(function (e, i) {
+        var many = it.examples.length > 1;
+        h += '<div class="qex">' + (many ? '<span class="qno">' + (i + 1) + '</span>' : '') +
+          '<div class="qbody">' +
+            '<p class="ex-jp gq" lang="ja">' +
+              gJP(e.jp, gPicked !== null ? { reveal: true, ruby: true } : { blank: true, ruby: true }) + '</p>' +
+            '<p class="ex-ko gqko">' + esc(e.ko) + '</p>' +
+          '</div></div>';
+      });
       h += '<div class="gopts">';
       gOpts.forEach(function (d, i) {
         var cls = '';
@@ -1543,10 +1556,16 @@
   }
 
   function bindGramCard() {
-    var inp = $('gAns');
-    if (inp) {
-      inp.focus();
+    var inputs = $$('#gStage .ginp');
+    if (inputs.length) inputs[0].focus();
+    inputs.forEach(function (inp, i) {
       inp.addEventListener('keydown', function (ev) {
+        // 마지막 칸이 아니면 Enter 로 다음 칸으로 내려간다.
+        if (ev.key === 'Enter' && !ev.isComposing && i < inputs.length - 1) {
+          ev.preventDefault(); ev.stopPropagation();
+          inputs[i + 1].focus();
+          return;
+        }
         // 일본어 IME 로 변환 중인 엔터는 확정용이므로 제출로 받으면 안 된다.
         if (ev.key === 'Enter' && !ev.isComposing) {
           ev.preventDefault();
@@ -1556,7 +1575,7 @@
           gSubmit(false);
         }
       });
-    }
+    });
     if ($('gSubmit')) $('gSubmit').addEventListener('click', function () { gSubmit(false); });
     if ($('gSkip'))   $('gSkip').addEventListener('click', function () { gSubmit(true); });
     if ($('gOverride')) $('gOverride').addEventListener('click', function () {
@@ -1573,7 +1592,7 @@
         var it = gQueue[gIdx].it;
         var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
         Store.gGrade(it, ok, ok, canPromote(it, ok));
-        gResults.push({ it: it, ex: gQueue[gIdx].ex, ok: ok, typed: gOpts[gPicked].pattern, skipped: false });
+        gResults.push({ it: it, ok: ok, typed: gOpts[gPicked].pattern, answers: [], skipped: false });
         if (!ok) gWrong.push(it);
         if (global_Sync()) Sync.touch();
         persistGSession();
@@ -1582,13 +1601,27 @@
     });
   }
 
+  // 예문마다 몇 개를 맞혔는지.
+  function gRightCount(it) {
+    var n = 0;
+    it.examples.forEach(function (e, i) {
+      if (normAns(gTypedAll[i] || '') === normAns(answerOf(e))) n++;
+    });
+    return n;
+  }
+
   function gSubmit(skip) {
-    var cur = gQueue[gIdx], e0 = cur.it.examples[cur.ex];
-    var el = $('gAns');
-    gTyped = el ? el.value.trim() : '';
+    var it = gQueue[gIdx].it;
+    var inputs = $$('#gStage .ginp');
+
+    gTypedAll = [];
+    inputs.forEach(function (el) { gTypedAll[Number(el.dataset.i)] = el.value.trim(); });
+    gTyped = gTypedAll.filter(Boolean).join(' / ');
+
     if (skip) gGraded = 'skip';
-    else if (!gTyped) { if (el) el.focus(); return; }
-    else gGraded = (normAns(gTyped) === normAns(answerOf(e0))) ? 'right' : 'wrong';
+    else if (!gTyped) { if (inputs[0]) inputs[0].focus(); return; }
+    // 예문을 다 맞혀야 정답이다. 하나만 맞히는 건 그 문장만 외운 것일 수 있다.
+    else gGraded = (gRightCount(it) === it.examples.length) ? 'right' : 'wrong';
 
     renderGramCard();
   }
@@ -1600,11 +1633,11 @@
       // 입력한 답이 곧 채점 결과다. 따로 물어보지 않는다.
       var ok = (gGraded === 'right');
       Store.gGrade(it, ok, ok, canPromote(it, ok));
-      gResults.push({ it: it, ex: gQueue[gIdx].ex, ok: ok, typed: gTyped, skipped: gGraded === 'skip' });
+      gResults.push({ it: it, ok: ok, typed: gTyped, answers: gTypedAll.slice(), skipped: gGraded === 'skip' });
       if (!ok) gWrong.push(it);
       if (global_Sync()) Sync.touch();
     }
-    gIdx++; gTyped = ''; gGraded = null; gPicked = null; gOpts = null;
+    gIdx++; gTyped = ''; gTypedAll = []; gGraded = null; gPicked = null; gOpts = null;
     persistGSession();
     renderGramCard();
   }
@@ -1642,8 +1675,27 @@
   }
 
   function renderGPeek() {
-    var x = gResults[gPeek], it = x.it, e0 = it.examples[x.ex || 0];
+    var x = gResults[gPeek], it = x.it;
     var mark = x.skipped ? '정답을 봤음' : (x.ok ? '정답' : '오답');
+    var mine = x.answers || [];
+
+    var body = '';
+    it.examples.forEach(function (e, i) {
+      var many = it.examples.length > 1;
+      var eok = normAns(mine[i] || '') === normAns(answerOf(e));
+      body += '<div class="qex">' + (many ? '<span class="qno">' + (i + 1) + '</span>' : '') +
+        '<div class="qbody">' +
+          '<p class="ex-jp gq" lang="ja">' + gJP(e.jp, { reveal: true, ruby: true }) + '</p>' +
+          '<p class="ex-ko gqko">' + esc(e.ko) + '</p>' +
+          (mine[i] && !eok
+            ? '<div class="gcmp"><span class="cl">내 답</span>' +
+              '<span class="cv bad" lang="ja">' + esc(mine[i]) + '</span></div>' : '') +
+          '<div class="gcmp"><span class="cl">정답</span>' +
+            '<span class="cv good" lang="ja">' + esc(answerText(e)) + '</span>' +
+            (mine.length ? '<span class="qok ' + (eok ? 'y' : 'n') + '">' + (eok ? 'O' : 'X') + '</span>' : '') +
+          '</div>' +
+        '</div></div>';
+    });
 
     $('gPeekStage').innerHTML =
       '<div class="card">' +
@@ -1651,13 +1703,8 @@
           '<span class="badge ' + Store.gStageFor(it) + '">' + G_STAGE_LABEL[Store.gStageFor(it)] + '</span>' +
           '<span class="card-no">' + esc(it.level) + ' · ' + it.no + (it.sub ? '-' + it.sub : '') + '</span>' +
         '</div>' +
-        '<p class="ex-jp gq" lang="ja">' + gJP(e0.jp, { reveal: true, ruby: true }) + '</p>' +
-        '<p class="ex-ko gqko">' + esc(e0.ko) + '</p>' +
+        body +
         '<div class="gjudge ' + (x.skipped ? 'skip' : (x.ok ? 'right' : 'wrong')) + '">' + mark + '</div>' +
-        (x.typed && !x.ok
-          ? '<div class="gcmp"><span class="cl">내 답</span><span class="cv bad" lang="ja">' + esc(x.typed) + '</span></div>'
-          : '') +
-        '<div class="gcmp"><span class="cl">정답</span><span class="cv good" lang="ja">' + esc(answerText(e0)) + '</span></div>' +
         grow('문형', '<span lang="ja">' + esc(it.pattern) + '</span> <span class="gko">' + esc(it.ko) + '</span>', 'cn') +
         grow('접속', esc(it.connect), 'cn') +
         grow('의미', esc(it.meaning), 'dim') +

@@ -621,6 +621,21 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .pos-chip i { font-style: normal; font-size: 11px; opacity: .7; }
 .pos-chip:hover { border-color: currentColor; filter: brightness(1.25); }
 
+/* ---------- 문제 카드의 예문 여러 개 ---------- */
+.qex { display: flex; gap: 9px; padding: 10px 0; }
+.qex + .qex { border-top: 1px solid var(--hair); }
+.qno {
+  flex: 0 0 18px; height: 18px; margin-top: 14px;
+  border-radius: 50%; border: 1px solid var(--line);
+  font-size: 11px; color: var(--dim); text-align: center; line-height: 17px;
+}
+.qbody { flex: 1; min-width: 0; }
+.qbody .gq { padding: 6px 0 2px; }
+.qbody .ginp { margin-top: 8px; }
+.qok { font-size: 12px; font-weight: 700; margin-left: auto; }
+.qok.y { color: var(--ok); }
+.qok.n { color: var(--no); }
+
 /* ---------- 이미 푼 단어 돌아보기 ---------- */
 .peek-mark { font-size: 14px; font-weight: 600; }
 .peek-mark.ok { color: var(--ok); }
