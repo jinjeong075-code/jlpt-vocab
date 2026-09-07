@@ -886,26 +886,28 @@
     });
     if (conv) write(PROG_KEY, progress);
 
-    // v43 까지는 복습일 전에 풀어도 맞히기만 하면 레벨이 올라갔다.
-    // 그래서 하루에 몰아 푼 단어가 장기기억으로 올라가 있을 수 있는데,
-    // 채점 시각을 남기지 않아 어느 것이 그렇게 올라갔는지 가릴 수가 없다.
-    // 확실한 쪽으로 간다 - 장기기억은 전부 단기기억 맨 위로 내리고 지금부터 복습 대상으로
-    // 삼는다. 진짜로 아는 단어는 일정대로 다시 올라온다. 기록(hist·tries)은 건드리지 않는다.
-    // 한 번만 돈다.
-    var FIX_KEY = 'jvocab.fix.duegate.v1';
+    // v44 에서 장기기억을 전부 단기기억으로 내리는 마이그레이션을 넣었다가 되물렸다.
+    // 레벨을 함부로 깎을 일이 아니었다. 여기서는 그때 깎인 것을 되살리기만 한다.
+    //
+    // 어느 것이 깎였는지는 복습일로 가린다. 정상적인 레벨 3 단어의 복습일은
+    // nextAt() 이 만든 '그 날 0시 + N일' 이라 자정에 딱 맞는다. 그때 깎인 것은
+    // due 에 그 순간의 시각을 그대로 넣어서 자정에 맞지 않는다.
+    // 틀려서 다시 만나기로 한 것(retryAt)도 자정에 안 맞지만 그건 miss 가 붙어 있다.
+    var FIX_KEY = 'jvocab.fix.duegate.v1';   // v44 가 남긴 표시
+    var UNDO_KEY = 'jvocab.fix.undo.v1';
     var fixed = 0;
     try {
-      if (!localStorage.getItem(FIX_KEY)) {
+      if (localStorage.getItem(FIX_KEY) && !localStorage.getItem(UNDO_KEY)) {
         Object.keys(progress).forEach(function (k) {
           var r = progress[k];
-          if (r && r.seen && r.level >= LONG_LEVEL) {
-            r.level = LONG_LEVEL - 1;
-            r.due = Date.now();
-            fixed++;
-          }
+          if (!r || !r.seen || r.level !== LONG_LEVEL - 1 || r.miss) return;
+          var d = new Date(dueMs(r));
+          if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) return;
+          r.level = LONG_LEVEL;   // 장기기억으로 되돌린다
+          fixed++;
         });
         if (fixed) write(PROG_KEY, progress);
-        localStorage.setItem(FIX_KEY, String(fixed));
+        localStorage.setItem(UNDO_KEY, String(fixed));
       }
     } catch (e) {}
     lastFixCount = fixed;
