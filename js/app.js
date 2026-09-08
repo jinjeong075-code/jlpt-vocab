@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v52';
+  var BUILD = 'v53';
 
   /* ---------------- 화면 ---------------- */
 
@@ -176,6 +176,7 @@
     renderResume();
     renderPosChips();
     renderRateChips();
+    renderKanjiChips();
     $$('#dirChips .chip').forEach(function (c) {
       c.classList.toggle('sel', c.dataset.dir === quizDir);
     });
@@ -373,6 +374,55 @@
       return '<button class="chip rate-chip" data-min="' + m + '"' + (n ? '' : ' disabled') + '>' +
         m + '%↑<i>' + n + '</i></button>';
     }).join('');
+  }
+
+  /* ---------------- 한자별 모아 보기 ---------------- */
+  // 같은 한자가 단어마다 다르게 읽히는 것이 헷갈림의 큰 몫이다.
+  // 生活(せい) · 生きる(い) · 芝生(ふ) 를 나란히 놓고 봐야 구별이 된다.
+
+  var kanjiMap = null;   // 한자 → 그 한자가 들어간 단어들. 2500단어를 훑으므로 한 번만 만든다.
+
+  function kanjiIndex() {
+    if (kanjiMap) return kanjiMap;
+    kanjiMap = {};
+    Store.allWords().forEach(function (e) {
+      var seen = {};
+      (String(e.w.word).match(/[一-龯々]/g) || []).forEach(function (c) {
+        if (seen[c]) return;          // 한 단어에 같은 한자가 두 번 나와도 한 번만
+        seen[c] = 1;
+        (kanjiMap[c] = kanjiMap[c] || []).push(e);
+      });
+    });
+    return kanjiMap;
+  }
+
+  // 읽는 법 순으로 늘어놓으면 같은 소리로 읽히는 단어끼리 붙어서 비교하기 좋다.
+  function wordsOfKanji(c) {
+    var list = (kanjiIndex()[c] || []).slice();
+    list.sort(function (a, b) {
+      return (readingOf(a.w) || a.w.word).localeCompare(readingOf(b.w) || b.w.word, 'ja');
+    });
+    return list;
+  }
+
+  function renderKanjiChips() {
+    var map = kanjiIndex();
+    // 여러 단어에 나오는 한자일수록 읽는 법이 갈릴 여지가 크다. 많은 순으로 앞에 둔다.
+    var top = Object.keys(map)
+      .filter(function (c) { return map[c].length >= 3; })
+      .sort(function (a, b) { return map[b].length - map[a].length; })
+      .slice(0, 28);
+    $('kanjiChips').innerHTML = top.map(function (c) {
+      return '<button class="chip kanji-chip" data-k="' + esc(c) + '">' +
+        '<span lang="ja">' + esc(c) + '</span><i>' + map[c].length + '</i></button>';
+    }).join('');
+  }
+
+  function openKanji(c) {
+    var list = wordsOfKanji(c);
+    if (!list.length) return;
+    currentDays = [];
+    renderSet(list, '한자 ' + c, list.length + '단어 · 읽는 법 순', true);
   }
 
   function renderPosChips() {
@@ -2157,6 +2207,21 @@
       quizDir = chip.dataset.dir;
       try { localStorage.setItem(DIR_KEY, quizDir); } catch (e) {}
       $$('#dirChips .chip').forEach(function (c) { c.classList.toggle('sel', c === chip); });
+    });
+
+    $('kanjiChips').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.kanji-chip');
+      if (chip) openKanji(chip.dataset.k);
+    });
+    // 칩에 없는 한자는 직접 쳐서 연다. 입력한 것 중 첫 한자를 쓴다.
+    $('kanjiInput').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' || ev.isComposing) return;
+      ev.preventDefault();
+      var m = String(this.value).match(/[一-龯々]/);
+      if (!m) return;
+      this.value = '';
+      this.blur();
+      openKanji(m[0]);
     });
 
     $('rateChips').addEventListener('click', function (ev) {
