@@ -241,14 +241,15 @@
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     var wasLong = isLong(r);
-    // 단어와 같다. 복습일 전에 푼 것은 맞혀도 레벨을 올리지 않는다.
+    // 단어와 같다. 복습일이 된 문형에서만 진도가 움직인다. 맞히든 틀리든.
     var onTime = gradeDue(r);
-    if (!onTime) allowPromote = false;
 
     if (patternOk) r.rO++; else r.rX++;
     if (connectOk) r.mO++; else r.mX++;
 
-    if (patternOk && connectOk) {
+    if (!onTime) {
+      // 연습이다. 기록만 남긴다.
+    } else if (patternOk && connectOk) {
       r.miss = 0;
       if (allowPromote) {
         r.level = Math.min(MAX_LEVEL, r.level + 1);
@@ -262,7 +263,7 @@
       r.miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
       r.due = retryAt(r.miss);
     }
-    logAttempt(r, wasLong, patternOk && connectOk, patternOk || connectOk, onTime, mode || 'gcloze');
+    logAttempt(r, wasLong && onTime, patternOk && connectOk, patternOk || connectOk, onTime, mode || 'gcloze');
     r.seen++;
     r.last = Date.now();
     progress[k] = r;
@@ -621,11 +622,15 @@
   //   둘 다 O  → 레벨 +1 (간격이 늘어남 = 장기기억으로 이동)
   //   하나만 O → 레벨을 3 이하로 내리고 내일 다시
   //   둘 다 X  → 레벨 -2, 그리고 같은 날 다시 (1시간 → 4시간 → 다음날)
-  // 복습일이 되지 않았는데 푼 것은 레벨을 올리지 않는다.
-  //   장기기억은 '시간이 지난 뒤에도 떠올랐다'는 뜻이다. 방금 본 단어를 다시 맞히는 것은
-  //   그 증거가 되지 못한다. 그래서 모름·품사별·랜덤·흔들리는 단어처럼 일정과 상관없이
-  //   여는 학습은 아무리 맞혀도 장기기억으로 넘어가지 않는다.
-  //   반대로 틀린 것은 언제 풀었든 그대로 반영한다. 모른다는 증거는 일정과 무관하다.
+  // 진도는 복습일이 된 단어에서만 움직인다. 맞히든 틀리든.
+  //
+  //   장기기억은 '시간이 지난 뒤에도 떠올랐다'는 뜻이다. 임의로 연 학습이 일정을
+  //   흔들면, 그 단어를 진짜 장기기억으로 넘긴 것인지 방금 본 잔상으로 맞힌 것인지
+  //   구별할 수 없게 된다. 그러면 이 앱이 재는 것이 아무 의미가 없다.
+  //
+  //   그래서 모름·품사별·한자별·오답률·랜덤·흔들리는 단어·타임어택은 전부 연습이다.
+  //   기록(오답률·느린 단어·시험 이력)에는 다 남으므로 무엇을 못하는지는 그대로 보인다.
+  //   아직 한 번도 안 본 단어는 복습 대상이므로 첫 학습은 정상적으로 반영된다.
   function gradeDue(r) {
     return !r.seen || dueMs(r) <= Date.now();
   }
@@ -644,15 +649,12 @@
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
 
-    if (noSchedule) {
-      // 기록만 남긴다. 레벨도 복습일도 그대로.
+    if (noSchedule || !onTime) {
+      // 연습이다. 기록만 남기고 레벨도 복습일도 그대로 둔다.
     } else if (readingOk && meaningOk) {
       r.miss = 0;
-      if (onTime) {
-        r.level = Math.min(MAX_LEVEL, r.level + 1);
-        r.due = nextAt(INTERVALS[r.level]);
-      }
-      // 복습일 전이면 레벨도 다음 복습일도 그대로 둔다. 원래 일정이 맞다.
+      r.level = Math.min(MAX_LEVEL, r.level + 1);
+      r.due = nextAt(INTERVALS[r.level]);
     } else {
       // 하나라도 X 면 같은 날 다시 낸다 (1시간 → 4시간 → 다음날).
       if (readingOk || meaningOk) {
@@ -671,7 +673,7 @@
 
     // 일정을 안 건드리는 판에서는 '장기기억에서 떨어졌다'도 세지 않는다.
     // 실제로 떨어지지 않았는데 흔들리는 단어로 잡히면 안 된다.
-    logAttempt(r, wasLong && !noSchedule, readingOk && meaningOk,
+    logAttempt(r, wasLong && !noSchedule && onTime, readingOk && meaningOk,
                readingOk || meaningOk, onTime, mode || 'jp2ko');
     r.seen++;
     r.last = Date.now();
