@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v46';
+  var BUILD = 'v47';
 
   /* ---------------- 화면 ---------------- */
 
@@ -396,6 +396,14 @@
       ? r.tries + '번 중 ' + r.fails + '번 틀림 · 오답률 ' + Math.round(Store.failRate(r) * 100) + '%'
       : r.tries + '번 다 맞음'];
     if (r.lapse) txt.push('장기기억에서 ' + r.lapse + '번 떨어짐');
+    // 왜 이 단계에 있는지 따져 볼 수 있게 레벨과 다음 복습일을 같이 적는다.
+    txt.push('Lv.' + (r.level || 0));
+    if (r.due) {
+      var ms = Store.dueMs(r) - Date.now();
+      txt.push(ms <= 0 ? '복습 대기'
+        : (ms < 86400000 ? '복습 ' + Math.max(1, Math.round(ms / 3600000)) + '시간 뒤'
+                         : '복습 ' + Math.round(ms / 86400000) + '일 뒤'));
+    }
     return '<div class="hist">' + marks +
       '<span class="hist-txt">' + txt.join(' · ') + '</span></div>';
   }

@@ -77,7 +77,15 @@
   var progress = {};  // { "26-1552": {...}, "g:N3-41-1": {...} }  단어와 문법이 한 곳에
   var timeLog = {};   // { "2026-08-27": { 기기id: 초 } }
   var deviceId = '';  // 이 기기를 구분하는 값. PC와 폰의 공부 시간을 따로 세는 데 쓴다.
-  var lastFixCount = 0;  // 이번 실행에서 되돌린 장기기억 단어 수
+  var lastFixCount = 0;  // 이번 실행에서 되살린 장기기억 단어 수
+  var lastUndoCount = 0; // 이번 실행에서 잘못 올라간 것을 되돌린 수
+
+  // 옛 날짜 번호에서 변환된 복습일. UTC 자정이라 DAY_MS 로 딱 나누어떨어진다.
+  // nextAt() 이 만든 값은 한국 시간 자정이라 이렇게 되지 않는다.
+  function isOldDue(r) {
+    var d = dueMs(r);
+    return d > 0 && d % DAY_MS === 0;
+  }
 
   function keyOf(day, word) {
     return day + '-' + (word.no != null ? word.no : word.word);
@@ -901,6 +909,7 @@
         Object.keys(progress).forEach(function (k) {
           var r = progress[k];
           if (!r || !r.seen || r.level !== LONG_LEVEL - 1 || r.miss) return;
+          if (isOldDue(r)) return;   // 아래 참고. 옛 형식은 대상이 아니다
           var d = new Date(dueMs(r));
           if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) return;
           r.level = LONG_LEVEL;   // 장기기억으로 되돌린다
@@ -911,6 +920,29 @@
       }
     } catch (e) {}
     lastFixCount = fixed;
+
+    // v45 의 되살리기가 한 부류를 잘못 올렸다.
+    // 옛 기록의 복습일은 날짜 번호였고 변환하면 UTC 자정, 즉 한국 시간 오전 9시가 된다.
+    // '자정이 아니면 v44 가 깎은 것' 이라는 판별에 이것들이 같이 걸려 장기기억으로 올라갔다.
+    // 옛 형식은 DAY_MS 로 딱 나누어떨어지므로 정확히 골라낼 수 있다.
+    // 그때 앱을 쓴 기간으로는 레벨 4 에 닿는 것 자체가 불가능했으므로, 이 표시가 붙은
+    // 장기기억은 전부 v45 가 올린 것이다. 원래 자리인 단기기억 맨 위로 돌려놓는다.
+    var UNDO2_KEY = 'jvocab.fix.undo2.v1';
+    var undone = 0;
+    try {
+      if (!localStorage.getItem(UNDO2_KEY)) {
+        Object.keys(progress).forEach(function (k) {
+          var r = progress[k];
+          if (r && r.seen && r.level === LONG_LEVEL && isOldDue(r)) {
+            r.level = LONG_LEVEL - 1;
+            undone++;
+          }
+        });
+        if (undone) write(PROG_KEY, progress);
+        localStorage.setItem(UNDO2_KEY, String(undone));
+      }
+    } catch (e) {}
+    lastUndoCount = undone;
 
     // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
     // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
@@ -952,6 +984,7 @@
     dueList: dueList,
     weakList: weakList,
     lastFix: function () { return lastFixCount; },
+    lastUndo: function () { return lastUndoCount; },
     shakyList: shakyList,
     shakyScore: shakyScore,
     failRate: failRate,
