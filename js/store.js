@@ -490,7 +490,7 @@
   //   코드 = 복습일여부*100 + 모드*10 + 결과
   //          결과 2 둘 다 · 1 하나만 · 0 둘 다 틀림 · 9 아는 단어로 넘김
   var LOG_MAX = 30;
-  var MODE_CODE = { jp2ko: 0, ko2jp: 1, gcloze: 2, gchoice: 3 };
+  var MODE_CODE = { jp2ko: 0, ko2jp: 1, gcloze: 2, gchoice: 3, timed: 4 };
 
   function pushLog(r, code, onTime, mode) {
     if (!r.log) r.log = [];
@@ -630,7 +630,11 @@
     return !r.seen || dueMs(r) <= Date.now();
   }
 
-  function grade(day, word, readingOk, meaningOk, mode) {
+  // noSchedule 이면 기록만 남기고 레벨과 복습일은 건드리지 않는다.
+  // 타임어택이 그렇다. 시간에 쫓겨 다른 단어로 착각한 것은 모른다는 증거가 아니라
+  // 아직 자동화가 덜 됐다는 증거라, 복습 일정을 흔들 이유가 없다.
+  // 오답률과 느린 단어에는 그대로 반영되므로 무엇이 문제인지는 남는다.
+  function grade(day, word, readingOk, meaningOk, mode, noSchedule) {
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     // 레벨을 손대기 전에 장기기억이었는지, 복습일이 됐었는지 기억해 둔다.
@@ -640,7 +644,9 @@
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
 
-    if (readingOk && meaningOk) {
+    if (noSchedule) {
+      // 기록만 남긴다. 레벨도 복습일도 그대로.
+    } else if (readingOk && meaningOk) {
       r.miss = 0;
       if (onTime) {
         r.level = Math.min(MAX_LEVEL, r.level + 1);
@@ -663,7 +669,10 @@
       r.due = retryAt(r.miss);
     }
 
-    logAttempt(r, wasLong, readingOk && meaningOk, readingOk || meaningOk, onTime, mode || 'jp2ko');
+    // 일정을 안 건드리는 판에서는 '장기기억에서 떨어졌다'도 세지 않는다.
+    // 실제로 떨어지지 않았는데 흔들리는 단어로 잡히면 안 된다.
+    logAttempt(r, wasLong && !noSchedule, readingOk && meaningOk,
+               readingOk || meaningOk, onTime, mode || 'jp2ko');
     r.seen++;
     r.last = Date.now();
     progress[k] = r;

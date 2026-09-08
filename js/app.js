@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v55';
+  var BUILD = 'v56';
 
   /* ---------------- 화면 ---------------- */
 
@@ -471,7 +471,7 @@
   }
 
   // 채점 하나하나를 시각과 함께 보여준다. 최근 것이 위에 온다.
-  var LOG_MODE = ['일 → 한', '한 → 일', '빈칸', '4지선다'];
+  var LOG_MODE = ['일 → 한', '한 → 일', '빈칸', '4지선다', '타임어택'];
 
   function logHTML(r) {
     var rows = Store.logEntries(r).filter(function (x) { return x.t; });
@@ -784,7 +784,8 @@
   // 확실히 아는 단어를 복습 목록에서 빼고 장기기억으로 보낸다.
   // 정답을 보기 전에도 누를 수 있다. 단어를 보고 바로 안다 싶으면 그게 제일 빠르다.
   function markKnown() {
-    if (!session || peek !== null) return;
+    // 타임어택은 진도를 건드리지 않는 판이다. 아는 단어 처리도 여기서는 막는다.
+    if (!session || peek !== null || session.timed) return;
     var e = session.queue[session.index];
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
@@ -1039,7 +1040,8 @@
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
     var e = session.queue[session.index];
-    var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1, 'jp2ko');
+    var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1,
+      session.timed ? 'timed' : 'jp2ko', !!session.timed);
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
     advance();
   }
