@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v54';
+  var BUILD = 'v55';
 
   /* ---------------- 화면 ---------------- */
 
@@ -321,6 +321,8 @@
     $('dayAllCount').textContent = entries.length + '개';
     $('dayDueCount').textContent = due.length + '개';
     $('btnStudyDue').disabled = !due.length;
+    // '느린 단어' 목록에서만 한꺼번에 지우는 버튼을 낸다.
+    $('btnClearSlow').hidden = (d.title !== '느린 단어');
 
     $('dayWordList').innerHTML = entries.map(function (e) {
       return itemHTML(e.day, e.w, showDay);
@@ -441,7 +443,7 @@
 
   // 시험 기록. 왼쪽이 오래된 것, 오른쪽이 최근 것이다.
   //   ● 둘 다 맞음 · ◐ 하나만 맞음 · ○ 둘 다 틀림
-  function histHTML(r) {
+  function histHTML(r, key) {
     if (!r.tries) return '';
     var marks = (r.hist || '').split('').map(function (c) {
       return '<i class="hm h' + c + '"></i>';
@@ -459,8 +461,13 @@
         : (ms < 86400000 ? '복습 ' + Math.max(1, Math.round(ms / 3600000)) + '시간 뒤'
                          : '복습 ' + Math.round(ms / 86400000) + '일 뒤'));
     }
+    // 시간초과는 손이 미끄러지거나 키보드가 먹통이 돼도 찍힌다. 지울 수 있어야 한다.
+    var slow = (r.slow && key)
+      ? '<span class="slow-tag">시간초과 ' + r.slow + '번' +
+        '<button class="slow-x" data-slow="' + esc(key) + '" title="이 기록 지우기">✕</button></span>'
+      : '';
     return '<div class="hist">' + marks +
-      '<span class="hist-txt">' + txt.join(' · ') + '</span></div>' + logHTML(r);
+      '<span class="hist-txt">' + txt.join(' · ') + '</span>' + slow + '</div>' + logHTML(r);
   }
 
   // 채점 하나하나를 시각과 함께 보여준다. 최근 것이 위에 온다.
@@ -492,7 +499,7 @@
   function itemHTML(day, w, showDay) {
     var st = Store.stageFor(day, w);
     var r = Store.recOf(day, w);
-    var detail = histHTML(r) + detailHTML(w, true);
+    var detail = histHTML(r, Store.keyOf(day, w)) + detailHTML(w, true);
     return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
         (detail ? ' role="button" tabindex="0"' : '') + '>' +
       '<div class="wl-head">' +
@@ -513,9 +520,36 @@
   }
 
   // 단어 항목을 누르면 예문이 펼쳐진다.
+  // 기록을 지운 뒤 지금 보고 있는 목록을 다시 그린다.
+  // '느린 단어' 처럼 목록 자체가 조건으로 만들어진 것은 항목이 빠져야 한다.
+  function refreshCurrentList() {
+    if (view !== 'day' || !setDesc) return;
+    if (setDesc.title === '느린 단어') {
+      var list = Store.slowList();
+      if (!list.length) { renderHome(); show('home'); return; }
+      applyGSetLike(list);
+      return;
+    }
+    applySet(setDesc);
+  }
+
+  function applyGSetLike(list) {
+    applySet({ entries: list, title: '느린 단어',
+               sub: list.length + '단어 · 제한시간을 넘긴 것', showDay: true });
+  }
+
   function bindExpand(container) {
     container.addEventListener('click', function (ev) {
       if (ev.target.closest('a')) return; // 사전 링크는 펼침과 무관하게 동작
+      // 시간초과 기록 지우기. 펼침이 같이 동작하지 않게 여기서 끊는다.
+      var x = ev.target.closest('.slow-x');
+      if (x) {
+        ev.stopPropagation();
+        Store.clearSlowKey(x.dataset.slow);
+        if (global_Sync()) Sync.touch();
+        refreshCurrentList();
+        return;
+      }
       var item = ev.target.closest('.wl-item.has-detail');
       if (!item || !container.contains(item)) return;
       var d = item.querySelector('.wl-detail');
@@ -2276,6 +2310,13 @@
       var pool = Store.learnedList();
       if (!pool.length) { alert('아직 익힌 단어가 없습니다.\n먼저 학습을 해 보세요.'); return; }
       startSession(pool, '타임어택 ' + taSec + '초', taSec);
+    });
+    $('btnClearSlow').addEventListener('click', function () {
+      var n = Store.slowList().length;
+      if (!n || !confirm('시간초과 기록 ' + n + '개를 전부 지웁니다.\n학습 진도는 그대로입니다. 계속할까요?')) return;
+      Store.clearAllSlow();
+      if (global_Sync()) Sync.touch();
+      renderHome(); show('home');
     });
     $('btnSlowList').addEventListener('click', function () {
       var list = Store.slowList();

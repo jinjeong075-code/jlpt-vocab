@@ -524,6 +524,25 @@
     return r;
   }
 
+  // 시간초과 기록은 지울 수 있어야 한다. 키보드가 먹통이 되거나 손을 놓친 것까지
+  // 느린 단어로 남으면 목록을 믿을 수 없게 된다.
+  function clearSlowKey(k) {
+    var r = progress[k];
+    if (!r || !r.slow) return false;
+    delete r.slow;
+    write(PROG_KEY, progress);
+    return true;
+  }
+
+  function clearAllSlow() {
+    var n = 0;
+    Object.keys(progress).forEach(function (k) {
+      if (progress[k] && progress[k].slow) { delete progress[k].slow; n++; }
+    });
+    if (n) write(PROG_KEY, progress);
+    return n;
+  }
+
   // 느린 단어. 시간초과가 잦은 것부터 앞에 온다.
   function slowList() {
     return allWords().filter(function (e) { return (recOf(e.day, e.w).slow || 0) > 0; })
@@ -1124,6 +1143,9 @@
     restoreResetBackup: restoreResetBackup,
     shakyList: shakyList,
     slowList: slowList,
+    clearSlowKey: clearSlowKey,
+    clearAllSlow: clearAllSlow,
+    keyOf: keyOf,
     learnedList: learnedList,
     markSlow: markSlow,
     shakyScore: shakyScore,
