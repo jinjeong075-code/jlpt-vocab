@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v45';
+  var BUILD = 'v46';
 
   /* ---------------- 화면 ---------------- */
 
@@ -176,6 +176,9 @@
     renderResume();
     renderPosChips();
     renderRateChips();
+    $$('#dirChips .chip').forEach(function (c) {
+      c.classList.toggle('sel', c.dataset.dir === quizDir);
+    });
 
     var due = Store.dueList(), weak = Store.weakList();
     // 대기가 0이면 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
@@ -509,6 +512,7 @@
       queue: shuffle(entries.slice()),
       index: 0,
       label: label,
+      dir: quizDir,
       results: []
     };
     persistSession();
@@ -524,6 +528,7 @@
     if (!session) return;
     Store.saveSession({
       label: session.label,
+      dir: session.dir || 'jp2ko',
       index: session.index,
       queue: session.queue.map(refOf),
       results: session.results.map(function (x) {
@@ -559,7 +564,7 @@
     var index = Math.min(Math.max(0, s.index - dropped), queue.length);
     if (index >= queue.length) { Store.clearSession(); return null; }
 
-    return { queue: queue, index: index, label: s.label || '학습', results: results };
+    return { queue: queue, index: index, label: s.label || '학습', dir: s.dir || 'jp2ko', results: results };
   }
 
   function renderResume() {
@@ -579,6 +584,9 @@
 
   function renderCard() {
     if (peek !== null) peekClose();
+    if (session.dir === 'ko2jp') { renderRevCard(); return; }
+    $('revStage').hidden = true;
+    $('card').hidden = false;
     var e = session.queue[session.index];
     var st = Store.stageFor(e.day, e.w);
 
@@ -651,6 +659,114 @@
     var e = session.queue[session.index];
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
+    advance();
+  }
+
+  /* ---------------- 뜻 → 일본어 (직접 입력) ---------------- */
+  // 일본어를 보고 뜻을 떠올리는 것과, 뜻을 보고 일본어를 꺼내는 것은 다른 능력이다.
+  // 앞의 것만 하면 읽을 줄은 알아도 쓰지는 못한다.
+  // 한자로 쓰든 읽는 법으로 쓰든 그 단어를 꺼낸 것이므로 둘 다 정답으로 본다.
+
+  var DIR_KEY = 'jvocab.dir.v1';
+  var quizDir = 'jp2ko';
+  try { quizDir = localStorage.getItem(DIR_KEY) || 'jp2ko'; } catch (e) {}
+
+  var revTyped = '', revGraded = null;   // null | 'right' | 'wrong' | 'skip'
+
+  function jpAnswers(w) {
+    var out = [String(w.word || '').trim()];
+    var r = (w.reading || '').trim();
+    // 한 단어에 읽는 법이 여럿인 것이 있다 (四 = し/よん).
+    if (r && r !== '-' && r !== '―') {
+      r.split(/[\/・,、|]/).forEach(function (x) { if (x.trim()) out.push(x.trim()); });
+    }
+    return out.filter(Boolean);
+  }
+
+  function checkJP(typed, w) {
+    var t = normAns(typed);
+    if (!t) return false;
+    return jpAnswers(w).some(function (a) { return normAns(a) === t; });
+  }
+
+  function renderRevCard() {
+    var e = session.queue[session.index], w = e.w;
+    var st = Store.stageFor(e.day, e.w);
+    var h = '<div class="card">' +
+      '<div class="card-meta">' +
+        '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
+        '<span class="card-no">DAY ' + e.day + (w.no ? ' · ' + w.no : '') + '</span>' +
+      '</div>' +
+      '<div class="rev-ko">' + posHTML(w.pos) + esc(w.meaning) + '</div>';
+
+    if (!revGraded) {
+      // 예문에는 그 단어가 그대로 들어 있어 정답이 새므로 채점 전에는 감춘다.
+      h += '<input class="ginp" id="revAns" lang="ja" placeholder="일본어로 쓰기 (한자 · 읽는 법 모두 정답)" ' +
+           'autocomplete="off" autocapitalize="off" spellcheck="false">' +
+           '<button class="next-btn" id="revSubmit">확인</button>' +
+           '<button class="known-btn" id="revSkip">모르겠어요 · 정답 보기</button>';
+    } else {
+      var ok = (revGraded === 'right');
+      h += '<div class="gjudge ' + (revGraded === 'skip' ? 'skip' : (ok ? 'right' : 'wrong')) + '">' +
+           (revGraded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다')) + '</div>';
+      if (revTyped && !ok)
+        h += '<div class="gcmp"><span class="cl">내 답</span>' +
+             '<span class="cv bad" lang="ja">' + esc(revTyped) + '</span></div>';
+      h += '<div class="answer-box">' +
+        '<div class="ans-row"><span class="ans-label">단어</span>' +
+          '<span class="ans-value" lang="ja">' + dictHTML(w.word) + '</span></div>' +
+        '<div class="ans-row"><span class="ans-label">읽는 법</span>' +
+          '<span class="ans-value reading" lang="ja">' + esc(readingOf(w) || w.word) + '</span></div>' +
+        '</div>';
+      var detail = detailHTML(w, true);
+      if (detail) h += '<div class="detail-box">' + detail + '</div>';
+      h += '<button class="next-btn" id="revNext">다음 <kbd>Enter</kbd></button>';
+      if (!ok) h += '<button class="known-btn" id="revOverride">이것도 맞아요 · 정답 처리</button>';
+    }
+    h += '</div>';
+
+    $('revStage').innerHTML = h;
+    $('revStage').hidden = false;
+    $('card').hidden = true;
+
+    if ($('revAns')) {
+      $('revAns').focus();
+      $('revAns').addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.isComposing) {
+          ev.preventDefault(); ev.stopPropagation(); revSubmit(false);
+        }
+      });
+    }
+    if ($('revSubmit')) $('revSubmit').addEventListener('click', function () { revSubmit(false); });
+    if ($('revSkip'))   $('revSkip').addEventListener('click', function () { revSubmit(true); });
+    if ($('revNext'))   $('revNext').addEventListener('click', revNext);
+    if ($('revOverride')) $('revOverride').addEventListener('click', function () {
+      revGraded = 'right'; renderRevCard();
+    });
+
+    var n = session.queue.length;
+    $('progressText').textContent = (session.index + 1) + ' / ' + n;
+    $('studyLabel').textContent = session.label + ' · 뜻 → 일본어';
+    $('progressFill').style.width = (session.index / n * 100) + '%';
+  }
+
+  function revSubmit(skip) {
+    var w = session.queue[session.index].w;
+    var el = $('revAns');
+    revTyped = el ? el.value.trim() : '';
+    if (skip) revGraded = 'skip';
+    else if (!revTyped) { if (el) el.focus(); return; }
+    else revGraded = checkJP(revTyped, w) ? 'right' : 'wrong';
+    renderRevCard();
+  }
+
+  function revNext() {
+    if (!revGraded) return;
+    var e = session.queue[session.index];
+    var ok = (revGraded === 'right');
+    var rec = Store.grade(e.day, e.w, ok, ok);
+    session.results.push({ day: e.day, w: e.w, r: ok, m: ok, level: rec.level });
+    revTyped = ''; revGraded = null;
     advance();
   }
 
@@ -1977,6 +2093,14 @@
       renderSelBar();
     });
 
+    $('dirChips').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.chip');
+      if (!chip) return;
+      quizDir = chip.dataset.dir;
+      try { localStorage.setItem(DIR_KEY, quizDir); } catch (e) {}
+      $$('#dirChips .chip').forEach(function (c) { c.classList.toggle('sel', c === chip); });
+    });
+
     $('rateChips').addEventListener('click', function (ev) {
       var chip = ev.target.closest('.rate-chip');
       if (!chip) return;
@@ -2299,6 +2423,11 @@
       }
       if (ev.key === 'ArrowLeft') {
         ev.preventDefault(); peekOpen(session.results.length - 1); return;
+      }
+      // 뜻 → 일본어 는 입력이 채점이다. 채점 전 Enter 는 입력란이 받아 제출한다.
+      if (session.dir === 'ko2jp') {
+        if (revGraded && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); revNext(); }
+        return;
       }
       if (ev.key === 'Enter') {
         ev.preventDefault();

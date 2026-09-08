@@ -102,6 +102,12 @@
     <button class="rand-go" id="btnRandStudy">랜덤 학습 시작</button>
   </div>
 
+  <div class="section-head"><h2>학습 방향</h2></div>
+  <div class="chips" id="dirChips">
+    <button class="chip sel" data-dir="jp2ko">일본어 → 뜻</button>
+    <button class="chip" data-dir="ko2jp">뜻 → 일본어 · 입력</button>
+  </div>
+
   <div class="section-head"><h2>오답률</h2></div>
   <div class="chips" id="rateChips"></div>
 
@@ -188,6 +194,9 @@
 
   <!-- 이미 푼 단어를 되돌아보는 자리. 채점은 끝났으므로 읽기만 한다. -->
   <div id="peekStage" hidden></div>
+
+  <!-- 뜻 → 일본어. 직접 쳐서 맞힌다. -->
+  <div id="revStage" hidden></div>
 
   <div class="card" id="card">
     <div class="card-meta"><span id="cardBadge" class="badge">미학습</span><span id="cardNo" class="card-no"></span></div>
