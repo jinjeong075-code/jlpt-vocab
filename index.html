@@ -120,6 +120,19 @@
   </div>
   <div class="chips" id="kanjiChips"></div>
 
+  <div class="section-head">
+    <h2>타임어택</h2>
+    <div class="head-actions">
+      <button class="mini-btn go" id="btnSlowList" hidden></button>
+    </div>
+  </div>
+  <div class="chips" id="taChips">
+    <button class="chip" data-sec="3">3초</button>
+    <button class="chip sel" data-sec="5">5초</button>
+    <button class="chip" data-sec="8">8초</button>
+    <button class="chip ta-go" id="btnTimeAttack">시작</button>
+  </div>
+
   <div class="section-head"><h2>품사별</h2></div>
   <div class="chips" id="posChips"></div>
 
@@ -200,6 +213,9 @@
     <div class="progress-bar"><div id="progressFill"></div></div>
     <div class="progress-text"><span id="progressText">0 / 0</span><span id="studyLabel"></span></div>
   </div>
+
+  <!-- 타임어택의 남은 시간. 떠올리는 동안에만 줄어든다. -->
+  <div class="ta-bar" id="taBar" hidden><i id="taFill"></i></div>
 
   <!-- 이미 푼 단어를 되돌아보는 자리. 채점은 끝났으므로 읽기만 한다. -->
   <div id="peekStage" hidden></div>

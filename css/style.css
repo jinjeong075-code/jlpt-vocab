@@ -542,6 +542,18 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 
 .rate-chip i { font-style: normal; font-size: 11px; opacity: .7; margin-left: 6px; }
 
+/* ---------- 타임어택 ---------- */
+#taChips { margin-bottom: 24px; }
+.chip.ta-go { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+.chip.ta-go:hover { filter: brightness(1.08); color: var(--bg); }
+.ta-bar {
+  height: 4px; border-radius: 2px; overflow: hidden;
+  background: var(--panel2); margin: 2px 2px 0;
+}
+.ta-bar i { display: block; height: 100%; background: var(--accent); }
+.ta-bar i.hot { background: var(--warn); }
+.ta-bar i.out { background: var(--no); }
+
 /* 한자 칩. 한자 자체가 커야 눈에 들어온다. */
 #kanjiChips { margin-bottom: 24px; }
 .kanji-chip {

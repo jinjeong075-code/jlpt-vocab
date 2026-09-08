@@ -512,6 +512,34 @@
     });
   }
 
+  // 타임어택에서 제한시간을 넘긴 것. 레벨은 건드리지 않는다.
+  // 아는데 느린 것과 모르는 것은 다른 문제라, 오답으로 치면 둘이 섞여 버린다.
+  function markSlow(day, word) {
+    var k = keyOf(day, word);
+    var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
+    r.slow = (r.slow || 0) + 1;
+    progress[k] = r;
+    pushLog(r, 8, false, 'jp2ko');   // 8 = 시간초과
+    write(PROG_KEY, progress);
+    return r;
+  }
+
+  // 느린 단어. 시간초과가 잦은 것부터 앞에 온다.
+  function slowList() {
+    return allWords().filter(function (e) { return (recOf(e.day, e.w).slow || 0) > 0; })
+      .sort(function (a, b) {
+        return (recOf(b.day, b.w).slow || 0) - (recOf(a.day, a.w).slow || 0);
+      });
+  }
+
+  // 타임어택 대상 = 이미 한 번이라도 익힌 단어. 모르는 단어에 시간을 재는 건 의미가 없다.
+  function learnedList() {
+    return allWords().filter(function (e) {
+      var st = stageFor(e.day, e.w);
+      return st === 'short' || st === 'long';
+    });
+  }
+
   function logAttempt(r, wasLong, bothOk, oneOk, onTime, mode) {
     r.tries = (r.tries || 0) + 1;
     if (!bothOk) {
@@ -1095,6 +1123,9 @@
     resetBackup: resetBackup,
     restoreResetBackup: restoreResetBackup,
     shakyList: shakyList,
+    slowList: slowList,
+    learnedList: learnedList,
+    markSlow: markSlow,
     shakyScore: shakyScore,
     failRate: failRate,
     logEntries: logEntries,

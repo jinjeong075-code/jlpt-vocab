@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v53';
+  var BUILD = 'v54';
 
   /* ---------------- 화면 ---------------- */
 
@@ -90,6 +90,7 @@
   };
 
   function show(name) {
+    if (name !== 'study') taStop();   // 학습을 벗어나면 시계를 멈춘다
     if (name !== 'pick' && name !== view) pushNav();
     view = name;
     $$('.view').forEach(function (v) { v.classList.remove('active'); });
@@ -193,6 +194,10 @@
     var shaky = Store.shakyList();
     $('shakyCount').textContent = shaky.length ? shaky.length + '개' : '아직 없음';
     $('btnShakyStudy').disabled = !shaky.length;
+
+    var slow = Store.slowList();
+    $('btnSlowList').hidden = !slow.length;
+    if (slow.length) $('btnSlowList').textContent = '느린 단어 ' + slow.length;
 
     $('randPool').textContent = '전체 ' + s.total + '단어';
     $('btnRandStudy').disabled = !s.total;
@@ -583,13 +588,16 @@
 
   /* ---------------- 학습 ---------------- */
 
-  function startSession(entries, label) {
+  function startSession(entries, label, timed) {
     if (!entries.length) return;
     session = {
       queue: shuffle(entries.slice()),
       index: 0,
       label: label,
-      dir: quizDir,
+      // 타임어택은 일본어 → 뜻 으로만 낸다. 타자 속도가 섞이면 무엇을 잰 건지 알 수 없다.
+      dir: timed ? 'jp2ko' : quizDir,
+      timed: timed || 0,
+      slow: 0,
       results: []
     };
     persistSession();
@@ -691,10 +699,17 @@
     $('progressText').textContent = (session.index + 1) + ' / ' + n;
     $('studyLabel').textContent = session.label;
     $('progressFill').style.width = (session.index / n * 100) + '%';
+    taBegin();
   }
 
-  function reveal() {
+  function reveal(timedOut) {
     if (!$('btnReveal').hidden) {
+      taStop();   // 떠올린 순간 시계를 멈춘다
+      if (timedOut) {
+        $('taBar').hidden = false;
+        $('taFill').style.width = '100%';
+        $('taFill').className = 'out';
+      }
       $('btnReveal').hidden = true;
       $('btnNext').hidden = false;
       $('answerBox').hidden = false;
@@ -740,6 +755,48 @@
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
     advance();
+  }
+
+  /* ---------------- 타임어택 ---------------- */
+  // 속도는 기억이 얼마나 자동화됐는지를 보여준다. 4초 걸려 떠오르는 단어는
+  // 문장 속에서는 못 잡고, 청해는 기다려 주지 않는다.
+  //
+  // 두 가지를 지킨다.
+  //   ① 이미 익힌 단어에만 건다. 모르는 단어에 시간을 재면 떠올리려는 시도 자체를
+  //      잘라 버려서, 시험의 학습 효과가 날아간다.
+  //   ② 시간초과를 오답으로 치지 않는다. 아는데 느린 것과 모르는 것은 다른 문제다.
+  //      따로 세어 '느린 단어'로 모아 준다.
+  var taSec = 5;
+  var taTimer = null, taStart = 0;
+
+  function taStop() {
+    if (taTimer) { clearInterval(taTimer); taTimer = null; }
+    $('taBar').hidden = true;
+  }
+
+  // 떠올리는 동안에만 잰다. 정답을 본 뒤 O/X 를 고르는 시간은 재지 않는다.
+  function taBegin() {
+    taStop();
+    if (!session || !session.timed) return;
+    $('taBar').hidden = false;
+    $('taFill').style.width = '100%';
+    $('taFill').className = '';
+    taStart = Date.now();
+    taTimer = setInterval(function () {
+      var left = session.timed * 1000 - (Date.now() - taStart);
+      if (left <= 0) { taTimeUp(); return; }
+      var pct = left / (session.timed * 1000) * 100;
+      $('taFill').style.width = pct + '%';
+      $('taFill').className = pct < 30 ? 'hot' : '';
+    }, 50);
+  }
+
+  function taTimeUp() {
+    taStop();
+    var e = session.queue[session.index];
+    Store.markSlow(e.day, e.w);
+    session.slow = (session.slow || 0) + 1;
+    reveal(true);
   }
 
   /* ---------------- 뜻 → 일본어 (직접 입력) ---------------- */
@@ -2207,6 +2264,24 @@
       quizDir = chip.dataset.dir;
       try { localStorage.setItem(DIR_KEY, quizDir); } catch (e) {}
       $$('#dirChips .chip').forEach(function (c) { c.classList.toggle('sel', c === chip); });
+    });
+
+    $('taChips').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.chip');
+      if (!chip || chip.id === 'btnTimeAttack') return;
+      taSec = Number(chip.dataset.sec);
+      $$('#taChips .chip[data-sec]').forEach(function (c) { c.classList.toggle('sel', c === chip); });
+    });
+    $('btnTimeAttack').addEventListener('click', function () {
+      var pool = Store.learnedList();
+      if (!pool.length) { alert('아직 익힌 단어가 없습니다.\n먼저 학습을 해 보세요.'); return; }
+      startSession(pool, '타임어택 ' + taSec + '초', taSec);
+    });
+    $('btnSlowList').addEventListener('click', function () {
+      var list = Store.slowList();
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '느린 단어', list.length + '단어 · 제한시간을 넘긴 것', true);
     });
 
     $('kanjiChips').addEventListener('click', function (ev) {
