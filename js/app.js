@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v49';
+  var BUILD = 'v50';
 
   /* ---------------- 화면 ---------------- */
 
@@ -2424,6 +2424,10 @@
         if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
         return;
       }
+      // 입력칸에 쓰는 중에는 단축키가 끼어들면 안 된다.
+      // 그 칸의 Enter 는 그 칸이 직접 받아 처리한다.
+      var t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       if (view === 'gramStudy') {
         // 돌아보는 중에는 좌우로만 움직인다.
         if (gPeek !== null) {
@@ -2463,6 +2467,9 @@
       if (ev.key === 'ArrowLeft') {
         ev.preventDefault(); peekOpen(session.results.length - 1); return;
       }
+      // + = 이 단어는 확실히 안다. 판단이 빨리 날 때 정답을 볼 것도 없이 넘긴다.
+      // 방향과 상관없이 먹는다.
+      if (ev.key === '+') { ev.preventDefault(); markKnown(); return; }
       // 뜻 → 일본어 는 입력이 채점이다. 채점 전 Enter 는 입력란이 받아 제출한다.
       if (session.dir === 'ko2jp') {
         if (revGraded && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); revNext(); }

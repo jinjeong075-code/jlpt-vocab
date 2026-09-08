@@ -649,11 +649,13 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .go-row { display: flex; gap: 8px; align-items: stretch; margin-top: 10px; }
 .go-row .reveal-btn, .go-row .next-btn { flex: 1; margin-top: 0; }
 .known-plus {
-  flex: 0 0 52px; border-radius: var(--radius); cursor: pointer; font-family: inherit;
+  flex: 0 0 auto; border-radius: var(--radius); cursor: pointer; font-family: inherit;
   background: transparent; border: 1px solid var(--line); color: var(--dim);
-  font-size: 20px; line-height: 1; padding: 0;
+  font-size: 13px; padding: 0 12px; white-space: nowrap;
 }
 .known-plus:hover { border-color: var(--ok); color: var(--ok); }
+.known-plus kbd { margin-left: 5px; }
+@media (max-width: 400px) { .known-plus { padding: 0 9px; font-size: 12px; } }
 
 /* ---------- 뜻 → 일본어 ---------- */
 .rev-ko {
