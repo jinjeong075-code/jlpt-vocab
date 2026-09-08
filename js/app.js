@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v47';
+  var BUILD = 'v48';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1098,6 +1098,10 @@
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
     $('syncBuild').textContent = BUILD;
+    // v45 가 잘못 올린 것을 v47 이 되돌렸다. 무엇이 걸렸는지 볼 수 있게 한다.
+    var undone = Store.undoneWords();
+    $('undoRow').hidden = !undone.length;
+    if (undone.length) $('btnUndoList').textContent = undone.length + '개 목록 보기';
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
@@ -2099,6 +2103,14 @@
       $('btnSelAll').textContent =
         (selected.length === Store.allDays().length && selected.length) ? '선택 해제' : '전체 선택';
       renderSelBar();
+    });
+
+    $('btnUndoList').addEventListener('click', function () {
+      var list = Store.undoneWords();
+      if (!list.length) return;
+      $('syncPanel').hidden = true;
+      currentDays = [];
+      renderSet(list, '되돌린 단어', list.length + '단어 · v45 가 잘못 올렸던 것', true);
     });
 
     $('dirChips').addEventListener('click', function (ev) {

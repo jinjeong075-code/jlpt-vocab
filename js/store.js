@@ -79,6 +79,23 @@
   var deviceId = '';  // 이 기기를 구분하는 값. PC와 폰의 공부 시간을 따로 세는 데 쓴다.
   var lastFixCount = 0;  // 이번 실행에서 되살린 장기기억 단어 수
   var lastUndoCount = 0; // 이번 실행에서 잘못 올라간 것을 되돌린 수
+  var undoneKeys = [];   // 그 단어들의 키. 무엇이 걸렸는지 확인할 수 있게 남긴다.
+
+  // 되돌린 단어를 실제 단어로 되찾아 준다.
+  function undoneWords() {
+    var out = [];
+    undoneKeys.forEach(function (k) {
+      if (k.indexOf('g:') === 0) return;             // 문법은 이 목록에 넣지 않는다
+      var i = k.indexOf('-');
+      var dayNo = Number(k.slice(0, i)), rest = k.slice(i + 1);
+      var d = days[dayNo];
+      if (!d) return;
+      d.words.forEach(function (w) {
+        if (String(w.no) === rest || w.word === rest) out.push({ day: d.day, w: w });
+      });
+    });
+    return out;
+  }
 
   // 옛 날짜 번호에서 변환된 복습일. UTC 자정이라 DAY_MS 로 딱 나누어떨어진다.
   // nextAt() 이 만든 값은 한국 시간 자정이라 이렇게 되지 않는다.
@@ -927,6 +944,7 @@
     // 옛 형식은 DAY_MS 로 딱 나누어떨어지므로 정확히 골라낼 수 있다.
     // 그때 앱을 쓴 기간으로는 레벨 4 에 닿는 것 자체가 불가능했으므로, 이 표시가 붙은
     // 장기기억은 전부 v45 가 올린 것이다. 원래 자리인 단기기억 맨 위로 돌려놓는다.
+    // 어떤 단어가 걸렸는지 확인할 수 있게 키를 남겨 둔다.
     var UNDO2_KEY = 'jvocab.fix.undo2.v1';
     var undone = 0;
     try {
@@ -935,11 +953,15 @@
           var r = progress[k];
           if (r && r.seen && r.level === LONG_LEVEL && isOldDue(r)) {
             r.level = LONG_LEVEL - 1;
+            undoneKeys.push(k);
             undone++;
           }
         });
         if (undone) write(PROG_KEY, progress);
-        localStorage.setItem(UNDO2_KEY, String(undone));
+        localStorage.setItem(UNDO2_KEY, JSON.stringify({ n: undone, keys: undoneKeys }));
+      } else {
+        var saved = read(UNDO2_KEY, null);
+        if (saved && saved.keys) { undoneKeys = saved.keys; undone = saved.n || undoneKeys.length; }
       }
     } catch (e) {}
     lastUndoCount = undone;
@@ -985,6 +1007,7 @@
     weakList: weakList,
     lastFix: function () { return lastFixCount; },
     lastUndo: function () { return lastUndoCount; },
+    undoneWords: undoneWords,
     shakyList: shakyList,
     shakyScore: shakyScore,
     failRate: failRate,
