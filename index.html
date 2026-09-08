@@ -211,7 +211,6 @@
     <!-- 문제를 푸는 동안에도 보인다. 단, 해석·문형은 quiz 클래스로 가려둔다. -->
     <div id="detailBox" class="detail-box quiz" hidden></div>
 
-    <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
 
     <div id="checkBox" class="check-box" hidden>
       <div class="check-row">
@@ -238,10 +237,14 @@
         </div>
       </div>
 
-      <button class="next-btn" id="btnNext" disabled>다음 <kbd>Enter</kbd></button>
+    </div>
 
-      <!-- 확실히 아는 단어를 복습 목록에서 빼는 버튼. 실수로 누르지 않도록 떨어뜨려 둔다. -->
-      <button class="known-btn" id="btnKnown">아는 단어</button>
+    <!-- ＋ 는 '확실히 아는 단어'. 판단이 빨리 날 때 바로 누를 수 있게
+         정답 보기 / 다음 과 늘 같은 자리에 나란히 둔다. -->
+    <div class="go-row">
+      <button class="known-plus" id="btnKnown" title="아는 단어 · 장기기억으로">＋</button>
+      <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
+      <button class="next-btn" id="btnNext" disabled hidden>다음 <kbd>Enter</kbd></button>
     </div>
   </div>
 </section>
@@ -462,6 +465,10 @@
       <div class="sync-row" id="undoRow" hidden>
         <span class="sync-k">복구</span>
         <span class="sync-v"><button class="mini-btn go" id="btnUndoList"></button></span>
+      </div>
+      <div class="sync-row" id="resetRow" hidden>
+        <span class="sync-k">초기화 전 기록</span>
+        <span class="sync-v"><button class="mini-btn go" id="btnRestoreReset"></button></span>
       </div>
       <p class="sheet-err" id="syncErr2" hidden></p>
       <button class="sheet-go" id="btnSyncNow">지금 동기화</button>

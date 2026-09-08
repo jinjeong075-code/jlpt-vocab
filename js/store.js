@@ -875,6 +875,28 @@
     return stat;
   }
 
+  /* ---------- 초기화 전 기록 되돌리기 ---------- */
+
+  function resetBackup() {
+    return read('jvocab.backup.prereset.v1', null);
+  }
+
+  // 되돌릴 때도 지금 시각을 찍는다. 그래야 다른 기기의 0 짜리 기록을 이긴다.
+  function restoreResetBackup() {
+    var b = resetBackup();
+    if (!b || !b.progress) return 0;
+    var n = 0, now = Date.now();
+    Object.keys(b.progress).forEach(function (k) {
+      var r = b.progress[k];
+      if (!r) return;
+      r.last = now;
+      progress[k] = r;
+      n++;
+    });
+    if (n) write(PROG_KEY, progress);
+    return n;
+  }
+
   function resetProgress() {
     progress = {};
     write(PROG_KEY, progress);
@@ -966,6 +988,34 @@
     } catch (e) {}
     lastUndoCount = undone;
 
+    // 요청에 따른 단어 진도 초기화. 한 번만 돈다.
+    // 지우기 전 기록을 통째로 남겨 두고, 동기화 패널에서 되돌릴 수 있게 한다.
+    //
+    // 그냥 지우면 안 된다. 다른 기기의 옛 기록이 동기화로 다시 들어와 되살아난다.
+    // 합칠 때 '마지막으로 학습한 시각'이 나중인 쪽을 채택하므로,
+    // 0 으로 만든 기록에 지금 시각을 찍어 그 쪽이 이기게 한다.
+    // 공부 시간(TIME_KEY)과 문법 진도('g:')는 건드리지 않는다.
+    var RESET_KEY = 'jvocab.reset.vocab.v1';
+    var BACKUP_KEY = 'jvocab.backup.prereset.v1';
+    try {
+      if (!localStorage.getItem(RESET_KEY)) {
+        var wiped = 0, snapshot = {};
+        Object.keys(progress).forEach(function (k) {
+          if (k.indexOf('g:') === 0) return;       // 문법은 그대로 둔다
+          snapshot[k] = progress[k];
+          progress[k] = { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0,
+                          tries: 0, fails: 0, hist: '', last: Date.now() };
+          wiped++;
+        });
+        if (wiped) {
+          write(BACKUP_KEY, { at: Date.now(), n: wiped, progress: snapshot });
+          write(PROG_KEY, progress);
+          try { localStorage.removeItem(SESS_KEY); } catch (e2) {}
+        }
+        localStorage.setItem(RESET_KEY, String(wiped));
+      }
+    } catch (e) {}
+
     // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
     // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
     // 그 백업을 되넣을 때 같은 시간이 두 번 더해진다.
@@ -1008,6 +1058,8 @@
     lastFix: function () { return lastFixCount; },
     lastUndo: function () { return lastUndoCount; },
     undoneWords: undoneWords,
+    resetBackup: resetBackup,
+    restoreResetBackup: restoreResetBackup,
     shakyList: shakyList,
     shakyScore: shakyScore,
     failRate: failRate,

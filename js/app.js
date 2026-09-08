@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v48';
+  var BUILD = 'v49';
 
   /* ---------------- 화면 ---------------- */
 
@@ -613,6 +613,7 @@
     $('answerBox').hidden = true;
     $('checkBox').hidden = true;
     $('btnReveal').hidden = false;
+    $('btnNext').hidden = true;
     $('btnNext').disabled = true;
     picked.reading = null; picked.meaning = null;
     $$('.ox-btn').forEach(function (b) { b.classList.remove('sel'); });
@@ -626,6 +627,7 @@
   function reveal() {
     if (!$('btnReveal').hidden) {
       $('btnReveal').hidden = true;
+      $('btnNext').hidden = false;
       $('answerBox').hidden = false;
       // 정답을 봤으니 예문을 후리가나까지 붙여 다시 그린다.
       // 문제를 푸는 동안에는 읽는 법이 새면 안 되므로 한자만 보여줬다.
@@ -662,8 +664,9 @@
   }
 
   // 확실히 아는 단어를 복습 목록에서 빼고 장기기억으로 보낸다.
+  // 정답을 보기 전에도 누를 수 있다. 단어를 보고 바로 안다 싶으면 그게 제일 빠르다.
   function markKnown() {
-    if ($('checkBox').hidden) return;
+    if (!session || peek !== null) return;
     var e = session.queue[session.index];
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
@@ -1102,6 +1105,11 @@
     var undone = Store.undoneWords();
     $('undoRow').hidden = !undone.length;
     if (undone.length) $('btnUndoList').textContent = undone.length + '개 목록 보기';
+
+    // 초기화 전 기록은 지우지 않고 남겨 둔다. 후회하면 여기서 되돌린다.
+    var bk = Store.resetBackup();
+    $('resetRow').hidden = !bk;
+    if (bk) $('btnRestoreReset').textContent = bk.n + '개 되돌리기';
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
@@ -2103,6 +2111,17 @@
       $('btnSelAll').textContent =
         (selected.length === Store.allDays().length && selected.length) ? '선택 해제' : '전체 선택';
       renderSelBar();
+    });
+
+    $('btnRestoreReset').addEventListener('click', function () {
+      var bk = Store.resetBackup();
+      if (!bk) return;
+      if (!confirm('초기화 전 기록 ' + bk.n + '개를 되돌립니다.\n지금까지의 학습은 사라집니다. 계속할까요?')) return;
+      var n = Store.restoreResetBackup();
+      $('syncPanel').hidden = true;
+      renderHome(); show('home');
+      if (global_Sync()) Sync.sync().catch(function () {});
+      alert(n + '개를 되돌렸습니다.');
     });
 
     $('btnUndoList').addEventListener('click', function () {
