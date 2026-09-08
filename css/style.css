@@ -6,6 +6,7 @@
   --hair: #191b21;         /* 안쪽 구분선. 테두리보다 더 옅다 */
   --text: #e7e9ee;
   --dim: #757b8b;
+  --rt:  #aab2c4;           /* 후리가나. 본문보다 옅되 확실히 읽히는 선 */
   --accent: #7d9fe8;
   --ok: #5fc98d;
   --no: #e07b7b;
@@ -482,18 +483,20 @@ body.has-selbar main { padding-bottom: 156px; }
   margin: 0; font-size: 17px; line-height: 1.85;
   font-family: var(--jp);
 }
-.ex.ruby .ex-jp { font-size: 19px; line-height: 2.6; }
+.ex.ruby .ex-jp { font-size: 20px; line-height: 2.5; }
 .ex-jp mark { background: transparent; color: var(--accent); font-weight: 700; }
 .ex-ko { margin: 5px 0 0; font-size: 13px; color: var(--dim); }
 ruby { ruby-position: over; }
-/* 읽는 법이 한자보다 넓으면 브라우저가 한자 사이를 벌려서 맞춘다.
-   그래서 簡単 이 '簡 単' 처럼 갈라져 보였다. 한자 한 자에 가나 두 자가 붙는 게
-   보통이므로 0.5em 으로 두면 폭이 딱 맞아 글자가 벌어지지 않는다. */
+/* 읽는 법이 한자보다 넓으면 브라우저가 한자 사이를 벌려 맞추므로,
+   너무 키우면 簡単 이 '簡 単' 처럼 갈라진다. 그렇다고 0.5em 까지 줄이면
+   8px 짜리 흐린 글씨가 되어 읽을 수가 없다. 0.56em 이 둘 사이의 자리다.
+   대신 색을 확실히 올리고 굵기를 조금 줘서 작아도 읽히게 한다. */
 ruby rt {
-  font-size: .52em; color: var(--dim); font-weight: 400;
-  transform: translateY(2px);
+  font-size: .56em; color: var(--rt); font-weight: 500;
+  letter-spacing: -.02em;
+  transform: translateY(1px);
 }
-mark ruby rt { color: var(--accent); opacity: .8; }
+mark ruby rt { color: var(--accent); opacity: 1; }
 
 .gram { display: flex; gap: 9px; align-items: flex-start; margin-top: 10px; }
 .gram-tag {
@@ -740,7 +743,7 @@ kbd {
   #viewStudy .detail-box { max-height: 20vh; overflow-y: auto; }
   /* 후리가나가 붙으면 줄 높이가 커진다. 폰에서는 한 줄에 안 들어가
      마지막 두 글자만 다음 줄로 떨어지므로 글자를 조금 줄인다. */
-  .ex.ruby .ex-jp { font-size: 16px; line-height: 2.3; }
+  .ex.ruby .ex-jp { font-size: 17px; line-height: 2.35; letter-spacing: -.01em; }
 }
 
 /* 세로가 특히 짧은 기기에서 한 번 더 줄인다 */
