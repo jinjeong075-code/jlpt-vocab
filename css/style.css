@@ -622,6 +622,16 @@ mark ruby rt { color: var(--accent); opacity: .8; }
 .hist .h0 { background: var(--no); }
 .hist-txt { font-size: 11px; color: var(--dim); margin-left: 7px; }
 
+/* 채점 하나하나의 기록 */
+.log { padding: 2px 0 8px; border-bottom: 1px solid var(--hair); margin-bottom: 4px; }
+.log-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; padding: 2px 0; }
+.log-row .lt { flex: 0 0 62px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.log-row .lc { flex: 0 0 14px; font-weight: 700; text-align: center; }
+.log-row .lc.y { color: var(--ok); }
+.log-row .lc.p { color: var(--warn); }
+.log-row .lc.n { color: var(--no); }
+.log-row .lm { color: var(--dim); }
+
 /* ---------- 품사별 칩 ---------- */
 #posChips { margin: 0 0 24px; }
 /* 칩은 단어 옆에 붙는 품사 배지(.pos-*)와 같은 색을 그대로 쓴다.

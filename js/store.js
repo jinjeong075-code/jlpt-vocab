@@ -236,13 +236,14 @@
   // allowPromote 가 false 면 맞혀도 레벨을 올리지 않는다.
   // 한 문형의 예문 여러 개를 한 학습에서 풀 때, 하루 만에 레벨이 몇 단계씩
   // 뛰어 복습 간격이 무너지는 것을 막으려는 것이다. (기본값은 true)
-  function gGrade(item, patternOk, connectOk, allowPromote) {
+  function gGrade(item, patternOk, connectOk, allowPromote, mode) {
     if (allowPromote === undefined) allowPromote = true;
     var k = gKeyOf(item);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     var wasLong = isLong(r);
     // 단어와 같다. 복습일 전에 푼 것은 맞혀도 레벨을 올리지 않는다.
-    if (!gradeDue(r)) allowPromote = false;
+    var onTime = gradeDue(r);
+    if (!onTime) allowPromote = false;
 
     if (patternOk) r.rO++; else r.rX++;
     if (connectOk) r.mO++; else r.mX++;
@@ -261,7 +262,7 @@
       r.miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
       r.due = retryAt(r.miss);
     }
-    logAttempt(r, wasLong, patternOk && connectOk, patternOk || connectOk);
+    logAttempt(r, wasLong, patternOk && connectOk, patternOk || connectOk, onTime, mode || 'gcloze');
     r.seen++;
     r.last = Date.now();
     progress[k] = r;
@@ -295,6 +296,7 @@
     r.seen = (r.seen || 0) + 1;
     r.known = 1;
     r.last = Date.now();
+    pushLog(r, 9, true, 'jp2ko');   // 9 = 아는 단어로 넘김
     progress[k] = r;
     write(PROG_KEY, progress);
     return r;
@@ -480,7 +482,37 @@
   //   '2' 둘 다 정답 · '1' 하나만 정답 · '0' 둘 다 오답
   var HIST_MAX = 12;
 
-  function logAttempt(r, wasLong, bothOk, oneOk) {
+  // 채점 하나를 시각까지 남긴다. 결과만 남기면 사흘에 걸쳐 맞힌 것과
+  // 한 자리에서 세 번 맞힌 것을 구별할 수 없어, 왜 이 단계가 됐는지 따질 수가 없다.
+  //
+  // 동기화로 통째로 오가므로 최대한 작게 적는다. 한 줄이 [분, 코드] 두 정수다.
+  //   분   = 1970년부터 지난 분 (초 단위까지 볼 일은 없다)
+  //   코드 = 복습일여부*100 + 모드*10 + 결과
+  //          결과 2 둘 다 · 1 하나만 · 0 둘 다 틀림 · 9 아는 단어로 넘김
+  var LOG_MAX = 30;
+  var MODE_CODE = { jp2ko: 0, ko2jp: 1, gcloze: 2, gchoice: 3 };
+
+  function pushLog(r, code, onTime, mode) {
+    if (!r.log) r.log = [];
+    r.log.push([Math.round(Date.now() / 60000),
+                (onTime ? 100 : 0) + (MODE_CODE[mode] || 0) * 10 + code]);
+    if (r.log.length > LOG_MAX) r.log = r.log.slice(-LOG_MAX);
+  }
+
+  // 화면에서 읽기 좋은 형태로 돌려준다. 시각이 없는 옛 기록도 같이 다룬다.
+  function logEntries(r) {
+    if (r.log && r.log.length) {
+      return r.log.map(function (e) {
+        var v = e[1];
+        return { t: e[0] * 60000, code: v % 10, mode: Math.floor(v / 10) % 10, onTime: v >= 100 };
+      });
+    }
+    return (r.hist || '').split('').map(function (c) {
+      return { t: 0, code: Number(c), mode: 0, onTime: null };
+    });
+  }
+
+  function logAttempt(r, wasLong, bothOk, oneOk, onTime, mode) {
     r.tries = (r.tries || 0) + 1;
     if (!bothOk) {
       r.fails = (r.fails || 0) + 1;
@@ -488,6 +520,7 @@
       if (wasLong) r.lapse = (r.lapse || 0) + 1;
     }
     r.hist = ((r.hist || '') + (bothOk ? '2' : (oneOk ? '1' : '0'))).slice(-HIST_MAX);
+    pushLog(r, bothOk ? 2 : (oneOk ? 1 : 0), onTime, mode);
   }
 
   function isLong(r) { return !!r.seen && r.level >= LONG_LEVEL; }
@@ -550,7 +583,7 @@
     return !r.seen || dueMs(r) <= Date.now();
   }
 
-  function grade(day, word, readingOk, meaningOk) {
+  function grade(day, word, readingOk, meaningOk, mode) {
     var k = keyOf(day, word);
     var r = progress[k] || { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0, last: 0 };
     // 레벨을 손대기 전에 장기기억이었는지, 복습일이 됐었는지 기억해 둔다.
@@ -583,7 +616,7 @@
       r.due = retryAt(r.miss);
     }
 
-    logAttempt(r, wasLong, readingOk && meaningOk, readingOk || meaningOk);
+    logAttempt(r, wasLong, readingOk && meaningOk, readingOk || meaningOk, onTime, mode || 'jp2ko');
     r.seen++;
     r.last = Date.now();
     progress[k] = r;
@@ -634,6 +667,7 @@
     r.seen = (r.seen || 0) + 1;
     r.known = 1;
     r.last = Date.now();
+    pushLog(r, 9, true, 'jp2ko');   // 9 = 아는 단어로 넘김
     progress[k] = r;
     write(PROG_KEY, progress);
     return r;
@@ -1063,6 +1097,7 @@
     shakyList: shakyList,
     shakyScore: shakyScore,
     failRate: failRate,
+    logEntries: logEntries,
     resetProgress: resetProgress,
     markKnown: markKnown,
     dueMs: dueMs,

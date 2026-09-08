@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v50';
+  var BUILD = 'v51';
 
   /* ---------------- 화면 ---------------- */
 
@@ -405,7 +405,26 @@
                          : '복습 ' + Math.round(ms / 86400000) + '일 뒤'));
     }
     return '<div class="hist">' + marks +
-      '<span class="hist-txt">' + txt.join(' · ') + '</span></div>';
+      '<span class="hist-txt">' + txt.join(' · ') + '</span></div>' + logHTML(r);
+  }
+
+  // 채점 하나하나를 시각과 함께 보여준다. 최근 것이 위에 온다.
+  var LOG_MODE = ['일 → 한', '한 → 일', '빈칸', '4지선다'];
+
+  function logHTML(r) {
+    var rows = Store.logEntries(r).filter(function (x) { return x.t; });
+    if (!rows.length) return '';
+    return '<div class="log">' + rows.slice().reverse().map(function (x) {
+      var d = new Date(x.t);
+      var when = (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+        ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      var mark = x.code === 9 ? '＋' : (x.code === 2 ? 'O' : (x.code === 1 ? '△' : 'X'));
+      var cls = x.code === 0 ? 'n' : (x.code === 1 ? 'p' : 'y');
+      return '<div class="log-row"><span class="lt">' + when + '</span>' +
+        '<span class="lc ' + cls + '">' + mark + '</span>' +
+        '<span class="lm">' + (x.code === 9 ? '아는 단어' : LOG_MODE[x.mode] || '') +
+          (x.onTime === false ? ' · 미리' : (x.onTime ? ' · 복습일' : '')) + '</span></div>';
+    }).join('') + '</div>';
   }
 
   // 목록 한 줄에 오답률을 같이 띄운다. 펼치지 않아도 어느 게 문제인지 보이게.
@@ -775,7 +794,7 @@
     if (!revGraded) return;
     var e = session.queue[session.index];
     var ok = (revGraded === 'right');
-    var rec = Store.grade(e.day, e.w, ok, ok);
+    var rec = Store.grade(e.day, e.w, ok, ok, 'ko2jp');
     session.results.push({ day: e.day, w: e.w, r: ok, m: ok, level: rec.level });
     revTyped = ''; revGraded = null;
     advance();
@@ -879,7 +898,7 @@
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
     var e = session.queue[session.index];
-    var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1);
+    var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1, 'jp2ko');
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
     advance();
   }
@@ -1763,7 +1782,7 @@
         gPicked = Number(b.dataset.i);
         var it = gQueue[gIdx].it;
         var ok = Store.gKeyOf(gOpts[gPicked]) === Store.gKeyOf(it);
-        Store.gGrade(it, ok, ok, canPromote(it, ok));
+        Store.gGrade(it, ok, ok, canPromote(it, ok), 'gchoice');
         gResults.push({ it: it, ok: ok, typed: gOpts[gPicked].pattern, answers: [], skipped: false });
         if (!ok) gWrong.push(it);
         if (global_Sync()) Sync.touch();
@@ -1804,7 +1823,7 @@
       if (!gGraded) return;                 // 아직 확인을 안 눌렀다
       // 입력한 답이 곧 채점 결과다. 따로 물어보지 않는다.
       var ok = (gGraded === 'right');
-      Store.gGrade(it, ok, ok, canPromote(it, ok));
+      Store.gGrade(it, ok, ok, canPromote(it, ok), 'gcloze');
       gResults.push({ it: it, ok: ok, typed: gTyped, answers: gTypedAll.slice(), skipped: gGraded === 'skip' });
       if (!ok) gWrong.push(it);
       if (global_Sync()) Sync.touch();
