@@ -1076,3 +1076,7 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 
 /* 상세 창 안에서는 사전 패널이 카드 안에 또 카드로 보이면 안 된다. */
 .ds-body .kanji-info { margin: 0; border: none; background: transparent; padding: 0; }
+
+/* 한자의 뜻. 한국어가 본체이고, 옮기지 못한 것만 영어로 남는다. */
+.kb-mean { font-size: 13px; color: var(--rt); margin-top: 3px; line-height: 1.5; }
+.ki-en.en { font-style: italic; }

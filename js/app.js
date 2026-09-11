@@ -468,6 +468,17 @@
     return '<button type="button" class="ki-part" lang="ja" data-k="' + esc(ch) + '">' + esc(ch) + '</button>';
   }
 
+  // 뜻은 한국어가 본체다. 옮기지 못한 한자가 나오면 그때만 영어를 보여준다.
+  function kiMeanHTML(k) {
+    if (k.mean && k.mean.length) {
+      return '<div class="ki-en">' + esc(k.mean.join(', ')) + '</div>';
+    }
+    if (k.en && k.en.length) {
+      return '<div class="ki-en en">' + esc(k.en.join(', ')) + '</div>';
+    }
+    return '';
+  }
+
   function kiRow(label, html) {
     return '<div class="ki-row"><span class="ki-label">' + label + '</span>' +
            '<span class="ki-value">' + html + '</span></div>';
@@ -504,7 +515,7 @@
              '<div class="ki-head">' +
                (k.ko && k.ko.length ? '<div class="ki-ko">' + esc(k.ko.join(', ')) + '</div>' : '') +
                (tags.length ? '<div class="ki-tags">' + esc(tags.join(' · ')) + '</div>' : '') +
-               (k.en && k.en.length ? '<div class="ki-en">' + esc(k.en.join(', ')) + '</div>' : '') +
+               kiMeanHTML(k) +
              '</div>' +
            '</div>' + rows;
   }
@@ -2547,6 +2558,8 @@
           '<button type="button" class="kb-char ki-part" lang="ja" data-k="' + esc(c) + '">' + esc(c) + '</button>' +
           '<div class="kb-body">' +
             '<div class="kb-meta">' + meta.join(' · ') + '</div>' +
+            (k.mean && k.mean.length
+              ? '<div class="kb-mean">' + esc(k.mean.join(', ')) + '</div>' : '') +
             (k.on && k.on.length
               ? '<div class="kb-line"><i>음독</i><span lang="ja">' +
                 k.on.map(function (x) { return esc(toHira(x)); }).join(', ') + '</span></div>' : '') +
