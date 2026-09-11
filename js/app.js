@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v57';
+  var BUILD = 'v58';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1269,9 +1269,18 @@
     if (undone.length) $('btnUndoList').textContent = undone.length + '개 목록 보기';
 
     // 초기화 전 기록은 지우지 않고 남겨 둔다. 후회하면 여기서 되돌린다.
+    // 언제 만들어진 백업인지 반드시 같이 보여준다.
+    // 기기마다 백업 시점이 다르므로, 날짜를 봐야 어느 쪽을 되돌릴지 고를 수 있다.
     var bk = Store.resetBackup();
     $('resetRow').hidden = !bk;
-    if (bk) $('btnRestoreReset').textContent = bk.n + '개 되돌리기';
+    if (bk) {
+      var d = new Date(bk.at || 0);
+      var when = bk.at
+        ? (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+          ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
+        : '시점 불명';
+      $('btnRestoreReset').textContent = when + ' · ' + bk.n + '개 되돌리기';
+    }
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
@@ -2278,7 +2287,11 @@
     $('btnRestoreReset').addEventListener('click', function () {
       var bk = Store.resetBackup();
       if (!bk) return;
-      if (!confirm('초기화 전 기록 ' + bk.n + '개를 되돌립니다.\n지금까지의 학습은 사라집니다. 계속할까요?')) return;
+      var bd = new Date(bk.at || 0);
+      if (!confirm('이 기기가 ' + (bk.at ? (bd.getMonth() + 1) + '월 ' + bd.getDate() + '일 ' +
+            ('0' + bd.getHours()).slice(-2) + ':' + ('0' + bd.getMinutes()).slice(-2) : '언젠가') +
+            '에 남긴 기록 ' + bk.n + '개로 되돌립니다.\n' +
+            '그 이후의 학습은 사라집니다. 계속할까요?')) return;
       var n = Store.restoreResetBackup();
       $('syncPanel').hidden = true;
       renderHome(); show('home');

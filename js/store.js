@@ -1087,26 +1087,16 @@
     // 합칠 때 '마지막으로 학습한 시각'이 나중인 쪽을 채택하므로,
     // 0 으로 만든 기록에 지금 시각을 찍어 그 쪽이 이기게 한다.
     // 공부 시간(TIME_KEY)과 문법 진도('g:')는 건드리지 않는다.
-    var RESET_KEY = 'jvocab.reset.vocab.v1';
+    // 없앴다. 표시를 기기마다 따로 저장한 것이 잘못이었다.
+    //
+    // PC 가 먼저 초기화하고 며칠 공부한 뒤에 폰이 이 버전을 처음 받으면,
+    // 폰에는 표시가 없으니 초기화가 한 번 더 돈다. 그 초기화는 동기화에서
+    // 이기도록 지금 시각을 찍게 되어 있어서, 며칠치 공부가 통째로 지워진다.
+    // 한 번만 도는 초기화는 기기가 여럿이면 '한 번'이 아니다.
+    //
+    // 초기화는 이미 제 역할을 했으므로 코드에서 뺀다. 다시 필요하면
+    // 동기화 패널에서 사람이 직접 누르는 방식으로 만든다.
     var BACKUP_KEY = 'jvocab.backup.prereset.v1';
-    try {
-      if (!localStorage.getItem(RESET_KEY)) {
-        var wiped = 0, snapshot = {};
-        Object.keys(progress).forEach(function (k) {
-          if (k.indexOf('g:') === 0) return;       // 문법은 그대로 둔다
-          snapshot[k] = progress[k];
-          progress[k] = { level: 0, due: 0, seen: 0, rO: 0, rX: 0, mO: 0, mX: 0,
-                          tries: 0, fails: 0, hist: '', last: Date.now() };
-          wiped++;
-        });
-        if (wiped) {
-          write(BACKUP_KEY, { at: Date.now(), n: wiped, progress: snapshot });
-          write(PROG_KEY, progress);
-          try { localStorage.removeItem(SESS_KEY); } catch (e2) {}
-        }
-        localStorage.setItem(RESET_KEY, String(wiped));
-      }
-    } catch (e) {}
 
     // 기기별로 나누기 전의 옛 기록(날짜 -> 숫자)을 지금 형태로 바꿔 둔다.
     // 여기서 미리 바꿔 두지 않으면 백업을 내보낼 때 숫자로 나가고,
