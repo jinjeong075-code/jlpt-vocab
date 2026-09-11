@@ -71,6 +71,23 @@
 
   <div class="stat-grid" id="globalStats"></div>
 
+  <!-- 목표 개수만 정하면 뭘 할지 고르지 않아도 된다.
+       복습할 때가 된 것을 먼저 채우고, 남는 자리를 아직 안 배운 단어로 메운다. -->
+  <div class="rand-card">
+    <div class="rand-row">
+      <span class="rand-title">오늘 학습</span>
+      <span class="rand-pool" id="dailyMix"></span>
+    </div>
+    <div class="chips" id="dailyCounts">
+      <button class="chip" data-n="10">10</button>
+      <button class="chip" data-n="20">20</button>
+      <button class="chip sel" data-n="30">30</button>
+      <button class="chip" data-n="50">50</button>
+      <button class="chip" data-n="80">80</button>
+    </div>
+    <button class="rand-go" id="btnDailyStudy">오늘 학습 시작</button>
+  </div>
+
   <div class="row-btns">
     <button class="big-btn primary" id="btnReviewToday">
       <span class="bb-title">오늘의 복습</span>
@@ -177,6 +194,8 @@
     <p class="sub" id="dayHeadSub"></p>
     <button class="mini-btn" id="btnClearSlow" hidden>시간초과 기록 전부 지우기</button>
   </div>
+  <!-- 한자별로 모아 볼 때만 나온다. 음독·훈독·부수와, 눌러서 건너갈 수 있는 조각들. -->
+  <div id="dayInfo" class="kanji-info" hidden></div>
   <div class="stat-grid" id="dayStats"></div>
   <div class="row-btns">
     <button class="big-btn primary" id="btnStudyAll">
@@ -225,7 +244,14 @@
   <div id="revStage" hidden></div>
 
   <div class="card" id="card">
-    <div class="card-meta"><span id="cardBadge" class="badge">미학습</span><span id="cardNo" class="card-no"></span></div>
+    <div class="card-meta">
+      <span id="cardBadge" class="badge">미학습</span>
+      <span class="card-meta-right">
+        <span id="cardNo" class="card-no"></span>
+        <!-- 정답을 본 뒤에만 나온다. 풀기 전에 열면 읽는 법이 새어 시험이 되지 않는다. -->
+        <button type="button" class="card-detail" id="btnCardDetail" hidden>상세</button>
+      </span>
+    </div>
 
     <div class="jp-word" id="jpWord" lang="ja">単語</div>
 
@@ -258,8 +284,9 @@
       <div class="check-row both">
         <span class="check-label">둘 다</span>
         <div class="ox">
-          <button class="ox-btn o wide" id="btnBothOk">O<kbd>Enter</kbd></button>
-          <button class="ox-btn x wide" id="btnBothNo">X<kbd>0</kbd></button>
+          <!-- 누르기 전에 다음 복습이 언제인지 보이게 한다. -->
+          <button class="ox-btn o wide" id="btnBothOk">O<i class="ox-gap" id="gapOk"></i><kbd>Enter</kbd></button>
+          <button class="ox-btn x wide" id="btnBothNo">X<i class="ox-gap" id="gapNo"></i><kbd>0</kbd></button>
         </div>
       </div>
 
@@ -515,8 +542,24 @@
   </div>
 </div>
 
+<!-- ============ 학습 중 상세 보기 ============ -->
+<!-- 화면을 옮기지 않고 카드 위에 덮는다. 닫으면 풀던 자리가 그대로 남는다. -->
+<div id="detailSheet" class="sheet" hidden>
+  <div class="sheet-box tall">
+    <div class="sheet-head">
+      <button class="icon-btn" id="btnDsBack" title="뒤로" aria-label="뒤로" hidden><svg viewBox="0 0 20 20"><path d="M12 4 6 10l6 6"/></svg></button>
+      <span class="sheet-title" id="dsTitle">상세</span>
+      <button class="icon-btn" id="btnDsClose" title="닫기" aria-label="닫기"><svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
+    </div>
+    <div id="dsBody" class="ds-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
 <script src="data/vocab.js"></script>
 <script src="data/grammar.js"></script>
+<script src="data/kanji.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>

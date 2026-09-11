@@ -635,6 +635,21 @@
     return !r.seen || dueMs(r) <= Date.now();
   }
 
+  // 지금 O 를 주면 며칠 뒤에, X 를 주면 몇 시간 뒤에 다시 나오는지.
+  // 버튼에 적어 두면 누르기 전에 결과가 보인다.
+  // 복습일이 되기 전에 연습으로 푸는 판은 일정을 건드리지 않으므로 null 을 준다.
+  function gapPreview(day, word) {
+    var r = recOf(day, word);
+    if (!gradeDue(r)) return null;
+    var up = Math.min(MAX_LEVEL, (r.level || 0) + 1);
+    var miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
+    return {
+      okDays: INTERVALS[up],
+      okLong: up >= LONG_LEVEL,      // 이번에 맞히면 장기기억으로 넘어가는가
+      noHours: RETRY_HOURS[miss - 1] // 0 은 시간이 아니라 '다음날'
+    };
+  }
+
   // noSchedule 이면 기록만 남기고 레벨과 복습일은 건드리지 않는다.
   // 타임어택이 그렇다. 시간에 쫓겨 다른 단어로 착각한 것은 모른다는 증거가 아니라
   // 아직 자동화가 덜 됐다는 증거라, 복습 일정을 흔들 이유가 없다.
@@ -1155,6 +1170,7 @@
     resetProgress: resetProgress,
     markKnown: markKnown,
     dueMs: dueMs,
+    gapPreview: gapPreview,
 
     // 문법
     loadGram: loadGram,

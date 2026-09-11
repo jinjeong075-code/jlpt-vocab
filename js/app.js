@@ -175,6 +175,7 @@
     $('globalStats').innerHTML = statHTML(s, true);
     renderProgress(s);
     renderResume();
+    renderDaily();
     renderPosChips();
     renderRateChips();
     renderKanjiChips();
@@ -295,9 +296,9 @@
   var setDesc = null;    // 지금 보고 있는 묶음
   var setStack = [];     // 목록에서 더 좁혀 들어오기 전의 묶음들. 뒤로가기가 한 단계씩 되돌린다.
 
-  function renderSet(entries, title, sub, showDay) {
+  function renderSet(entries, title, sub, showDay, info) {
     if (!entries.length) return;
-    var d = { entries: entries.slice(), title: title, sub: sub, showDay: !!showDay };
+    var d = { entries: entries.slice(), title: title, sub: sub, showDay: !!showDay, info: info || '' };
     // 같은 화면에서 더 좁혀 들어가는 경우(DAY 20 → 단기기억)에는
     // 화면이 바뀌지 않아 show() 가 히스토리를 쌓지 않는다. 직접 쌓아 둔다.
     if (view === 'day' && setDesc) { setStack.push(setDesc); pushNav(); }
@@ -312,6 +313,8 @@
 
     $('dayHeadTitle').textContent = d.title;
     $('dayHeadSub').textContent = d.sub;
+    $('dayInfo').innerHTML = d.info || '';
+    $('dayInfo').hidden = !d.info;
 
     var s = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
     entries.forEach(function (e) { s.total++; s[Store.stageFor(e.day, e.w)]++; });
@@ -429,7 +432,79 @@
     var list = wordsOfKanji(c);
     if (!list.length) return;
     currentDays = [];
-    renderSet(list, '한자 ' + c, list.length + '단어 · 읽는 법 순', true);
+    renderSet(list, '한자 ' + c, list.length + '단어 · 읽는 법 순', true, kanjiInfoHTML(c));
+  }
+
+  /* ---------------- 한자 한 글자의 사전 정보 ---------------- */
+  // 자료는 data/kanji.js (build-kanji.ps1 이 KANJIDIC2·KRADFILE 에서 만든다).
+
+  function kanjiDict(c) {
+    var d = window.KANJI_DICT;
+    return (d && d.kanji && d.kanji[c]) || null;
+  }
+
+  // 사전에는 음독이 가타카나로 들어 있다. 단어를 읽을 때 눈에 익은 히라가나로 바꿔 준다.
+  function toHira(s) {
+    return String(s).replace(/[ァ-ヶ]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0x60);
+    });
+  }
+
+  // 훈독의 점은 오쿠리가나가 시작하는 자리다. 지워 버리면 어디까지가 한자인지 알 수 없다.
+  // 점을 빼는 대신 뒷부분을 흐리게 두어 경계가 그대로 보이게 한다.
+  function kunHTML(k) {
+    var s = String(k), i = s.indexOf('.');
+    if (i < 0) return esc(s);
+    return esc(s.slice(0, i)) + '<span class="ki-oku">' + esc(s.slice(i + 1)) + '</span>';
+  }
+
+  // 부수와 조각은 눌러서 건너뛸 수 있어야 그물이 된다.
+  // 사전에 있고 실제로 쓰인 단어가 있는 것만 누를 수 있게 한다.
+  function kanjiLink(ch) {
+    var live = kanjiDict(ch) && (kanjiIndex()[ch] || []).length;
+    if (!live) return '<span class="ki-part off" lang="ja">' + esc(ch) + '</span>';
+    return '<button type="button" class="ki-part" lang="ja" data-k="' + esc(ch) + '">' + esc(ch) + '</button>';
+  }
+
+  function kiRow(label, html) {
+    return '<div class="ki-row"><span class="ki-label">' + label + '</span>' +
+           '<span class="ki-value">' + html + '</span></div>';
+  }
+
+  function kanjiInfoHTML(c) {
+    var k = kanjiDict(c);
+    if (!k) return '';
+
+    var tags = [];
+    if (k.st) tags.push(k.st + '획');
+    if (k.jl) tags.push('N' + k.jl);
+    if (k.fq) tags.push('빈도 ' + k.fq);
+
+    var rows = '';
+    if (k.on && k.on.length) {
+      rows += kiRow('음독', '<span lang="ja">' +
+        k.on.map(function (x) { return esc(toHira(x)); }).join(', ') + '</span>');
+    }
+    if (k.kun && k.kun.length) {
+      rows += kiRow('훈독', '<span lang="ja">' + k.kun.map(kunHTML).join(', ') + '</span>');
+    }
+    if (k.radc) {
+      rows += kiRow('부수', kanjiLink(k.radc) +
+        '<span class="ki-radko">' + esc(k.radko || '') + '</span>');
+    }
+    // 조각이 저 자신 하나뿐이면 쪼갤 것이 없다는 뜻이라 줄을 낸다.
+    if (k.parts && k.parts.length > 1) {
+      rows += kiRow('조각', k.parts.map(kanjiLink).join(''));
+    }
+
+    return '<div class="ki-top">' +
+             '<div class="ki-char" lang="ja">' + esc(c) + '</div>' +
+             '<div class="ki-head">' +
+               (k.ko && k.ko.length ? '<div class="ki-ko">' + esc(k.ko.join(', ')) + '</div>' : '') +
+               (tags.length ? '<div class="ki-tags">' + esc(tags.join(' · ')) + '</div>' : '') +
+               (k.en && k.en.length ? '<div class="ki-en">' + esc(k.en.join(', ')) + '</div>' : '') +
+             '</div>' +
+           '</div>' + rows;
   }
 
   function renderPosChips() {
@@ -620,13 +695,134 @@
     renderBrowseCard();
   }
 
+  /* ---------------- 학습 중 상세 보기 ---------------- */
+  // 시험을 멈추지 않고 단어를 뜯어본다. 화면을 옮기는 대신 카드 위에 덮는다.
+  // 옮겨 버리면 돌아왔을 때 정답을 봤는지 O 를 눌렀는지가 다 풀려 버린다.
+  //
+  // 단어 → 한자 → 그 한자를 쓰는 다른 단어 → 또 그 한자 … 로 계속 파고들 수 있고,
+  // 들어간 만큼 ← 로 되돌아온다.
+
+  var dsStack = [];    // 파고든 순서
+  var dsWords = [];    // 지금 목록에 뜬 단어들. 눌렀을 때 이 배열에서 찾는다.
+
+  function dsIsOpen() { return !$('detailSheet').hidden; }
+
+  function dsOpen(w) {
+    dsStack = [{ t: 'word', w: w }];
+    dsRender();
+    $('detailSheet').hidden = false;
+  }
+
+  function dsPush(item) {
+    dsStack.push(item);
+    dsRender();
+  }
+
+  function dsBack() {
+    if (dsStack.length <= 1) { dsClose(); return; }
+    dsStack.pop();
+    dsRender();
+  }
+
+  function dsClose() {
+    $('detailSheet').hidden = true;
+    dsStack = [];
+    dsWords = [];
+  }
+
+  function dsRender() {
+    var s = dsStack[dsStack.length - 1];
+    $('btnDsBack').hidden = dsStack.length <= 1;
+
+    if (s.t === 'word') {
+      dsWords = [];
+      $('dsTitle').textContent = s.w.word;
+      $('dsBody').innerHTML =
+        '<div class="ds-word">' +
+          '<div class="ds-jp" lang="ja">' + esc(s.w.word) + '</div>' +
+          '<div class="ds-read" lang="ja">' + esc(readingOf(s.w) || '') + '</div>' +
+          '<div class="ds-mean">' + posHTML(s.w.pos) + esc(s.w.meaning) + '</div>' +
+        '</div>' +
+        '<div class="detail-box">' + detailHTML(s.w, true) + '</div>';
+    } else {
+      dsWords = wordsOfKanji(s.k);
+      $('dsTitle').textContent = '한자 ' + s.k;
+      $('dsBody').innerHTML =
+        kanjiInfoHTML(s.k) +
+        '<div class="ds-head">이 한자를 쓰는 단어 ' + dsWords.length + '</div>' +
+        '<div class="ds-list">' + dsWords.map(function (e, i) {
+          return '<button type="button" class="ds-item" data-i="' + i + '">' +
+            '<span class="ds-item-w" lang="ja">' + esc(e.w.word) + '</span>' +
+            '<span class="ds-item-r" lang="ja">' + esc(readingOf(e.w) || '') + '</span>' +
+            '<span class="ds-item-m">' + esc(e.w.meaning) + '</span>' +
+          '</button>';
+        }).join('') + '</div>';
+    }
+    $('dsBody').scrollTop = 0;
+  }
+
+  /* ---------------- 잠깐 뜨는 안내 ---------------- */
+  // 바퀴가 넘어가는 것처럼 알아야 하지만 손을 멈출 필요는 없는 일에 쓴다.
+
+  var toastTimer = null;
+  function toast(text) {
+    var el = $('toast');
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = false;
+    // 다시 그리기를 한 번 거쳐야 애니메이션이 처음부터 돈다.
+    el.classList.remove('on');
+    void el.offsetWidth;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      el.classList.remove('on');
+      setTimeout(function () { el.hidden = true; }, 250);
+    }, 2200);
+  }
+
+  /* ---------------- 오늘 학습 ---------------- */
+  // 매번 Day 를 고르는 것 자체가 일이다. 개수만 정해 두면 앱이 알아서 짠다.
+  // 복습이 먼저다. 새 단어를 아무리 넣어도 복습을 놓치면 남는 것이 없다.
+
+  var DAILY_KEY = 'jvocab.daily';
+  var dailyCount = 30;
+  try { dailyCount = Number(localStorage.getItem(DAILY_KEY)) || 30; } catch (e) {}
+
+  function dailyPlan(n) {
+    var due = Store.dueList().slice(0, n);
+    var fresh = [];
+    if (due.length < n) {
+      fresh = Store.allWords().filter(function (e) {
+        return Store.stageFor(e.day, e.w) === 'new';
+      }).slice(0, n - due.length);
+    }
+    return { due: due, fresh: fresh, all: due.concat(fresh) };
+  }
+
+  function renderDaily() {
+    var p = dailyPlan(dailyCount);
+    $('dailyMix').textContent = p.all.length
+      ? '복습 ' + p.due.length + ' · 새 단어 ' + p.fresh.length
+      : '오늘 할 것이 없습니다';
+    $('btnDailyStudy').disabled = !p.all.length;
+    $$('#dailyCounts .chip').forEach(function (c) {
+      c.classList.toggle('sel', Number(c.dataset.n) === dailyCount);
+    });
+  }
+
   /* ---------------- 학습 ---------------- */
 
   function startSession(entries, label, timed) {
     if (!entries.length) return;
     session = {
       queue: shuffle(entries.slice()),
+      retry: [],                  // 이 바퀴에서 틀려 다음 바퀴로 넘길 것
       index: 0,
+      total: entries.length,      // 목표 개수. 다시 낸다고 늘지 않는다
+      done: 0,                    // 맞혀서 끝낸 개수
+      lap: 1,
+      miss: {},                   // 이 판에서 틀린 단어와 횟수
       label: label,
       // 타임어택은 일본어 → 뜻 으로만 낸다. 타자 속도가 섞이면 무엇을 잰 건지 알 수 없다.
       dir: timed ? 'jp2ko' : quizDir,
@@ -639,6 +835,18 @@
     renderCard();
   }
 
+  /* ---------------- 틀린 단어는 이 판을 못 떠난다 ---------------- */
+  // 판이 끝난 뒤에 몰아서 다시 보면 이미 잊은 뒤다. 맞힐 때까지 그 자리에서 다시 낸다.
+  // 타임어택은 속도를 재는 판이라 예외다. 진도를 건드리지 않으므로 다시 내지도 않는다.
+
+  function sessKey(e) { return e.day + '|' + (e.w.no || 0) + '|' + e.w.word; }
+
+  function settle(e, ok) {
+    if (ok) { session.done++; return; }
+    session.miss[sessKey(e)] = (session.miss[sessKey(e)] || 0) + 1;
+    session.retry.push(e);
+  }
+
   /* ---------------- 학습 이어하기 ---------------- */
 
   function refOf(e) { return { d: e.day, n: e.w.no, w: e.w.word }; }
@@ -649,7 +857,13 @@
       label: session.label,
       dir: session.dir || 'jp2ko',
       index: session.index,
+      total: session.total,
+      done: session.done,
+      lap: session.lap,
+      miss: session.miss,
+      timed: session.timed,
       queue: session.queue.map(refOf),
+      retry: (session.retry || []).map(refOf),
       results: session.results.map(function (x) {
         return { d: x.day, n: x.w.no, w: x.w.word, r: x.r, m: x.m, level: x.level };
       })
@@ -683,15 +897,31 @@
     var index = Math.min(Math.max(0, s.index - dropped), queue.length);
     if (index >= queue.length) { Store.clearSession(); return null; }
 
-    return { queue: queue, index: index, label: s.label || '학습', dir: s.dir || 'jp2ko', results: results };
+    var retry = [];
+    (s.retry || []).forEach(function (ref) {
+      var e = hydrate(ref);
+      if (e) retry.push(e);
+    });
+
+    // 옛 판에는 목표·진행이 없다. 남은 큐 길이로 메워 두면 이어하기가 깨지지 않는다.
+    var total = s.total || (queue.length + retry.length);
+    return {
+      queue: queue, retry: retry, index: index,
+      total: total,
+      done: typeof s.done === 'number' ? s.done : index,
+      lap: s.lap || 1,
+      miss: s.miss || {},
+      timed: s.timed || 0,
+      slow: 0,
+      label: s.label || '학습', dir: s.dir || 'jp2ko', results: results
+    };
   }
 
   function renderResume() {
     var s = restoreSession();
     $('btnResume').hidden = !s;
     if (s) {
-      $('resumeInfo').textContent =
-        s.label + ' · ' + (s.index + 1) + ' / ' + s.queue.length;
+      $('resumeInfo').textContent = s.label + ' · ' + s.done + ' / ' + s.total;
     }
   }
 
@@ -724,16 +954,41 @@
     $('answerBox').hidden = true;
     $('checkBox').hidden = true;
     $('btnReveal').hidden = false;
+    // 카드가 바뀌면 열려 있던 상세 창은 앞 단어의 것이라 닫는다.
+    if (dsIsOpen()) dsClose();
+    $('btnCardDetail').hidden = true;
     $('btnNext').hidden = true;
     $('btnNext').disabled = true;
     picked.reading = null; picked.meaning = null;
     $$('.ox-btn').forEach(function (b) { b.classList.remove('sel'); });
 
-    var n = session.queue.length;
-    $('progressText').textContent = (session.index + 1) + ' / ' + n;
-    $('studyLabel').textContent = session.label;
-    $('progressFill').style.width = (session.index / n * 100) + '%';
+    renderProgressText();
+    renderGap(e);
     taBegin();
+  }
+
+  /* ---------------- 다음에 언제 다시 나오는지 ---------------- */
+  // 누르기 전에 결과가 보이면 판단이 빨라진다. O 를 눌러 놓고 '그래서 언제?' 를
+  // 다시 찾아볼 일이 없어진다.
+
+  function gapDayLabel(d) {
+    if (d <= 0) return '오늘 다시';
+    if (d === 1) return '내일';
+    return d + '일 후';
+  }
+
+  function gapHourLabel(h) {
+    return h > 0 ? h + '시간 후' : '내일';
+  }
+
+  function renderGap(e) {
+    var g = session.timed ? null : Store.gapPreview(e.day, e.w);
+    // 복습일 전에 미리 푸는 판은 일정을 건드리지 않는다. 방금 틀려서 다시 나온 단어가 그렇다.
+    // 빈칸으로 두면 고장난 것처럼 보이므로 왜 비었는지를 적는다.
+    $('gapOk').textContent = g ? gapDayLabel(g.okDays) : '그대로';
+    $('gapOk').className = 'ox-gap' + (g && g.okLong ? ' long' : '');
+    $('gapNo').textContent = g ? gapHourLabel(g.noHours) : '그대로';
+    $('gapNo').className = 'ox-gap';
   }
 
   function reveal(timedOut) {
@@ -750,9 +1005,10 @@
       // 정답을 봤으니 예문을 후리가나까지 붙여 다시 그린다.
       // 문제를 푸는 동안에는 읽는 법이 새면 안 되므로 한자만 보여줬다.
       var e = session.queue[session.index];
-      $('detailBox').innerHTML = detailHTML(e.w, true);
+      $('detailBox').innerHTML = detailHTML(e.w, true, true);
       $('detailBox').className = 'detail-box'; // 해석·문형 공개
       $('checkBox').hidden = false;
+      $('btnCardDetail').hidden = false;
     }
   }
 
@@ -789,6 +1045,7 @@
     var e = session.queue[session.index];
     var rec = Store.markKnown(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: true, m: true, level: rec.level, known: true });
+    settle(e, true);
     advance();
   }
 
@@ -916,10 +1173,9 @@
       revGraded = 'right'; renderRevCard();
     });
 
-    var n = session.queue.length;
-    $('progressText').textContent = (session.index + 1) + ' / ' + n;
-    $('studyLabel').textContent = session.label + ' · 뜻 → 일본어';
-    $('progressFill').style.width = (session.index / n * 100) + '%';
+    renderProgressText();
+    $('studyLabel').textContent = session.label + ' · 뜻 → 일본어' +
+      (session.lap > 1 ? ' · ' + session.lap + '바퀴' : '');
   }
 
   function revSubmit(skip) {
@@ -938,6 +1194,7 @@
     var ok = (revGraded === 'right');
     var rec = Store.grade(e.day, e.w, ok, ok, 'ko2jp');
     session.results.push({ day: e.day, w: e.w, r: ok, m: ok, level: rec.level });
+    settle(e, ok);
     revTyped = ''; revGraded = null;
     advance();
   }
@@ -1010,9 +1267,13 @@
     window.scrollTo(0, 0);
   }
 
+  // 진행은 '맞혀서 끝낸 개수 / 목표'다. 틀려서 다시 낸다고 목표가 늘지는 않는다.
   function renderProgressText() {
     if (!session) return;
-    $('progressText').textContent = (session.index + 1) + ' / ' + session.queue.length;
+    $('progressText').textContent = session.done + ' / ' + session.total;
+    $('studyLabel').textContent = session.label +
+      (session.lap > 1 ? ' · ' + session.lap + '바퀴' : '');
+    $('progressFill').style.width = (session.done / session.total * 100) + '%';
   }
 
   /* ---------------- 좌우로 밀어서 넘기기 ---------------- */
@@ -1040,14 +1301,25 @@
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
     var e = session.queue[session.index];
+    var ok = (picked.reading === 1 && picked.meaning === 1);
     var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1,
       session.timed ? 'timed' : 'jp2ko', !!session.timed);
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
+    settle(e, ok || !!session.timed);
     advance();
   }
 
   function advance() {
     session.index++;
+    // 한 바퀴를 다 돌았는데 남은 것이 있으면 섞어서 다시 낸다.
+    // 순서를 그대로 두면 앞 단어의 잔상으로 맞히게 되어 시험이 되지 않는다.
+    if (session.index >= session.queue.length && session.retry.length) {
+      session.queue = shuffle(session.retry);
+      session.retry = [];
+      session.index = 0;
+      session.lap++;
+      toast('남은 ' + session.queue.length + '단어를 섞어서 다시 냅니다');
+    }
     persistSession();
     if (global_Sync()) Sync.touch(); // 세션 중간에 앱을 꺼도 잃지 않게
     if (session.index >= session.queue.length) renderResult();
@@ -1056,15 +1328,35 @@
 
   /* ---------------- 결과 ---------------- */
 
+  // 같은 단어의 여러 시도를 한 줄로 묶는다.
+  // 레벨과 O·X 는 마지막 시도의 것을 쓰고, '한 번에 맞혔는지'는 첫 시도로 판단한다.
+  function distinctResults() {
+    var byKey = {}, order = [];
+    session.results.forEach(function (x) {
+      var k = x.day + '|' + (x.w.no || 0) + '|' + x.w.word;
+      var prev = byKey[k];
+      if (!prev) order.push(k);
+      byKey[k] = {
+        day: x.day, w: x.w, r: x.r, m: x.m, level: x.level, known: x.known,
+        tries: (prev ? prev.tries : 0) + 1,
+        firstOk: prev ? prev.firstOk : !!(x.r && x.m)
+      };
+    });
+    return order.map(function (k) { return byKey[k]; });
+  }
+
   function renderResult() {
     Store.clearSession(); // 다 풀었으므로 이어하기 대상이 아니다
     if (global_Sync()) Sync.sync().catch(function () {}); // 결과를 바로 올린다
     $('progressFill').style.width = '100%';
-    var res = session.results;
-    var perfect = res.filter(function (x) { return x.r && x.m; }).length;
-    var wrong = res.filter(function (x) { return !x.r || !x.m; });
+    $('progressText').textContent = session.total + ' / ' + session.total;
+    // 틀린 단어는 맞힐 때까지 다시 나왔으므로 기록에 같은 단어가 여러 번 있다.
+    // 결과는 단어 단위로 센다. 무엇을 몇 번 만났는지가 아니라 무엇이 어려웠는지가 궁금한 것이다.
+    var res = distinctResults();
+    var perfect = res.filter(function (x) { return x.firstOk; }).length;
+    var wrong = res.filter(function (x) { return !x.firstOk; });
 
-    $('resultSub').textContent = res.length + '단어 중 ' + perfect + '개 정답';
+    $('resultSub').textContent = res.length + '단어 중 ' + perfect + '개를 한 번에';
 
     var s = { total: res.length, unknown: 0, short: 0, long: 0, 'new': 0 };
     res.forEach(function (x) { s[Store.stageOf(x.level, 1)]++; });
@@ -1085,8 +1377,11 @@
   function resultItemHTML(x) {
     var st = Store.stageOf(x.level, 1);
     var detail = detailHTML(x.w, true);
+    // 다시 나왔던 단어는 마지막에 결국 O 라서 O·X 를 적어 봐야 소용없다.
+    // 몇 번 만에 맞혔는지가 그 단어의 성적이다.
     var mark = x.known ? '이미 아는 단어'
-      : '읽기 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X');
+      : (x.tries > 1 ? x.tries + '번 만에 맞힘'
+                     : '읽기 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X'));
     return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
         (detail ? ' role="button" tabindex="0"' : '') + '>' +
       '<div class="wl-head">' +
@@ -2205,8 +2500,53 @@
   }
 
   // 예문 · 문형 · 관련어 블록. 학습 카드와 단어 목록에서 함께 쓴다.
-  function detailHTML(w, withRuby) {
+  // 단어를 이루는 한자를 하나씩 펼친다. 음독·훈독·부수, 그리고 눌러서 그 한자가 쓰인 단어로.
+  // 이 단어를 왜 이렇게 읽는지가 여기서 풀린다.
+  function kanjiBreakdownHTML(w, noLink) {
+    var seen = {}, rows = [];
+    (String(w.word).match(/[一-龯]/g) || []).forEach(function (c) {
+      if (seen[c]) return;              // 한 단어에 같은 한자가 두 번 나와도 한 번만
+      seen[c] = 1;
+      var k = kanjiDict(c);
+      if (!k) return;
+
+      var meta = [];
+      if (k.ko && k.ko.length) meta.push('<b>' + esc(k.ko.join(', ')) + '</b>');
+      if (k.st) meta.push(k.st + '획');
+      if (k.radc) meta.push('부수 ' + esc(k.radc) + ' ' + esc(k.radko || ''));
+
+      var head = noLink
+        ? '<span class="kb-char" lang="ja">' + esc(c) + '</span>'
+        : '<button type="button" class="kb-char ki-part" lang="ja" data-k="' + esc(c) + '">' + esc(c) + '</button>';
+
+      rows.push(
+        '<div class="kb-row">' + head +
+          '<div class="kb-body">' +
+            '<div class="kb-meta">' + meta.join(' · ') + '</div>' +
+            (k.on && k.on.length
+              ? '<div class="kb-line"><i>음독</i><span lang="ja">' +
+                k.on.map(function (x) { return esc(toHira(x)); }).join(', ') + '</span></div>' : '') +
+            (k.kun && k.kun.length
+              ? '<div class="kb-line"><i>훈독</i><span lang="ja">' +
+                k.kun.map(kunHTML).join(', ') + '</span></div>' : '') +
+          '</div>' +
+        '</div>'
+      );
+    });
+    if (!rows.length) return '';
+    return '<div class="gram kb"><span class="gram-tag kanji">한자 ' + rows.length + '</span>' +
+           '<div class="kb-list">' + rows.join('') + '</div></div>';
+  }
+
+  // noLink 는 학습 카드에서만 쓴다. 풀던 카드를 떠나 버리면 돌아오기 어렵다.
+  function detailHTML(w, withRuby, noLink) {
     var parts = [];
+
+    // 문제를 푸는 중에는 읽는 법이 새면 안 되므로 답을 본 뒤에만 펼친다.
+    if (withRuby) {
+      var kb = kanjiBreakdownHTML(w, noLink);
+      if (kb) parts.push(kb);
+    }
 
     (w.examples || []).forEach(function (ex) {
       parts.push(
@@ -2344,6 +2684,38 @@
       var chip = ev.target.closest('.kanji-chip');
       if (chip) openKanji(chip.dataset.k);
     });
+
+    // 한자 글자는 어디에 있든 눌러서 그 한자로 건너뛴다. 단어 상세, 결과 목록, 한자 사전 패널.
+    // 목록 안에서는 펼침 토글이 같이 도는 것을 막아야 하므로 캡처 단계에서 끊는다.
+    document.addEventListener('click', function (ev) {
+      var b = ev.target.closest('.ki-part[data-k]');
+      if (b) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        // 상세 창 안에서는 화면을 옮기지 않고 그 창에서 파고든다.
+        if (b.closest('#detailSheet')) dsPush({ t: 'kanji', k: b.dataset.k });
+        else openKanji(b.dataset.k);
+        return;
+      }
+      var it = ev.target.closest('#detailSheet .ds-item[data-i]');
+      if (it) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var e = dsWords[Number(it.dataset.i)];
+        if (e) dsPush({ t: 'word', w: e.w });
+      }
+    }, true);
+
+    $('btnCardDetail').addEventListener('click', function () {
+      if (!session || peek !== null) return;
+      dsOpen(session.queue[session.index].w);
+    });
+    $('btnDsBack').addEventListener('click', dsBack);
+    $('btnDsClose').addEventListener('click', dsClose);
+    // 바깥을 누르면 닫는다. 상자 안을 누른 것은 그대로 둔다.
+    $('detailSheet').addEventListener('click', function (ev) {
+      if (ev.target === this) dsClose();
+    });
     // 칩에 없는 한자는 직접 쳐서 연다. 입력한 것 중 첫 한자를 쓴다.
     $('kanjiInput').addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter' || ev.isComposing) return;
@@ -2439,6 +2811,19 @@
       var list = Store.shakyList();
       currentDays = [];
       renderSet(list, '흔들리는 단어', list.length + '단어 · 2번 이상 학습 · 오답률 50% 이상', true);
+    });
+
+    $('dailyCounts').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.chip');
+      if (!chip) return;
+      dailyCount = Number(chip.dataset.n);
+      try { localStorage.setItem(DAILY_KEY, dailyCount); } catch (e) {}
+      renderDaily();
+    });
+    $('btnDailyStudy').addEventListener('click', function () {
+      var p = dailyPlan(dailyCount);
+      if (!p.all.length) return;
+      startSession(p.all, '오늘 학습 ' + p.all.length + '단어');
     });
 
     $('randCounts').addEventListener('click', function (ev) {
@@ -2634,6 +3019,12 @@
     });
 
     document.addEventListener('keydown', function (ev) {
+      // 상세 창이 덮여 있으면 채점 키가 뒤에서 돌면 안 된다.
+      // Escape 는 한 칸 되돌아가고, 처음 자리면 창을 닫는다.
+      if (dsIsOpen()) {
+        if (ev.key === 'Escape') { ev.preventDefault(); dsBack(); }
+        return;
+      }
       // 검색 패널이 열려 있으면 O/X 단축키가 검색어에 끼어들면 안 된다.
       if (searchOpen) {
         if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }

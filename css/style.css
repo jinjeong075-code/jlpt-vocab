@@ -928,3 +928,151 @@ body.no-scroll { overflow: hidden; }
   .stat:nth-child(n+3) { border-top: 1px solid var(--hair); }
   .row-btns { grid-template-columns: 1fr; }
 }
+
+/* ---------- 한자 사전 (한자별로 모아 볼 때 목록 위에 붙는다) ---------- */
+.kanji-info {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 0 4px 14px;
+}
+
+.ki-top { display: flex; align-items: flex-start; gap: 16px; }
+.ki-char { font-size: 54px; line-height: 1; flex: none; }
+.ki-head { min-width: 0; padding-top: 2px; }
+.ki-ko { font-size: 17px; font-weight: 600; }
+.ki-tags {
+  font-size: 11px; color: var(--dim); margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.ki-en { font-size: 12px; color: var(--rt); margin-top: 6px; line-height: 1.5; }
+
+.ki-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 8px 0; border-top: 1px solid var(--hair);
+}
+.ki-row:first-of-type { margin-top: 12px; }
+.ki-label { flex: 0 0 34px; font-size: 11px; color: var(--dim); }
+.ki-value { font-size: 15px; line-height: 1.6; min-width: 0; }
+
+/* 훈독의 오쿠리가나. 어디까지가 한자인지 보이게 한 톤 내린다. */
+.ki-oku { color: var(--dim); }
+
+/* 부수와 조각. 눌러서 그 한자로 건너뛴다. */
+.ki-part {
+  display: inline-block;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  padding: 5px 8px;
+  margin: 0 4px 4px 0;
+  cursor: pointer;
+}
+.ki-part:hover { border-color: var(--accent); color: var(--accent); }
+.ki-part:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 단어에 쓰인 적 없는 조각은 눌러도 갈 곳이 없다. */
+.ki-part.off { color: var(--dim); cursor: default; }
+
+.ki-radko { font-size: 13px; color: var(--dim); margin-left: 8px; }
+
+/* ---------- 채점 버튼의 다음 복습일 ---------- */
+/* O 를 누르면 언제 다시 나오는지 누르기 전에 보이게 한다. */
+.ox-gap {
+  display: block; margin-top: 2px;
+  font-size: 10px; font-weight: 500; font-style: normal;
+  opacity: .75; font-variant-numeric: tabular-nums;
+}
+.ox-gap:empty { display: none; }
+/* 이번에 맞히면 장기기억으로 넘어가는 단어 */
+.ox-gap.long { opacity: 1; font-weight: 700; }
+
+/* ---------- 잠깐 뜨는 안내 ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; z-index: 60;
+  transform: translate(-50%, 10px);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--line);
+  color: var(--text); font-size: 13px; line-height: 1.4;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
+  opacity: 0; transition: opacity .22s, transform .22s;
+  pointer-events: none;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+}
+
+/* ---------- 단어 상세 안의 한자 풀이 ---------- */
+.gram-tag.kanji { background: rgba(95,201,141,.13); color: var(--ok); }
+
+.kb-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.kb-row { display: flex; gap: 10px; align-items: flex-start; }
+
+/* 글자 자체가 그 한자로 가는 문이다. */
+.kb-char {
+  flex: 0 0 auto; width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; line-height: 1;
+  border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text);
+  font-family: inherit; padding: 0;
+}
+button.kb-char { cursor: pointer; }
+button.kb-char:hover { border-color: var(--accent); color: var(--accent); }
+button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.kb-body { min-width: 0; flex: 1; padding-top: 1px; }
+.kb-meta { font-size: 11px; color: var(--dim); }
+.kb-meta b { color: var(--text); font-weight: 600; }
+.kb-line { font-size: 13px; display: flex; gap: 8px; margin-top: 2px; }
+.kb-line i { flex: 0 0 26px; font-style: normal; font-size: 11px; color: var(--dim); padding-top: 2px; }
+.kb-line span { min-width: 0; }
+
+/* 예문은 후리가나가 글자 위로 올라간다. 한자 풀이 바로 밑에 붙으면 겹쳐 보이므로 선으로 끊는다. */
+.gram.kb { padding-bottom: 12px; border-bottom: 1px solid var(--hair); }
+
+/* ---------- 학습 중 상세 보기 ---------- */
+.card-meta-right { display: flex; align-items: center; gap: 10px; }
+.card-detail {
+  padding: 3px 10px; border-radius: 6px; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line);
+  color: var(--dim); font-size: 11px; font-weight: 600; font-family: inherit;
+}
+.card-detail:hover { color: var(--accent); border-color: var(--accent); }
+.card-detail:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 상자가 화면보다 길어지면 안쪽만 구른다. */
+.sheet-box.tall { max-width: 400px; display: flex; flex-direction: column; max-height: min(80vh, 640px); }
+.ds-body { padding: 14px 16px 18px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.ds-word { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.ds-jp { font-size: 30px; line-height: 1.25; }
+.ds-read { font-size: 14px; color: var(--rt); margin-top: 3px; }
+.ds-mean { font-size: 15px; margin-top: 6px; }
+
+.ds-head {
+  font-size: 11px; color: var(--dim);
+  margin: 16px 0 7px; padding-top: 12px; border-top: 1px solid var(--hair);
+}
+.ds-list { display: flex; flex-direction: column; }
+.ds-item {
+  display: flex; align-items: baseline; gap: 9px; width: 100%;
+  padding: 9px 4px; cursor: pointer; text-align: left;
+  background: transparent; border: none; border-bottom: 1px solid var(--hair);
+  color: var(--text); font-family: inherit;
+}
+.ds-item:last-child { border-bottom: none; }
+.ds-item:hover { background: var(--panel2); }
+.ds-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ds-item-w { font-size: 16px; flex: 0 0 auto; }
+.ds-item-r { font-size: 12px; color: var(--rt); flex: 0 0 auto; }
+.ds-item-m { font-size: 12px; color: var(--dim); margin-left: auto; text-align: right; min-width: 0; }
+
+/* 상세 창 안에서는 사전 패널이 카드 안에 또 카드로 보이면 안 된다. */
+.ds-body .kanji-info { margin: 0; border: none; background: transparent; padding: 0; }
