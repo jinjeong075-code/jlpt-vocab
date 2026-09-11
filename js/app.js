@@ -1038,7 +1038,7 @@
         $('taFill').className = 'out';
       }
       $('btnReveal').hidden = true;
-      $('btnNext').hidden = false;
+      // O 나 X 를 누르면 바로 넘어가므로 '다음' 버튼은 쓸 일이 없다.
       $('answerBox').hidden = false;
       // 정답을 봤으니 예문을 후리가나까지 붙여 다시 그린다.
       // 문제를 푸는 동안에는 읽는 법이 새면 안 되므로 한자만 보여줬다.
@@ -1050,28 +1050,17 @@
     }
   }
 
-  function pick(type, val) {
-    if ($('checkBox').hidden) return;
-    picked[type] = val;
-    $$('.ox-btn[data-t="' + type + '"]').forEach(function (b) {
-      b.classList.toggle('sel', Number(b.dataset.v) === val);
-    });
-    $('btnNext').disabled = (picked.reading === null || picked.meaning === null);
-  }
-
-  // 둘 다 O 로 찍고 바로 넘어간다. 아는 단어를 빠르게 지나가기 위한 지름길.
+  // 읽는 법과 뜻을 따로 묻지 않는다. 알았으면 O, 아니면 X 하나로 끝낸다.
+  // 기록에는 여전히 둘 다에 같은 값이 들어간다. 예전 진도와 오답률이 그대로 이어진다.
   function bothOk() {
     if ($('checkBox').hidden) return;
-    pick('reading', 1);
-    pick('meaning', 1);
+    picked.reading = 1; picked.meaning = 1;
     next();
   }
 
-  // 읽는 법도 뜻도 모를 때. 둘 다 X 로 찍고 넘어간다.
   function bothNo() {
     if ($('checkBox').hidden) return;
-    pick('reading', 0);
-    pick('meaning', 0);
+    picked.reading = 0; picked.meaning = 0;
     next();
   }
 
@@ -1418,8 +1407,7 @@
     // 다시 나왔던 단어는 마지막에 결국 O 라서 O·X 를 적어 봐야 소용없다.
     // 몇 번 만에 맞혔는지가 그 단어의 성적이다.
     var mark = x.known ? '이미 아는 단어'
-      : (x.tries > 1 ? x.tries + '번 만에 맞힘'
-                     : '읽기 ' + (x.r ? 'O' : 'X') + ' · 뜻 ' + (x.m ? 'O' : 'X'));
+      : (x.tries > 1 ? x.tries + '번 만에 맞힘' : (x.r ? '한 번에 맞힘' : '틀림'));
     return '<div class="wl-item' + (detail ? ' has-detail' : '') + '"' +
         (detail ? ' role="button" tabindex="0"' : '') + '>' +
       '<div class="wl-head">' +
@@ -2885,9 +2873,6 @@
     $('btnKnown').addEventListener('click', markKnown);
     $('tabWrong').addEventListener('click', function () { resultView = 'wrong'; renderResultList(); });
     $('tabAll').addEventListener('click', function () { resultView = 'all'; renderResultList(); });
-    $$('.ox-btn').forEach(function (b) {
-      b.addEventListener('click', function () { pick(b.dataset.t, Number(b.dataset.v)); });
-    });
 
     $('btnRetryWrong').addEventListener('click', function () {
       startSession(session.wrong, '틀린 단어 다시');
@@ -3120,17 +3105,14 @@
         if (revGraded && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); revNext(); }
         return;
       }
+      // 정답을 보기 전이면 Enter 가 정답 보기, 본 뒤에는 O. 아는 단어는 Enter 두 번이면 지나간다.
       if (ev.key === 'Enter') {
         ev.preventDefault();
         if (!$('btnReveal').hidden) reveal();
-        // 아무것도 체크하지 않은 채 Enter = 둘 다 알았음. 아는 단어는 Enter 두 번이면 지나간다.
-        else if (picked.reading === null && picked.meaning === null) bothOk();
-        else next();
-      } else if (ev.key === '1') pick('reading', 1);
-      else if (ev.key === '2') pick('reading', 0);
-      else if (ev.key === '3') pick('meaning', 1);
-      else if (ev.key === '4') pick('meaning', 0);
-      else if (ev.key === '0') { ev.preventDefault(); bothNo(); }
+        else bothOk();
+      }
+      else if (ev.key === '1') { ev.preventDefault(); bothOk(); }
+      else if (ev.key === '2' || ev.key === '0') { ev.preventDefault(); bothNo(); }
       else if (ev.key === ' ') { ev.preventDefault(); reveal(); }
     });
   }

@@ -1080,3 +1080,7 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 /* 한자의 뜻. 한국어가 본체이고, 옮기지 못한 것만 영어로 남는다. */
 .kb-mean { font-size: 13px; color: var(--rt); margin-top: 3px; line-height: 1.5; }
 .ki-en.en { font-style: italic; }
+
+/* 채점 줄이 하나뿐이라 O·X 를 크게 잡는다. 폰에서 엄지로 누르는 자리다. */
+.check-row.both .ox { flex: 1; gap: 8px; }
+.check-row.both .ox-btn.wide { flex: 1; min-width: 0; padding: 12px 0; font-size: 16px; }

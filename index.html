@@ -264,32 +264,16 @@
     <div id="detailBox" class="detail-box quiz" hidden></div>
 
 
+    <!-- 읽는 법과 뜻을 따로 묻지 않는다. 알았으면 O, 아니면 X 하나로 끝낸다. -->
     <div id="checkBox" class="check-box" hidden>
-      <div class="check-row">
-        <span class="check-label">읽는 법을 알았나요?</span>
-        <div class="ox">
-          <button class="ox-btn o" data-t="reading" data-v="1">O<kbd>1</kbd></button>
-          <button class="ox-btn x" data-t="reading" data-v="0">X<kbd>2</kbd></button>
-        </div>
-      </div>
-      <div class="check-row">
-        <span class="check-label">뜻을 알았나요?</span>
-        <div class="ox">
-          <button class="ox-btn o" data-t="meaning" data-v="1">O<kbd>3</kbd></button>
-          <button class="ox-btn x" data-t="meaning" data-v="0">X<kbd>4</kbd></button>
-        </div>
-      </div>
-
-      <!-- 둘 다 맞았을 때 한 번에 찍는 버튼. 위 두 줄과 같은 O 모양으로 맞춘다. -->
       <div class="check-row both">
-        <span class="check-label">둘 다</span>
+        <span class="check-label">알았나요?</span>
         <div class="ox">
           <!-- 누르기 전에 다음 복습이 언제인지 보이게 한다. -->
           <button class="ox-btn o wide" id="btnBothOk">O<i class="ox-gap" id="gapOk"></i><kbd>Enter</kbd></button>
           <button class="ox-btn x wide" id="btnBothNo">X<i class="ox-gap" id="gapNo"></i><kbd>0</kbd></button>
         </div>
       </div>
-
     </div>
 
     <!-- ＋ 는 '확실히 아는 단어'. 판단이 빨리 날 때 바로 누를 수 있게
