@@ -264,26 +264,8 @@
     <div id="detailBox" class="detail-box quiz" hidden></div>
 
 
-    <!-- 읽는 법과 뜻을 따로 묻지 않는다. 알았으면 O, 아니면 X 하나로 끝낸다. -->
-    <div id="checkBox" class="check-box" hidden>
-      <div class="check-row both">
-        <span class="check-label">알았나요?</span>
-        <div class="ox">
-          <!-- 누르기 전에 다음 복습이 언제인지 보이게 한다. -->
-          <button class="ox-btn o wide" id="btnBothOk">O<i class="ox-gap" id="gapOk"></i><kbd>Enter</kbd></button>
-          <button class="ox-btn x wide" id="btnBothNo">X<i class="ox-gap" id="gapNo"></i><kbd>0</kbd></button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ＋ 는 '확실히 아는 단어'. 판단이 빨리 날 때 바로 누를 수 있게
-         정답 보기 / 다음 과 늘 같은 자리에 나란히 둔다. -->
-    <div class="go-row">
-      <button class="known-plus" id="btnKnown" title="아는 단어 · 장기기억으로 (키보드 +)">아는 단어<kbd>+</kbd></button>
-      <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
-      <button class="next-btn" id="btnNext" disabled hidden>다음 <kbd>Enter</kbd></button>
-    </div>
   </div>
+
 </section>
 
 <!-- ============ 결과 ============ -->
@@ -523,6 +505,23 @@
   <div class="sp-body">
     <p class="search-hint" id="searchHint"></p>
     <div id="searchResults" class="word-list"></div>
+  </div>
+</div>
+
+<!-- ============ 학습 화면 아래 고정 버튼 ============ -->
+<!-- 누르는 것은 전부 화면 아래에 붙여 둔다. 카드가 길어져도 버튼을 찾아 스크롤할 일이 없다.
+     화면(.view) 안에 두면 안 된다. 화면 전환 애니메이션의 transform 이 조상에 걸리는 순간
+     position:fixed 가 그 조상 기준으로 바뀌어 바가 카드 밑으로 따라 내려온다.
+     ＋ 는 '확실히 아는 단어'. 판단이 빨리 날 때 정답을 볼 것도 없이 넘긴다. -->
+<div id="studyBar" class="study-bar" hidden>
+  <button class="known-plus" id="btnKnown" title="아는 단어 · 장기기억으로 (키보드 +)">아는 단어<kbd>+</kbd></button>
+  <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>
+  <button class="next-btn" id="btnNext" disabled hidden>다음 <kbd>Enter</kbd></button>
+  <!-- 읽는 법과 뜻을 따로 묻지 않는다. 알았으면 O, 아니면 X 하나로 끝낸다.
+       누르기 전에 다음 복습이 언제인지 보이게 한다. -->
+  <div id="checkBox" class="ox" hidden>
+    <button class="ox-btn o wide" id="btnBothOk">O<i class="ox-gap" id="gapOk"></i><kbd>Enter</kbd></button>
+    <button class="ox-btn x wide" id="btnBothNo">X<i class="ox-gap" id="gapNo"></i><kbd>0</kbd></button>
   </div>
 </div>
 

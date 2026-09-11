@@ -97,6 +97,8 @@
     view = name;
     $$('.view').forEach(function (v) { v.classList.remove('active'); });
     $('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+    // 아래 고정 버튼은 학습 화면에서만 나온다. 화면 밖에 있으므로 여기서 같이 여닫는다.
+    $('studyBar').hidden = (name !== 'study');
     $('btnHome').hidden = (name === 'pick');
     $('btnTimeTop').hidden = (name === 'study' || name === 'gramStudy' || name === 'time');
     $('selBar').hidden = !(name === 'home' && selected.length);
@@ -974,6 +976,7 @@
     if (session.dir === 'ko2jp') { renderRevCard(); return; }
     $('revStage').hidden = true;
     $('card').hidden = false;
+    $('studyBar').hidden = false;
     var e = session.queue[session.index];
     var st = Store.stageFor(e.day, e.w);
 
@@ -1045,6 +1048,9 @@
       var e = session.queue[session.index];
       $('detailBox').innerHTML = detailHTML(e.w, true);
       $('detailBox').className = 'detail-box'; // 해석·문형 공개
+      // 예문이 없는 단어는 문제를 푸는 동안 이 칸이 비어 숨겨져 있었다.
+      // 정답을 본 뒤에는 한자 풀이가 들어가므로 다시 열어 준다.
+      $('detailBox').hidden = !$('detailBox').innerHTML;
       $('checkBox').hidden = false;
       $('btnCardDetail').hidden = false;
     }
@@ -1184,6 +1190,7 @@
     $('revStage').innerHTML = h;
     $('revStage').hidden = false;
     $('card').hidden = true;
+    $('studyBar').hidden = true;
 
     if ($('revAns')) {
       $('revAns').focus();
@@ -1242,6 +1249,7 @@
     peek = null;
     $('peekStage').hidden = true;
     $('card').hidden = false;
+    $('studyBar').hidden = false;
     renderProgressText();
   }
 
@@ -1287,6 +1295,7 @@
 
     $('peekStage').hidden = false;
     $('card').hidden = true;
+    $('studyBar').hidden = true;
     $('peekPrev').addEventListener('click', function () { peekGo(-1); });
     $('peekNext').addEventListener('click', function () { peekGo(1); });
 

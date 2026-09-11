@@ -780,7 +780,7 @@ kbd {
    단, 단어 학습 카드에만 건다. 문법 '내용 보기'는 읽으라고 있는 화면이라
    예문 세 개가 다 보여야 한다. 여기에 걸면 두 번째 예문이 잘린다. */
 @media (max-width: 520px) {
-  #viewStudy .detail-box { max-height: 20vh; overflow-y: auto; }
+  /* 상한은 아래 '한 화면에 맞추기' 규칙이 남는 공간에서 다시 계산한다. */
   /* 후리가나가 붙으면 줄 높이가 커진다. 폰에서는 한 줄에 안 들어가
      마지막 두 글자만 다음 줄로 떨어지므로 글자를 조금 줄인다. */
   .ex.ruby .ex-jp { font-size: 17px; line-height: 2.35; letter-spacing: -.01em; }
@@ -1084,3 +1084,52 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 /* 채점 줄이 하나뿐이라 O·X 를 크게 잡는다. 폰에서 엄지로 누르는 자리다. */
 .check-row.both .ox { flex: 1; gap: 8px; }
 .check-row.both .ox-btn.wide { flex: 1; min-width: 0; padding: 12px 0; font-size: 16px; }
+
+/* ---------- 학습 화면 아래 고정 버튼 ---------- */
+/* 카드가 길어져도 누를 것을 찾아 스크롤하지 않게, 손이 닿는 자리에 붙여 둔다. */
+.study-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; gap: 8px; align-items: stretch;
+  max-width: 720px; margin: 0 auto;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(10, 11, 14, .94);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--hair);
+}
+.study-bar .reveal-btn, .study-bar .next-btn { flex: 1; margin-top: 0; }
+.study-bar .ox { flex: 1; gap: 8px; }
+.study-bar .ox-btn.wide { flex: 1; min-width: 0; padding: 13px 0; font-size: 16px; }
+.study-bar .known-plus { padding: 0 14px; }
+
+/* 고정 바에 가려지는 만큼 아래를 비워 둔다. */
+#viewStudy { padding-bottom: 86px; }
+
+/* 카드 안을 조금씩 줄여 한 화면에 더 담는다. */
+#viewStudy .card { padding: 14px 16px 12px; }
+#viewStudy .jp-word { padding: 18px 0 16px; }
+#viewStudy .answer-box { padding-top: 11px; margin-bottom: 2px; }
+#viewStudy .detail-box { margin-bottom: 0; }
+#viewStudy .ex { padding: 8px 0; }
+#viewStudy .ex.ruby .ex-jp { line-height: 2.25; }
+#viewStudy .kb-list { gap: 6px; }
+#viewStudy .kb-char { width: 34px; height: 34px; font-size: 21px; }
+
+/* ---------- 학습 화면을 한 화면에 맞추기 ---------- */
+/* 버튼은 아래에 고정돼 있으니, 남는 공간을 예문·한자 풀이가 나눠 쓰면 된다.
+   넘치는 것은 그 상자 안에서만 구른다. 페이지 자체는 움직이지 않는다. */
+@media (max-width: 620px) {
+  /* 상단바 46 + main 위 여백 16 + 진행바 + 아래 고정바 만큼을 뺀 자리가 카드 몫이다. */
+  /* 높이 계산에 고정바 몫이 이미 들어 있으므로 아래 여백은 다시 빼야 한다. */
+  #viewStudy.active { display: flex; flex-direction: column; height: calc(100dvh - 152px); padding-bottom: 0; }
+  /* 카드는 늘어나지 않는다. 짧은 단어는 짧은 카드로 둔다. */
+  #viewStudy .card { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
+  #viewStudy .card > * { flex: 0 0 auto; }
+  /* 넘칠 때 줄어드는 것은 예문·한자 풀이뿐이고, 줄어든 만큼 이 상자 안에서 구른다. */
+  #viewStudy .detail-box {
+    flex: 0 1 auto; min-height: 0; max-height: none;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  /* 고정바가 이미 자리를 잡아 두므로 main 아래 여백은 학습 화면에서만 줄인다.
+     :has 를 모르는 브라우저에서는 아래가 조금 비는 것뿐이라 문제되지 않는다. */
+  main:has(#viewStudy.active) { padding-bottom: 0; }
+}
