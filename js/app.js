@@ -47,7 +47,9 @@
   function handleBack() {
     navLock = true;
     try {
-      if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
+      // 상세 창이 덮여 있으면 앱을 나가기 전에 파고든 만큼 먼저 되돌린다.
+      if (dsIsOpen()) dsPop();
+      else if (!$('syncPanel').hidden) $('syncPanel').hidden = true;
       else if (!$('howToPanel').hidden) $('howToPanel').hidden = true;
       else if (searchOpen) closeSearch();
       // 돌아보는 중이면 학습을 나가지 말고 풀던 문제로 먼저 돌아온다.
@@ -707,27 +709,52 @@
 
   function dsIsOpen() { return !$('detailSheet').hidden; }
 
-  function dsOpen(w) {
-    dsStack = [{ t: 'word', w: w }];
-    dsRender();
-    $('detailSheet').hidden = false;
+  // 창이 열려 있는 동안 히스토리 한 칸을 계속 쥐고 있는다.
+  // 폰의 뒤로가기가 앱을 나가는 대신 이 창의 한 단계를 무르게 하려는 것이다.
+  // handleBack 안에서는 pushNav 가 navLock 에 막히므로 여기서는 직접 쌓는다.
+  function dsArm() {
+    try { history.pushState({ jv: 1, ds: 1 }, ''); } catch (e) {}
   }
 
+  function dsShow(item) {
+    dsStack = [item];
+    dsRender();
+    $('detailSheet').hidden = false;
+    dsArm();
+  }
+
+  function dsOpen(w) { dsShow({ t: 'word', w: w }); }
+
+  // 더 파고들 때는 히스토리를 더 쌓지 않는다. 쥐고 있는 한 칸을 계속 돌려 쓴다.
   function dsPush(item) {
     dsStack.push(item);
     dsRender();
   }
 
-  function dsBack() {
-    if (dsStack.length <= 1) { dsClose(); return; }
-    dsStack.pop();
-    dsRender();
+  // 뒤로가기 한 번. 폰의 뒤로가기도, 창 안의 ← 도, Escape 도 결국 여기로 온다.
+  function dsPop() {
+    if (dsStack.length > 1) {
+      dsStack.pop();
+      dsRender();
+      dsArm();          // 아직 열려 있으니 다음 뒤로가기 몫을 다시 쥔다
+    } else {
+      dsHide();         // 마지막 장이었다. 쥐고 있던 칸을 놓아준다
+    }
   }
 
-  function dsClose() {
+  // 화면만 닫는다. 히스토리는 건드리지 않는다.
+  function dsHide() {
     $('detailSheet').hidden = true;
     dsStack = [];
     dsWords = [];
+  }
+
+  // 통째로 닫기. 몇 단계를 파고들었든 쥐고 있는 칸은 하나뿐이라,
+  // 마지막 한 장만 남겨 두고 뒤로가기를 한 번 부르면 그 칸까지 깔끔히 정리된다.
+  function dsCloseAll() {
+    if (!dsIsOpen()) return;
+    dsStack = dsStack.slice(0, 1);
+    goBack();
   }
 
   function dsRender() {
@@ -955,7 +982,7 @@
     $('checkBox').hidden = true;
     $('btnReveal').hidden = false;
     // 카드가 바뀌면 열려 있던 상세 창은 앞 단어의 것이라 닫는다.
-    if (dsIsOpen()) dsClose();
+    if (dsIsOpen()) dsHide();
     $('btnCardDetail').hidden = true;
     $('btnNext').hidden = true;
     $('btnNext').disabled = true;
@@ -1005,7 +1032,7 @@
       // 정답을 봤으니 예문을 후리가나까지 붙여 다시 그린다.
       // 문제를 푸는 동안에는 읽는 법이 새면 안 되므로 한자만 보여줬다.
       var e = session.queue[session.index];
-      $('detailBox').innerHTML = detailHTML(e.w, true, true);
+      $('detailBox').innerHTML = detailHTML(e.w, true);
       $('detailBox').className = 'detail-box'; // 해석·문형 공개
       $('checkBox').hidden = false;
       $('btnCardDetail').hidden = false;
@@ -2502,7 +2529,7 @@
   // 예문 · 문형 · 관련어 블록. 학습 카드와 단어 목록에서 함께 쓴다.
   // 단어를 이루는 한자를 하나씩 펼친다. 음독·훈독·부수, 그리고 눌러서 그 한자가 쓰인 단어로.
   // 이 단어를 왜 이렇게 읽는지가 여기서 풀린다.
-  function kanjiBreakdownHTML(w, noLink) {
+  function kanjiBreakdownHTML(w) {
     var seen = {}, rows = [];
     (String(w.word).match(/[一-龯]/g) || []).forEach(function (c) {
       if (seen[c]) return;              // 한 단어에 같은 한자가 두 번 나와도 한 번만
@@ -2515,12 +2542,9 @@
       if (k.st) meta.push(k.st + '획');
       if (k.radc) meta.push('부수 ' + esc(k.radc) + ' ' + esc(k.radko || ''));
 
-      var head = noLink
-        ? '<span class="kb-char" lang="ja">' + esc(c) + '</span>'
-        : '<button type="button" class="kb-char ki-part" lang="ja" data-k="' + esc(c) + '">' + esc(c) + '</button>';
-
       rows.push(
-        '<div class="kb-row">' + head +
+        '<div class="kb-row">' +
+          '<button type="button" class="kb-char ki-part" lang="ja" data-k="' + esc(c) + '">' + esc(c) + '</button>' +
           '<div class="kb-body">' +
             '<div class="kb-meta">' + meta.join(' · ') + '</div>' +
             (k.on && k.on.length
@@ -2538,13 +2562,12 @@
            '<div class="kb-list">' + rows.join('') + '</div></div>';
   }
 
-  // noLink 는 학습 카드에서만 쓴다. 풀던 카드를 떠나 버리면 돌아오기 어렵다.
-  function detailHTML(w, withRuby, noLink) {
+  function detailHTML(w, withRuby) {
     var parts = [];
 
     // 문제를 푸는 중에는 읽는 법이 새면 안 되므로 답을 본 뒤에만 펼친다.
     if (withRuby) {
-      var kb = kanjiBreakdownHTML(w, noLink);
+      var kb = kanjiBreakdownHTML(w);
       if (kb) parts.push(kb);
     }
 
@@ -2692,8 +2715,10 @@
       if (b) {
         ev.preventDefault();
         ev.stopPropagation();
-        // 상세 창 안에서는 화면을 옮기지 않고 그 창에서 파고든다.
+        // 상세 창 안에서는 그 창에서 더 파고든다.
         if (b.closest('#detailSheet')) dsPush({ t: 'kanji', k: b.dataset.k });
+        // 학습 중에는 화면을 옮기지 않는다. 풀던 카드 위에 창을 덮어 보여준다.
+        else if (view === 'study') dsShow({ t: 'kanji', k: b.dataset.k });
         else openKanji(b.dataset.k);
         return;
       }
@@ -2710,11 +2735,12 @@
       if (!session || peek !== null) return;
       dsOpen(session.queue[session.index].w);
     });
-    $('btnDsBack').addEventListener('click', dsBack);
-    $('btnDsClose').addEventListener('click', dsClose);
+    // ← 는 폰의 뒤로가기와 같은 길을 타야 히스토리가 어긋나지 않는다.
+    $('btnDsBack').addEventListener('click', goBack);
+    $('btnDsClose').addEventListener('click', dsCloseAll);
     // 바깥을 누르면 닫는다. 상자 안을 누른 것은 그대로 둔다.
     $('detailSheet').addEventListener('click', function (ev) {
-      if (ev.target === this) dsClose();
+      if (ev.target === this) dsCloseAll();
     });
     // 칩에 없는 한자는 직접 쳐서 연다. 입력한 것 중 첫 한자를 쓴다.
     $('kanjiInput').addEventListener('keydown', function (ev) {
@@ -3022,7 +3048,7 @@
       // 상세 창이 덮여 있으면 채점 키가 뒤에서 돌면 안 된다.
       // Escape 는 한 칸 되돌아가고, 처음 자리면 창을 닫는다.
       if (dsIsOpen()) {
-        if (ev.key === 'Escape') { ev.preventDefault(); dsBack(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); goBack(); }
         return;
       }
       // 검색 패널이 열려 있으면 O/X 단축키가 검색어에 끼어들면 안 된다.
