@@ -860,6 +860,11 @@ kbd {
   background: var(--accent); color: var(--bg); font-size: 14px; font-weight: 700; font-family: inherit;
 }
 .sheet-go:disabled { background: var(--panel2); color: var(--dim); cursor: not-allowed; }
+/* 받기·올리기를 나란히. 올리기는 덮어쓰는 쪽이라 받기를 옅게 둬서 구분한다. */
+.sync-acts { display: flex; gap: 8px; }
+.sync-acts .sheet-go { flex: 1; }
+.sheet-go.alt { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.sheet-go.alt:disabled { background: transparent; border-color: var(--line); color: var(--dim); }
 .sheet-sub {
   width: 100%; padding: 10px; border-radius: 10px; cursor: pointer;
   background: transparent; border: none; color: var(--dim);

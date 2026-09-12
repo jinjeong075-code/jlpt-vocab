@@ -131,14 +131,15 @@
 
   function path() { return 'users/' + user.uid + '/backup'; }
 
-  // 받아서 합치고 → 합친 결과를 다시 올린다. 두 걸음을 따로 표시한다.
-  // 순서를 바꾸면 안 된다. 먼저 올려 버리면 다른 기기가 쌓은 기록을 덮어쓴다.
-  function sync() {
+  // 받기와 올리기는 따로 돈다.
+  // 한쪽 기기가 이상해졌을 때 '올리기만' 하거나 '받기만' 할 수 있어야
+  // 성한 쪽을 지키면서 고칠 수 있다. 묶여 있으면 받는 순간 덮어써진다.
+
+  function down() {
     if (!user || busy || !navigator.onLine) return Promise.resolve(null);
     busy = true; phase = 'down'; lastResult = null; emit();
 
     var res = { found: false, merged: null, from: '', downAt: 0, upAt: 0 };
-
     return load().then(function (f) {
       return f.get(f.ref(f.db, path()));
     }).then(function (snap) {
@@ -150,21 +151,43 @@
       }
       res.downAt = Date.now();
       save(DOWN_KEY, String(res.downAt));
-      // 여기까지가 '받기'. 받은 것이 없어도 받아 보긴 했으므로 시각을 남긴다.
-      phase = 'up'; emit();
-      return fb.set(fb.ref(fb.db, path()), Store.exportAll());
+      lastResult = res;
+      busy = false; phase = ''; emit();
+      return res;
+    }).catch(function (e) {
+      lastResult = { failedAt: 'down', downAt: 0, upAt: 0, found: false, merged: null, from: '' };
+      busy = false; phase = ''; emit();
+      throw e;
+    });
+  }
+
+  function up() {
+    if (!user || busy || !navigator.onLine) return Promise.resolve(null);
+    busy = true; phase = 'up'; lastResult = null; emit();
+
+    var res = { found: false, merged: null, from: '', downAt: 0, upAt: 0 };
+    return load().then(function (f) {
+      return f.set(f.ref(f.db, path()), Store.exportAll());
     }).then(function () {
       res.upAt = Date.now();
       save(UP_KEY, String(res.upAt));
       save(LAST_KEY, String(res.upAt));
       lastResult = res;
       busy = false; phase = ''; emit();
-      return res.merged;
+      return res;
     }).catch(function (e) {
-      // 어느 걸음에서 멈췄는지 남겨 둔다. 받기는 됐는데 올리기가 안 된 경우가 있다.
-      lastResult = { failedAt: phase, downAt: res.downAt, upAt: 0, found: res.found, merged: res.merged, from: res.from };
+      lastResult = { failedAt: 'up', downAt: 0, upAt: 0, found: false, merged: null, from: '' };
       busy = false; phase = ''; emit();
       throw e;
+    });
+  }
+
+  // 자동 동기화는 여전히 받고 나서 올린다. 그래야 두 기기가 합쳐진다.
+  // 사람이 누르는 버튼만 나뉘어 있다.
+  function sync() {
+    if (!user || busy || !navigator.onLine) return Promise.resolve(null);
+    return down().then(function (res) {
+      return up().then(function () { return res ? res.merged : null; });
     });
   }
 
@@ -211,6 +234,8 @@
     signUp: signUp,
     signOut: signOut,
     sync: sync,
+    down: down,
+    up: up,
     touch: touch
   };
 })(window);

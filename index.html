@@ -511,8 +511,11 @@
         <span class="sync-v"><button class="mini-btn go" id="btnRestoreReset"></button></span>
       </div>
       <p class="sheet-err" id="syncErr2" hidden></p>
-      <button class="sheet-go" id="btnSyncNow">받고 올리기</button>
-      <p class="sheet-note sync-why">한쪽만 하지 않습니다. 받아서 합친 뒤 올려야 다른 기기가 쌓은 기록이 지워지지 않습니다.</p>
+      <div class="sync-acts">
+        <button class="sheet-go alt" id="btnSyncDown">받기</button>
+        <button class="sheet-go" id="btnSyncUp">올리기</button>
+      </div>
+      <p class="sheet-note sync-why">받기는 클라우드를 이 기기에 합칩니다. 올리기는 이 기기를 클라우드에 덮습니다.</p>
       <button class="sheet-sub" id="btnSignOut">로그아웃</button>
     </div>
   </div>

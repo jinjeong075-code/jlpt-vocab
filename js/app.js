@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v58';
+  var BUILD = 'v68';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1619,10 +1619,11 @@
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       renderSyncDir(st);
-      $('btnSyncNow').disabled = st.busy || !st.online;
-      $('btnSyncNow').textContent = st.phase === 'down' ? '받는 중…'
-        : st.phase === 'up' ? '올리는 중…'
-        : (st.online ? '받고 올리기' : '오프라인');
+      var off = st.busy || !st.online;
+      $('btnSyncDown').disabled = off;
+      $('btnSyncUp').disabled = off;
+      $('btnSyncDown').textContent = st.phase === 'down' ? '받는 중…' : (st.online ? '받기' : '오프라인');
+      $('btnSyncUp').textContent   = st.phase === 'up'   ? '올리는 중…' : (st.online ? '올리기' : '오프라인');
     } else if (st.email) {
       $('syncEmail').value = $('syncEmail').value || st.email;
     }
@@ -1733,9 +1734,20 @@
         .catch(function (e) { showSyncErr('syncErr', syncError(e)); });
     });
 
-    $('btnSyncNow').addEventListener('click', function () {
+    $('btnSyncDown').addEventListener('click', function () {
       showSyncErr('syncErr2', '');
-      Sync.sync()
+      Sync.down()
+        .then(function () { renderHome(); })
+        .catch(function (e) { showSyncErr('syncErr2', syncError(e)); });
+    });
+    // 올리기는 클라우드를 이 기기 내용으로 덮는다. 되돌릴 수 없으니 한 번 묻는다.
+    $('btnSyncUp').addEventListener('click', function () {
+      var s = Store.summarizeAll();
+      if (!confirm('이 기기의 기록을 클라우드에 덮어씁니다.\n' +
+                   '학습한 단어 ' + (s.total - s['new']) + '개 · 장기기억 ' + s.long + '개\n\n' +
+                   '다른 기기에만 있던 기록은 사라집니다. 계속할까요?')) return;
+      showSyncErr('syncErr2', '');
+      Sync.up()
         .then(function () { renderHome(); })
         .catch(function (e) { showSyncErr('syncErr2', syncError(e)); });
     });
