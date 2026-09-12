@@ -89,7 +89,6 @@
         user = u;
         if (u && u.email) save(EMAIL_KEY, u.email);
         emit();
-        if (u) sync();   // 로그인되면 바로 한 번 맞춘다
       });
       return fb;
     }).catch(function (e) {
@@ -191,21 +190,13 @@
     });
   }
 
-  /* ---------- 학습 중 자동 저장 ---------- */
-  // 세션을 끝내지 않고 앱을 꺼도 잃지 않도록, 단어를 채점할 때마다
-  // 타이머를 다시 걸어 마지막 채점 후 잠시 뒤에 한 번 올린다.
-
-  var IDLE_PUSH_MS = 20000;
-  var timer = null;
-
-  function touch() {
-    if (!user) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(function () {
-      timer = null;
-      sync().catch(function () {});
-    }, IDLE_PUSH_MS);
-  }
+  /* ---------- 자동 동기화는 하지 않는다 ---------- */
+  // 언제 무엇이 오가는지 사람이 정한다. 앱이 알아서 올리고 받으면
+  // 한쪽이 이상해졌을 때 손쓸 틈 없이 다른 쪽까지 덮인다.
+  //
+  // touch 는 앱 곳곳에서 부르고 있어 자리만 남겨 둔다. 아무것도 하지 않는다.
+  // 대신 마지막 올리기 이후에 바뀐 것이 있으면 ☁ 아이콘으로 알린다.
+  function touch() {}
 
   /* ---------- 시작 ---------- */
 
@@ -214,16 +205,8 @@
     // 전에 로그인한 적이 있으면 SDK 를 미리 불러와 세션을 되살린다.
     if (read(EMAIL_KEY)) load().catch(function () {});
 
-    global.addEventListener('online', function () { if (user) sync().catch(function () {}); });
-
-    // 앱을 덮거나 끌 때 마지막 상태를 올린다.
-    // visibilitychange 는 확실하지 않은 경우가 있어 pagehide 도 같이 건다.
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden && user) sync().catch(function () {});
-    });
-    global.addEventListener('pagehide', function () {
-      if (user) sync().catch(function () {});
-    });
+    // 켜질 때도, 꺼질 때도, 인터넷이 돌아올 때도 알아서 올리거나 받지 않는다.
+    // 오가는 것은 사람이 받기·올리기를 누를 때뿐이다.
   }
 
   global.Sync = {

@@ -68,8 +68,23 @@
       return raw ? JSON.parse(raw) : fallback;
     } catch (e) { return fallback; }
   }
+  // 올릴 거리가 생겼는지 알기 위해 마지막으로 바뀐 시각을 남긴다.
+  // 자동 동기화를 하지 않으므로, 안 올린 것이 있으면 앱이 알려 줘야 한다.
+  var CHANGED_KEY = 'jvocab.changedAt.v1';
+  var SYNCED_KEYS = { };
+  SYNCED_KEYS[PROG_KEY] = 1; SYNCED_KEYS[TIME_KEY] = 1;
+  SYNCED_KEYS[SESS_KEY] = 1; SYNCED_KEYS[GSESS_KEY] = 1;
+  SYNCED_KEYS[VOCAB_KEY] = 1; SYNCED_KEYS[GRAM_KEY] = 1;
+
   function write(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+      if (SYNCED_KEYS[key]) localStorage.setItem(CHANGED_KEY, String(Date.now()));
+    } catch (e) {}
+  }
+
+  function lastChange() {
+    try { return Number(localStorage.getItem(CHANGED_KEY) || 0); } catch (e) { return 0; }
   }
 
   var days = {};      // { "26": {day, title, words:[...]} }
@@ -869,7 +884,12 @@
     return (s && !s.cleared && s.queue) ? s : null;
   }
 
+  // 이미 지운 표시가 있으면 시각을 다시 찍지 않는다.
+  // 홈을 그릴 때마다 불리는 자리라, 새로 찍으면 그 표시가 영원히 최신이 되어
+  // 다른 기기에서 올린 세션을 계속 밀어낸다.
   function clearSession() {
+    var cur = read(SESS_KEY, null);
+    if (cur && cur.cleared) return;
     write(SESS_KEY, { cleared: 1, savedAt: Date.now() });
   }
 
@@ -880,6 +900,8 @@
     return (s && !s.cleared && s.queue) ? s : null;
   }
   function clearGSession() {
+    var cur = read(GSESS_KEY, null);
+    if (cur && cur.cleared) return;
     write(GSESS_KEY, { cleared: 1, savedAt: Date.now() });
   }
 
@@ -1182,6 +1204,7 @@
     summarizeAll: summarizeAll,
     dueList: dueList,
     weakList: weakList,
+    lastChange: lastChange,
     lastFix: function () { return lastFixCount; },
     lastUndo: function () { return lastUndoCount; },
     undoneWords: undoneWords,

@@ -819,6 +819,13 @@ kbd {
 /* 동기화가 켜졌는지 아이콘 색으로 바로 알 수 있게 한다.
    꺼져 있으면 백업 파일을 손으로 옮기는 수밖에 없는데, 그걸 모르고 지나치기 쉽다. */
 .icon-btn.on { color: var(--ok); }
+/* 마지막 올리기 이후에 바뀐 것이 있음. 자동으로 안 올리므로 눈에 띄어야 한다. */
+.icon-btn.wait { color: var(--warn); position: relative; }
+.icon-btn.wait::after {
+  content: ""; position: absolute; right: 7px; top: 7px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--warn); box-shadow: 0 0 0 2px var(--bg);
+}
 .icon-btn.off { color: var(--dim); position: relative; }
 .icon-btn.off::after {
   content: ""; position: absolute; right: 7px; top: 7px;

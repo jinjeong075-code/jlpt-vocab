@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v69';
+  var BUILD = 'v70';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1583,17 +1583,21 @@
 
     // 아이콘(svg)은 그대로 두고 상태만 색으로 알린다.
     // 예전에는 여기서 textContent 로 이모지를 넣어 svg 를 지워 버렸다.
+    // 자동으로 올리지 않으므로, 마지막 올리기 이후에 바뀐 것이 있으면 표시한다.
+    var unsent = st.signedIn && Store.lastChange() > (st.lastUp || 0);
     $('btnSyncTop').classList.toggle('spin', st.busy);
-    $('btnSyncTop').classList.toggle('on', st.signedIn);
+    $('btnSyncTop').classList.toggle('on', st.signedIn && !unsent);
+    $('btnSyncTop').classList.toggle('wait', !!unsent);
     $('btnSyncTop').classList.toggle('off', !st.signedIn);
     // 돌고 있을 때는 어느 쪽으로 가는 중인지 아이콘 옆 화살표로 알린다.
     $('btnSyncTop').classList.toggle('dn', st.phase === 'down');
     $('btnSyncTop').classList.toggle('up', st.phase === 'up');
     $('btnSyncTop').title = st.phase === 'down' ? '클라우드에서 받는 중'
       : st.phase === 'up' ? '이 기기 기록을 올리는 중'
+      : unsent ? '올리지 않은 기록이 있습니다 — 눌러서 올리기'
       : st.signedIn
-        ? '동기화 켜짐 · ' + st.email
-        : '동기화 꺼짐 — 눌러서 로그인하면 PC와 폰이 자동으로 합쳐집니다';
+        ? '올릴 것 없음 · ' + st.email
+        : '로그인 안 됨 — 눌러서 로그인';
 
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
