@@ -856,19 +856,31 @@
   // 단어 전체를 저장하지 않고 (day, no, word) 참조만 남긴다.
   // 나중에 단어 파일을 다시 올려도 어긋나지 않는다.
 
-  function saveSession(s) { write(SESS_KEY, s); }
+  // 저장할 때마다 시각을 찍는다. 기기 둘이 각자 풀던 것이 있을 때
+  // 어느 쪽이 최신인지 이 값으로만 가린다.
+  //
+  // 다 풀고 지울 때도 그냥 지우지 않고 '지웠다'는 표시를 남긴다.
+  // 그래야 그 사실도 동기화로 건너가서, 다른 기기가 이미 끝난 학습을
+  // 이어하기로 다시 띄우지 않는다.
+  function saveSession(s) { s.savedAt = Date.now(); write(SESS_KEY, s); }
 
-  function loadSession() { return read(SESS_KEY, null); }
+  function loadSession() {
+    var s = read(SESS_KEY, null);
+    return (s && !s.cleared && s.queue) ? s : null;
+  }
 
   function clearSession() {
-    try { localStorage.removeItem(SESS_KEY); } catch (e) {}
+    write(SESS_KEY, { cleared: 1, savedAt: Date.now() });
   }
 
   // 문법도 따로 이어하기를 둔다. 단어를 풀다 문법으로 넘어가도 둘 다 남아야 한다.
-  function saveGSession(s) { write(GSESS_KEY, s); }
-  function loadGSession() { return read(GSESS_KEY, null); }
+  function saveGSession(s) { s.savedAt = Date.now(); write(GSESS_KEY, s); }
+  function loadGSession() {
+    var s = read(GSESS_KEY, null);
+    return (s && !s.cleared && s.queue) ? s : null;
+  }
   function clearGSession() {
-    try { localStorage.removeItem(GSESS_KEY); } catch (e) {}
+    write(GSESS_KEY, { cleared: 1, savedAt: Date.now() });
   }
 
   // 저장해 둔 참조로 실제 단어를 되찾는다. 못 찾으면 null.
@@ -897,7 +909,11 @@
       vocab: days,
       grammar: gram,
       progress: progress,
-      time: timeLog
+      time: timeLog,
+      // 풀다 만 학습도 같이 보낸다. 폰에서 풀던 것을 PC 에서 이어받을 수 있어야 한다.
+      // 단어 전체가 아니라 (Day, 번호) 참조만 들어 있어서 기기가 달라도 그대로 맞는다.
+      session: read(SESS_KEY, null),
+      gsession: read(GSESS_KEY, null)
     };
   }
 
@@ -979,7 +995,21 @@
     }
     stat.time = timeTotal();
 
+    // 풀다 만 학습은 합칠 수가 없다. 둘 중 나중에 저장된 쪽을 쓴다.
+    // '지웠다'는 표시도 같은 규칙을 타므로, 한 기기에서 다 푼 학습이
+    // 다른 기기에서 이어하기로 되살아나지 않는다.
+    stat.resumed = mergeSession(SESS_KEY, obj.session) ? 1 : 0;
+    if (mergeSession(GSESS_KEY, obj.gsession)) stat.resumed = (stat.resumed || 0) + 1;
+
     return stat;
+  }
+
+  function mergeSession(key, incoming) {
+    if (!incoming) return false;
+    var cur = read(key, null);
+    if (cur && (cur.savedAt || 0) >= (incoming.savedAt || 0)) return false;
+    write(key, incoming);
+    return true;
   }
 
   /* ---------- 초기화 전 기록 되돌리기 ---------- */
