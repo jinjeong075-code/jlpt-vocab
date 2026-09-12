@@ -1056,27 +1056,6 @@
 
   function sessionNote() { return lastSessionNote; }
 
-  /* ---------- 초기화 전 기록 되돌리기 ---------- */
-
-  function resetBackup() {
-    return read('jvocab.backup.prereset.v1', null);
-  }
-
-  // 되돌릴 때도 지금 시각을 찍는다. 그래야 다른 기기의 0 짜리 기록을 이긴다.
-  function restoreResetBackup() {
-    var b = resetBackup();
-    if (!b || !b.progress) return 0;
-    var n = 0, now = Date.now();
-    Object.keys(b.progress).forEach(function (k) {
-      var r = b.progress[k];
-      if (!r) return;
-      r.last = now;
-      progress[k] = r;
-      n++;
-    });
-    if (n) write(PROG_KEY, progress);
-    return n;
-  }
 
   function resetProgress() {
     progress = {};
@@ -1231,8 +1210,6 @@
     lastFix: function () { return lastFixCount; },
     lastUndo: function () { return lastUndoCount; },
     undoneWords: undoneWords,
-    resetBackup: resetBackup,
-    restoreResetBackup: restoreResetBackup,
     shakyList: shakyList,
     slowList: slowList,
     clearSlowKey: clearSlowKey,

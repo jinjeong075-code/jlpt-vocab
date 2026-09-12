@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v72';
+  var BUILD = 'v73';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1383,7 +1383,10 @@
 
   function renderResult() {
     Store.clearSession(); // 다 풀었으므로 이어하기 대상이 아니다
-    if (global_Sync()) Sync.sync().catch(function () {}); // 결과를 바로 올린다
+    // 여기서 자동으로 올리지 않는다. 올리기는 클라우드를 이 기기 내용으로 덮는 일이라,
+    // 다른 기기가 올려 둔 이어하기를 말없이 지워 버린다. 실제로 그것 때문에
+    // 폰에서 올린 학습이 PC 에서 안 받아졌다. 올릴 것이 생겼다는 표시만 남긴다.
+    if (global_Sync()) Sync.touch();
     $('progressFill').style.width = '100%';
     $('progressText').textContent = session.total + ' / ' + session.total;
     // 틀린 단어는 맞힐 때까지 다시 나왔으므로 기록에 같은 단어가 여러 번 있다.
@@ -1607,19 +1610,6 @@
     $('undoRow').hidden = !undone.length;
     if (undone.length) $('btnUndoList').textContent = undone.length + '개 목록 보기';
 
-    // 초기화 전 기록은 지우지 않고 남겨 둔다. 후회하면 여기서 되돌린다.
-    // 언제 만들어진 백업인지 반드시 같이 보여준다.
-    // 기기마다 백업 시점이 다르므로, 날짜를 봐야 어느 쪽을 되돌릴지 고를 수 있다.
-    var bk = Store.resetBackup();
-    $('resetRow').hidden = !bk;
-    if (bk) {
-      var d = new Date(bk.at || 0);
-      var when = bk.at
-        ? (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
-          ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
-        : '시점 불명';
-      $('btnRestoreReset').textContent = when + ' · ' + bk.n + '개 되돌리기';
-    }
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
       renderSyncDir(st);
@@ -1970,7 +1960,6 @@
     $('pasteBox').value = '';
     $('howToPanel').hidden = true;
     renderHome();
-    if (global_Sync()) Sync.sync().catch(function () {});  // 다른 기기로 바로 보낸다
     alert(msg);
   }
 
@@ -2610,7 +2599,6 @@
       startGram(gMode, wrong, '틀린 문형 다시');
     });
     $('gHomeBtn').addEventListener('click', function () { renderGramHome(); show('gram'); });
-    if (global_Sync()) Sync.sync().catch(function () {});
   }
 
   /* ---------------- 백업 내보내기 ---------------- */
@@ -2834,20 +2822,6 @@
       renderSelBar();
     });
 
-    $('btnRestoreReset').addEventListener('click', function () {
-      var bk = Store.resetBackup();
-      if (!bk) return;
-      var bd = new Date(bk.at || 0);
-      if (!confirm('이 기기가 ' + (bk.at ? (bd.getMonth() + 1) + '월 ' + bd.getDate() + '일 ' +
-            ('0' + bd.getHours()).slice(-2) + ':' + ('0' + bd.getMinutes()).slice(-2) : '언젠가') +
-            '에 남긴 기록 ' + bk.n + '개로 되돌립니다.\n' +
-            '그 이후의 학습은 사라집니다. 계속할까요?')) return;
-      var n = Store.restoreResetBackup();
-      $('syncPanel').hidden = true;
-      renderHome(); show('home');
-      if (global_Sync()) Sync.sync().catch(function () {});
-      alert(n + '개를 되돌렸습니다.');
-    });
 
     $('btnUndoList').addEventListener('click', function () {
       var list = Store.undoneWords();
