@@ -1033,24 +1033,34 @@
 
   // 왜 적용됐는지/왜 아닌지를 남긴다. 안 넘어올 때 어디를 봐야 하는지 알 수 있어야 한다.
   var lastSessionNote = '', lastGSessionNote = '', lastMergeNote = '';
-
+  // 받기는 '클라우드에 있는 것을 이 기기로 가져오기'다. 이어하기도 그 규칙을 그대로 따른다.
+  //
+  // 예전에는 저장 시각을 견줘서 이 기기 것이 더 나중이면 물리쳤다.
+  // 자동 동기화가 있던 시절에는 그것이 방패였지만, 지금은 사람이 누를 때만 오간다.
+  // 그 규칙이 남아 있으니 폰에서 올린 학습을 PC 로 가져올 수가 없었다.
+  // PC 에 풀다 만 학습이 있으면 그것이 이기고, 넘어왔나 보려고 이어하기를
+  // 한 번 눌러 한 문제만 풀어도 PC 쪽 시각이 다시 찍혀 더 굳어졌다.
+  // 눌러 볼수록 멀어지는 구조였다.
+  //
+  // 이제 받기를 누르면 클라우드 것을 그대로 가져온다. 무엇을 가져왔는지는 적어 둔다.
   function mergeSession(key, incoming) {
-    var cur = read(key, null);
-    var curAt = cur ? (cur.savedAt || 0) : 0;
-
     if (!incoming) { lastMergeNote = '올라온 것에 학습 자리가 없음'; return false; }
-    if (incoming.cleared && !curAt) { lastMergeNote = '저쪽은 다 푼 상태'; return false; }
-    if (curAt >= (incoming.savedAt || 0)) {
-      lastMergeNote = '이 기기 것이 더 최신 (' +
-        new Date(curAt).toLocaleString('ko') + ' vs ' +
-        new Date(incoming.savedAt || 0).toLocaleString('ko') + ')';
+
+    var cur = read(key, null);
+    // 같은 것을 또 받는 것은 바꾼 것이 아니다. 괜히 바뀐 척하지 않는다.
+    if (cur && incoming.savedAt && cur.savedAt === incoming.savedAt) {
+      lastMergeNote = '이미 같은 이어하기를 갖고 있음';
       return false;
     }
+
+    var had = cur && !cur.cleared && cur.queue;
+    var len = incoming.queue ? incoming.queue.length : 0;
     write(key, incoming);
     lastMergeNote = incoming.cleared
-      ? '저쪽에서 다 풀어서 이어하기를 비움'
-      : '이어하기를 받음 (' + (incoming.label || '') + ' ' +
-        (incoming.index + 1) + '/' + (incoming.queue ? incoming.queue.length : 0) + ')';
+      ? (had ? '저쪽에서 다 풀어서 이어하기를 비움' : '저쪽은 다 푼 상태')
+      : '이어하기를 받음 · ' + (incoming.label || '학습') + ' ' +
+        Math.min((incoming.index || 0) + 1, len) + '/' + len +
+        (had ? ' (이 기기에서 풀던 것은 밀려남)' : '');
     return true;
   }
 

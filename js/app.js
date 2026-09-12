@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v73';
+  var BUILD = 'v74';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1835,7 +1835,12 @@
     $('btnSyncDown').addEventListener('click', function () {
       showSyncErr('syncErr2', '');
       Sync.down()
-        .then(function () { renderHome(); })
+        .then(function () {
+          renderHome();
+          // 이어하기가 어떻게 됐는지는 제일 헷갈리는 자리다. 작은 글씨 말고 크게 알린다.
+          var note = Store.sessionNote();
+          if (note) toast(note);
+        })
         .catch(function (e) { showSyncErr('syncErr2', syncError(e)); });
     });
     // 올리기는 클라우드를 이 기기 내용으로 덮는다. 되돌릴 수 없으니 한 번 묻는다.
