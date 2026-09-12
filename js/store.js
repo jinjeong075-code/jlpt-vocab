@@ -1020,19 +1020,41 @@
     // 풀다 만 학습은 합칠 수가 없다. 둘 중 나중에 저장된 쪽을 쓴다.
     // '지웠다'는 표시도 같은 규칙을 타므로, 한 기기에서 다 푼 학습이
     // 다른 기기에서 이어하기로 되살아나지 않는다.
-    stat.resumed = mergeSession(SESS_KEY, obj.session) ? 1 : 0;
-    if (mergeSession(GSESS_KEY, obj.gsession)) stat.resumed = (stat.resumed || 0) + 1;
+    // 단어와 문법을 따로 센다. 한 변수에 같이 쓰면 뒤에 부른 쪽이 앞을 덮어
+    // 단어 세션이 잘 들어와도 '없음'으로 보인다.
+    var vocabTook = mergeSession(SESS_KEY, obj.session);
+    lastSessionNote = lastMergeNote;
+    var gramTook = mergeSession(GSESS_KEY, obj.gsession);
+    lastGSessionNote = lastMergeNote;
+    stat.resumed = (vocabTook ? 1 : 0) + (gramTook ? 1 : 0);
 
     return stat;
   }
 
+  // 왜 적용됐는지/왜 아닌지를 남긴다. 안 넘어올 때 어디를 봐야 하는지 알 수 있어야 한다.
+  var lastSessionNote = '', lastGSessionNote = '', lastMergeNote = '';
+
   function mergeSession(key, incoming) {
-    if (!incoming) return false;
     var cur = read(key, null);
-    if (cur && (cur.savedAt || 0) >= (incoming.savedAt || 0)) return false;
+    var curAt = cur ? (cur.savedAt || 0) : 0;
+
+    if (!incoming) { lastMergeNote = '올라온 것에 학습 자리가 없음'; return false; }
+    if (incoming.cleared && !curAt) { lastMergeNote = '저쪽은 다 푼 상태'; return false; }
+    if (curAt >= (incoming.savedAt || 0)) {
+      lastMergeNote = '이 기기 것이 더 최신 (' +
+        new Date(curAt).toLocaleString('ko') + ' vs ' +
+        new Date(incoming.savedAt || 0).toLocaleString('ko') + ')';
+      return false;
+    }
     write(key, incoming);
+    lastMergeNote = incoming.cleared
+      ? '저쪽에서 다 풀어서 이어하기를 비움'
+      : '이어하기를 받음 (' + (incoming.label || '') + ' ' +
+        (incoming.index + 1) + '/' + (incoming.queue ? incoming.queue.length : 0) + ')';
     return true;
   }
+
+  function sessionNote() { return lastSessionNote; }
 
   /* ---------- 초기화 전 기록 되돌리기 ---------- */
 
@@ -1205,6 +1227,7 @@
     dueList: dueList,
     weakList: weakList,
     lastChange: lastChange,
+    sessionNote: sessionNote,
     lastFix: function () { return lastFixCount; },
     lastUndo: function () { return lastUndoCount; },
     undoneWords: undoneWords,

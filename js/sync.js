@@ -145,8 +145,11 @@
       var remote = snap.exists() ? snap.val() : null;
       if (remote && Store.isBackup(remote)) {
         res.found = true;
-        res.merged = Store.importBackup(remote);
+        // 합치기 전에 먼저 적어 둔다. 올리기가 실제로 닿았는지 이걸로 안다.
         res.from = remote.device || '';
+        res.remoteAt = remote.exportedAt || '';
+        res.remoteHasSession = !!(remote.session && remote.session.queue);
+        res.merged = Store.importBackup(remote);
       }
       res.downAt = Date.now();
       save(DOWN_KEY, String(res.downAt));

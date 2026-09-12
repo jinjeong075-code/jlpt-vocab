@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v70';
+  var BUILD = 'v71';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1640,12 +1640,27 @@
   // 합친 결과를 사람이 읽는 한 줄로.
   // theirs 와 dates 만 쓴다. days·gram 은 같은 내용을 다시 받아도 올라가는 수라
   // '새로 받은 것'을 뜻하지 않는다. 그걸 적으면 매번 Day 50개 받았다고 거짓말을 한다.
+  // 클라우드에 놓인 것이 어느 기기가 언제 올린 것인지. 올리기가 닿았는지를 여기서 본다.
+  function cloudNote(r) {
+    var bits = [];
+    if (r.remoteAt) {
+      var d = new Date(r.remoteAt);
+      if (!isNaN(d)) bits.push((d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+        ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' 올린 것');
+    }
+    bits.push(r.remoteHasSession ? '학습 자리 있음' : '학습 자리 없음');
+    return bits.join(' · ');
+  }
+
   function mergeNote(m) {
     if (!m) return '';
     var bits = [];
     if (m.theirs) bits.push('진도 ' + m.theirs + '개');
     if (m.dates) bits.push('공부 시간 ' + m.dates + '일');
-    return bits.length ? bits.join(' · ') + ' 받음' : '새로 받은 것 없음';
+    // 이어하기가 왜 왔는지/왜 안 왔는지는 따로 적는다. 제일 헷갈리는 자리다.
+    var note = Store.sessionNote();
+    bits.push(note || '이어하기 변화 없음');
+    return bits.join(' · ');
   }
 
   function renderSyncDir(st) {
@@ -1660,7 +1675,7 @@
     } else {
       $('syncDownV').textContent = st.lastDown ? fmtAgo(st.lastDown) : '아직 없음';
       $('syncDownNote').textContent = (r && r.downAt)
-        ? (r.found ? mergeNote(r.merged) : '클라우드에 아직 아무것도 없음')
+        ? (r.found ? cloudNote(r) + ' — ' + mergeNote(r.merged) : '클라우드에 아직 아무것도 없음')
         : '';
       if (r && r.failedAt === 'down') { down.className = 'sync-step fail'; $('syncDownNote').textContent = '실패'; }
     }
