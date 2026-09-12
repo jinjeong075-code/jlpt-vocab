@@ -906,6 +906,10 @@ kbd {
 .sync-k { color: var(--dim); }
 .sync-v { text-align: right; word-break: break-all; }
 
+/* 설치된 서비스워커 버전. 앱 버전과 다르면 옛것이 앉아 있다는 뜻이라 눈에 띄게 둔다. */
+.sync-v .sw-v { margin-right: 8px; color: var(--dim); }
+.sync-v .sw-v.stale { color: var(--warn, #e0a458); }
+
 /* ---------- 검색 패널 (전체 화면 위에 겹침) ---------- */
 body.no-scroll { overflow: hidden; }
 

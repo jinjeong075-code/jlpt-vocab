@@ -502,6 +502,12 @@
       </div>
 
       <div class="sync-row"><span class="sync-k">앱 버전</span><span class="sync-v" id="syncBuild"></span></div>
+      <!-- 화면 쪽 버전과 설치된 서비스워커 버전은 따로 움직인다.
+           둘이 다르면 옛 파일이 아직 앉아 있다는 뜻이라, 눌러서 받아 올 수 있어야 한다. -->
+      <div class="sync-row">
+        <span class="sync-k">설치된 버전</span>
+        <span class="sync-v"><span id="syncSw" class="sw-v"></span><button class="mini-btn go" id="btnUpdate">업데이트 확인</button></span>
+      </div>
       <div class="sync-row" id="undoRow" hidden>
         <span class="sync-k">복구</span>
         <span class="sync-v"><button class="mini-btn go" id="btnUndoList"></button></span>
@@ -574,9 +580,25 @@
 <script src="js/app.js"></script>
 <script>
   // 설치형 앱으로 쓰기 위한 서비스워커. file:// 로 열었을 때는 등록되지 않는다.
+  // updateViaCache:'none' 이 없으면 브라우저가 sw.js 자체를 HTTP 캐시에서 꺼내 온다.
+  // GitHub Pages 는 10분쯤 캐시하라고 하므로, 그동안은 새 서비스워커가 있어도 못 본다.
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then(function (reg) {
+          // 앱을 열 때마다 조용히 한 번 확인한다.
+          try { reg.update(); } catch (e) {}
+          // 폰에서 앱 목록으로 갔다가 돌아오는 것은 '새로 열기'가 아니라
+          // 검사할 기회가 아예 없다. 돌아올 때도 확인한다. (10분에 한 번만)
+          var last = 0;
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) return;
+            if (Date.now() - last < 600000) return;
+            last = Date.now();
+            try { reg.update(); } catch (e) {}
+          });
+        })
+        .catch(function () {});
     });
   }
 </script>

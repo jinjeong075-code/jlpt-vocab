@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v71';
+  var BUILD = 'v72';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1716,6 +1716,94 @@
     el.hidden = !msg;
   }
 
+  /* ---------------- 앱 업데이트 ---------------- */
+  // 폰이 새 버전으로 안 넘어가던 이유는 서비스워커에 있었다.
+  // 세 군데를 고쳤다. (1) 받아 온 파일을 브라우저 HTTP 캐시가 가로채 옛것을 주고
+  // 그것이 다시 캐시에 덮이던 것, (2) sw.js 자체가 캐시돼 새 워커를 못 보던 것,
+  // (3) 앱 목록에서 되살릴 때는 검사할 기회조차 없던 것.
+  // 그래도 안 되면 사람이 직접 눌러 확인할 수 있어야 한다. 아래가 그 버튼이다.
+
+  var wantReload = false;
+
+  // 지금 앉아 있는 서비스워커가 몇 번인지 물어본다. 대답이 없으면 빈 문자열.
+  function swVersion() {
+    var sw = navigator.serviceWorker;
+    if (!sw || !sw.controller) return Promise.resolve('');
+    return new Promise(function (ok) {
+      var ch = new MessageChannel(), done = false;
+      ch.port1.onmessage = function (e) {
+        done = true; ok((e.data && e.data.cache) || '');
+      };
+      try { sw.controller.postMessage({ ask: 'version' }, [ch.port2]); }
+      catch (e) { return ok(''); }
+      // 옛 서비스워커는 이 물음을 모른다. 대답이 없는 것도 답이다.
+      setTimeout(function () { if (!done) ok('(옛 버전)'); }, 1200);
+    });
+  }
+
+  function renderSwVersion() {
+    var el = $('syncSw');
+    if (!el) return;
+    if (!navigator.serviceWorker) { el.textContent = '설치 안 됨'; return; }
+    swVersion().then(function (v) {
+      // 캐시 이름은 jvocab-v72 꼴이다. 뒤의 v72 만 보인다.
+      var short = v ? v.replace(/^jvocab-/, '') : '설치 안 됨';
+      el.textContent = short;
+      el.classList.toggle('stale', !!v && short !== BUILD);
+    });
+  }
+
+  // 새 워커가 설치되면 곧바로 자리를 넘겨받게 한다.
+  function takeOver(w) {
+    if (!w) return;
+    var poke = function () {
+      if (w.state === 'installed' || w.state === 'activated') {
+        try { w.postMessage({ ask: 'skipWaiting' }); } catch (e) {}
+      }
+    };
+    w.addEventListener('statechange', poke);
+    poke();
+  }
+
+  function checkUpdate() {
+    var b = $('btnUpdate');
+    if (!navigator.serviceWorker) { toast('이 브라우저에서는 확인할 수 없습니다'); return; }
+    b.disabled = true;
+    b.textContent = '확인 중…';
+    var reset = function (msg) {
+      b.disabled = false;
+      b.textContent = '업데이트 확인';
+      if (msg) toast(msg);
+      renderSwVersion();
+    };
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (!reg) return reset('설치되어 있지 않습니다');
+      return reg.update().then(function () {
+        var fresh = reg.installing || reg.waiting;
+        if (!fresh) return reset('이미 최신입니다');
+        b.textContent = '새 버전 받는 중…';
+        wantReload = true;
+        takeOver(fresh);
+        // 자리를 넘겨받으면 controllerchange 가 새로 고친다.
+        // 그게 안 와도 10초 뒤에는 그냥 새로 고친다. 받아는 놨으니 손해가 없다.
+        setTimeout(function () { if (wantReload) location.reload(); }, 10000);
+      });
+    }).catch(function () { reset('확인 실패 — 인터넷을 확인해 주세요'); });
+  }
+
+  function bindUpdate() {
+    var b = $('btnUpdate');
+    if (b) b.addEventListener('click', checkUpdate);
+    if (!navigator.serviceWorker) return;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      // 버튼을 눌러서 기다리던 중이면 바로 새로 고친다.
+      // 그렇지 않으면 학습하다 화면이 날아가지 않게, 알리기만 한다.
+      if (wantReload) { wantReload = false; location.reload(); return; }
+      renderSwVersion();
+      toast('새 버전이 준비됐습니다. 앱을 다시 열면 적용됩니다');
+    });
+  }
+
   function bindSync() {
     if (!global_Sync()) return;
 
@@ -1726,6 +1814,7 @@
       showSyncErr('syncErr', ''); showSyncErr('syncErr2', '');
       pushNav();
       $('syncPanel').hidden = false;
+      renderSwVersion();
       renderSync(Sync.status());
     });
     $('btnSyncClose').addEventListener('click', goBack);
@@ -3217,6 +3306,7 @@
   Store.init();
   bind();
   bindSync();
+  bindUpdate();
   window.addEventListener('popstate', handleBack);
   ['click', 'keydown', 'pointerdown', 'touchstart'].forEach(function (t) {
     document.addEventListener(t, markActivity, true);
