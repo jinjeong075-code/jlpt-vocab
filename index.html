@@ -479,7 +479,28 @@
 
     <div id="syncIn" class="sheet-body" hidden>
       <div class="sync-row"><span class="sync-k">계정</span><span class="sync-v" id="syncWho"></span></div>
-      <div class="sync-row"><span class="sync-k">마지막 동기화</span><span class="sync-v" id="syncLast"></span></div>
+
+      <!-- 동기화는 '받기 → 합치기 → 올리기' 두 걸음이다. 어디까지 됐는지 따로 보여준다.
+           순서를 바꾸면 안 된다. 먼저 올리면 다른 기기가 쌓은 기록을 덮어쓴다. -->
+      <div class="sync-dir">
+        <div class="sync-step" id="stepDown">
+          <span class="sd-arrow">↓</span>
+          <span class="sd-body">
+            <span class="sd-k">받기</span>
+            <span class="sd-v" id="syncDownV"></span>
+            <span class="sd-note" id="syncDownNote"></span>
+          </span>
+        </div>
+        <div class="sync-step" id="stepUp">
+          <span class="sd-arrow">↑</span>
+          <span class="sd-body">
+            <span class="sd-k">올리기</span>
+            <span class="sd-v" id="syncUpV"></span>
+            <span class="sd-note" id="syncUpNote"></span>
+          </span>
+        </div>
+      </div>
+
       <div class="sync-row"><span class="sync-k">앱 버전</span><span class="sync-v" id="syncBuild"></span></div>
       <div class="sync-row" id="undoRow" hidden>
         <span class="sync-k">복구</span>
@@ -490,7 +511,8 @@
         <span class="sync-v"><button class="mini-btn go" id="btnRestoreReset"></button></span>
       </div>
       <p class="sheet-err" id="syncErr2" hidden></p>
-      <button class="sheet-go" id="btnSyncNow">지금 동기화</button>
+      <button class="sheet-go" id="btnSyncNow">받고 올리기</button>
+      <p class="sheet-note sync-why">한쪽만 하지 않습니다. 받아서 합친 뒤 올려야 다른 기기가 쌓은 기록이 지워지지 않습니다.</p>
       <button class="sheet-sub" id="btnSignOut">로그아웃</button>
     </div>
   </div>

@@ -11,12 +11,18 @@
 
   var SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
   var LAST_KEY = 'jvocab.lastSync.v1';
+  var DOWN_KEY = 'jvocab.lastDown.v1';
+  var UP_KEY = 'jvocab.lastUp.v1';
   var EMAIL_KEY = 'jvocab.email.v1';
 
   var cfg = global.FIREBASE_CONFIG || null;
   var fb = null;          // { app, auth, db, fns }
   var user = null;
   var busy = false;
+  // 지금 어느 쪽으로 가고 있는지. '' 는 쉬는 중, 'down' 은 받는 중, 'up' 은 올리는 중.
+  // 한 번에 도는 두 걸음이라도 어디서 멈췄는지는 보여야 한다.
+  var phase = '';
+  var lastResult = null;  // 마지막으로 받아서 합친 결과
   var listeners = [];
 
   function configured() {
@@ -36,7 +42,14 @@
       signedIn: !!user,
       email: user ? user.email : (read(EMAIL_KEY) || ''),
       busy: busy,
+      phase: phase,                              // '' | 'down' | 'up'
       last: Number(read(LAST_KEY) || 0),
+      // 예전 버전은 한 시각만 남겼다. 그 시각은 '받고 올리기'를 다 마친 때라
+      // 양쪽 모두의 마지막 시각으로 써도 맞다. 안 그러면 쭉 써 온 기기가
+      // 한 번도 동기화한 적 없는 것처럼 보인다.
+      lastDown: Number(read(DOWN_KEY) || read(LAST_KEY) || 0),
+      lastUp: Number(read(UP_KEY) || read(LAST_KEY) || 0),
+      result: lastResult,
       online: navigator.onLine
     };
   }
@@ -107,6 +120,9 @@
       user = null;
       drop(EMAIL_KEY);
       drop(LAST_KEY);
+      drop(DOWN_KEY);
+      drop(UP_KEY);
+      lastResult = null;
       emit();
     });
   }
@@ -115,28 +131,39 @@
 
   function path() { return 'users/' + user.uid + '/backup'; }
 
-  // 받아서 합치고 → 합친 결과를 다시 올린다.
+  // 받아서 합치고 → 합친 결과를 다시 올린다. 두 걸음을 따로 표시한다.
+  // 순서를 바꾸면 안 된다. 먼저 올려 버리면 다른 기기가 쌓은 기록을 덮어쓴다.
   function sync() {
     if (!user || busy || !navigator.onLine) return Promise.resolve(null);
-    busy = true; emit();
+    busy = true; phase = 'down'; lastResult = null; emit();
+
+    var res = { found: false, merged: null, from: '', downAt: 0, upAt: 0 };
 
     return load().then(function (f) {
       return f.get(f.ref(f.db, path()));
     }).then(function (snap) {
       var remote = snap.exists() ? snap.val() : null;
-      var stat = null;
       if (remote && Store.isBackup(remote)) {
-        stat = Store.importBackup(remote);
+        res.found = true;
+        res.merged = Store.importBackup(remote);
+        res.from = remote.device || '';
       }
-      return fb.set(fb.ref(fb.db, path()), Store.exportAll()).then(function () {
-        save(LAST_KEY, String(Date.now()));
-        return stat;
-      });
-    }).then(function (stat) {
-      busy = false; emit();
-      return stat;
+      res.downAt = Date.now();
+      save(DOWN_KEY, String(res.downAt));
+      // 여기까지가 '받기'. 받은 것이 없어도 받아 보긴 했으므로 시각을 남긴다.
+      phase = 'up'; emit();
+      return fb.set(fb.ref(fb.db, path()), Store.exportAll());
+    }).then(function () {
+      res.upAt = Date.now();
+      save(UP_KEY, String(res.upAt));
+      save(LAST_KEY, String(res.upAt));
+      lastResult = res;
+      busy = false; phase = ''; emit();
+      return res.merged;
     }).catch(function (e) {
-      busy = false; emit();
+      // 어느 걸음에서 멈췄는지 남겨 둔다. 받기는 됐는데 올리기가 안 된 경우가 있다.
+      lastResult = { failedAt: phase, downAt: res.downAt, upAt: 0, found: res.found, merged: res.merged, from: res.from };
+      busy = false; phase = ''; emit();
       throw e;
     });
   }

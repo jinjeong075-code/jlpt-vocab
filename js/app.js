@@ -1586,9 +1586,14 @@
     $('btnSyncTop').classList.toggle('spin', st.busy);
     $('btnSyncTop').classList.toggle('on', st.signedIn);
     $('btnSyncTop').classList.toggle('off', !st.signedIn);
-    $('btnSyncTop').title = st.signedIn
-      ? '동기화 켜짐 · ' + st.email
-      : '동기화 꺼짐 — 눌러서 로그인하면 PC와 폰이 자동으로 합쳐집니다';
+    // 돌고 있을 때는 어느 쪽으로 가는 중인지 아이콘 옆 화살표로 알린다.
+    $('btnSyncTop').classList.toggle('dn', st.phase === 'down');
+    $('btnSyncTop').classList.toggle('up', st.phase === 'up');
+    $('btnSyncTop').title = st.phase === 'down' ? '클라우드에서 받는 중'
+      : st.phase === 'up' ? '이 기기 기록을 올리는 중'
+      : st.signedIn
+        ? '동기화 켜짐 · ' + st.email
+        : '동기화 꺼짐 — 눌러서 로그인하면 PC와 폰이 자동으로 합쳐집니다';
 
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
@@ -1613,12 +1618,64 @@
     }
     if (st.signedIn) {
       $('syncWho').textContent = st.email;
-      $('syncLast').textContent = st.busy ? '동기화 중…' : fmtAgo(st.last);
+      renderSyncDir(st);
       $('btnSyncNow').disabled = st.busy || !st.online;
-      $('btnSyncNow').textContent = st.busy ? '동기화 중…'
-        : (st.online ? '지금 동기화' : '오프라인');
+      $('btnSyncNow').textContent = st.phase === 'down' ? '받는 중…'
+        : st.phase === 'up' ? '올리는 중…'
+        : (st.online ? '받고 올리기' : '오프라인');
     } else if (st.email) {
       $('syncEmail').value = $('syncEmail').value || st.email;
+    }
+  }
+
+  /* ---------------- 동기화 방향 표시 ---------------- */
+  // 받기와 올리기를 한 줄씩 따로 보여준다. 예전에는 '마지막 동기화' 한 줄뿐이라
+  // 올라간 것인지 내려온 것인지, 반만 되고 멈춘 것인지 알 수 없었다.
+
+  // 합친 결과를 사람이 읽는 한 줄로.
+  // theirs 와 dates 만 쓴다. days·gram 은 같은 내용을 다시 받아도 올라가는 수라
+  // '새로 받은 것'을 뜻하지 않는다. 그걸 적으면 매번 Day 50개 받았다고 거짓말을 한다.
+  function mergeNote(m) {
+    if (!m) return '';
+    var bits = [];
+    if (m.theirs) bits.push('진도 ' + m.theirs + '개');
+    if (m.dates) bits.push('공부 시간 ' + m.dates + '일');
+    return bits.length ? bits.join(' · ') + ' 받음' : '새로 받은 것 없음';
+  }
+
+  function renderSyncDir(st) {
+    var r = st.result;
+    var down = $('stepDown'), up = $('stepUp');
+
+    // 받기
+    down.className = 'sync-step' + (st.phase === 'down' ? ' live' : '');
+    if (st.phase === 'down') {
+      $('syncDownV').textContent = '받는 중…';
+      $('syncDownNote').textContent = '';
+    } else {
+      $('syncDownV').textContent = st.lastDown ? fmtAgo(st.lastDown) : '아직 없음';
+      $('syncDownNote').textContent = (r && r.downAt)
+        ? (r.found ? mergeNote(r.merged) : '클라우드에 아직 아무것도 없음')
+        : '';
+      if (r && r.failedAt === 'down') { down.className = 'sync-step fail'; $('syncDownNote').textContent = '실패'; }
+    }
+
+    // 올리기
+    up.className = 'sync-step' + (st.phase === 'up' ? ' live' : '');
+    if (st.phase === 'up') {
+      $('syncUpV').textContent = '올리는 중…';
+      $('syncUpNote').textContent = '';
+    } else if (st.phase === 'down') {
+      $('syncUpV').textContent = '기다림';
+      $('syncUpNote').textContent = '';
+    } else {
+      $('syncUpV').textContent = st.lastUp ? fmtAgo(st.lastUp) : '아직 없음';
+      $('syncUpNote').textContent = '';
+      // 받기는 됐는데 올리기가 안 된 상태. 이게 제일 헷갈리던 자리라 못 박아 둔다.
+      if (r && r.failedAt === 'up') {
+        up.className = 'sync-step fail';
+        $('syncUpNote').textContent = '실패 — 이 기기 기록이 아직 안 올라갔습니다';
+      }
     }
   }
 
