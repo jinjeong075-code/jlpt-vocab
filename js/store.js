@@ -9,6 +9,7 @@
   var SESS_KEY  = 'jvocab.session.v1';
   var GSESS_KEY = 'jvocab.gsession.v1';
   var DEV_KEY   = 'jvocab.device.v1';
+  var EXAM_KEY  = 'jvocab.exams.v1';
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -75,6 +76,7 @@
   SYNCED_KEYS[PROG_KEY] = 1; SYNCED_KEYS[TIME_KEY] = 1;
   SYNCED_KEYS[SESS_KEY] = 1; SYNCED_KEYS[GSESS_KEY] = 1;
   SYNCED_KEYS[VOCAB_KEY] = 1; SYNCED_KEYS[GRAM_KEY] = 1;
+  SYNCED_KEYS[EXAM_KEY] = 1;
 
   function write(key, val) {
     try {
@@ -935,7 +937,9 @@
       // 풀다 만 학습도 같이 보낸다. 폰에서 풀던 것을 PC 에서 이어받을 수 있어야 한다.
       // 단어 전체가 아니라 (Day, 번호) 참조만 들어 있어서 기기가 달라도 그대로 맞는다.
       session: read(SESS_KEY, null),
-      gsession: read(GSESS_KEY, null)
+      gsession: read(GSESS_KEY, null),
+      // 시험 기록. 기기마다 따로 쌓이므로 받는 쪽에서 id 로 모은다.
+      exams: read(EXAM_KEY, [])
     };
   }
 
@@ -1027,6 +1031,7 @@
     var gramTook = mergeSession(GSESS_KEY, obj.gsession);
     lastGSessionNote = lastMergeNote;
     stat.resumed = (vocabTook ? 1 : 0) + (gramTook ? 1 : 0);
+    stat.exams = mergeExams(obj.exams);
 
     return stat;
   }
@@ -1065,6 +1070,49 @@
   }
 
   function sessionNote() { return lastSessionNote; }
+
+  /* ---------- 시험 기록 ---------- */
+  // 한 판을 끝낼 때마다 그 판에서 무엇을 틀렸는지 남긴다. 진도는 건드리지 않는다.
+  // 폰과 PC 에서 따로 쌓이므로 합칠 때는 id 로 모으기만 하고, 지우는 쪽으로는 합치지 않는다.
+  var EXAM_MAX = 500;
+
+  // Firebase 는 배열을 객체로 돌려줄 때가 있다. 어느 쪽이 와도 배열로 편다.
+  function examArr(v) {
+    var a = Array.isArray(v) ? v
+      : (v && typeof v === 'object' ? Object.keys(v).map(function (k) { return v[k]; }) : []);
+    return a.filter(function (r) { return r && r.at && r.id; });
+  }
+
+  // 오래된 것부터 시각 순서로.
+  function examList() {
+    return examArr(read(EXAM_KEY, [])).sort(function (x, y) { return x.at - y.at; });
+  }
+
+  function saveExams(a) {
+    a.sort(function (x, y) { return x.at - y.at; });
+    if (a.length > EXAM_MAX) a = a.slice(-EXAM_MAX);
+    write(EXAM_KEY, a);
+  }
+
+  function addExam(rec) {
+    rec.id = rec.at + ':' + deviceId;
+    var a = examList();
+    a.push(rec);
+    saveExams(a);
+  }
+
+  function mergeExams(inc) {
+    var add = examArr(inc);
+    if (!add.length) return 0;
+    var a = examList(), have = {}, n = 0;
+    a.forEach(function (r) { have[r.id] = 1; });
+    add.forEach(function (r) {
+      if (have[r.id]) return;
+      have[r.id] = 1; a.push(r); n++;
+    });
+    if (n) saveExams(a);
+    return n;
+  }
 
 
   function resetProgress() {
@@ -1241,6 +1289,8 @@
     gramLevels: gramLevels,
     allGram: allGram,
     gKeyOf: gKeyOf,
+    examList: examList,
+    addExam: addExam,
     gRecOf: gRecOf,
     gStageFor: gStageFor,
     gIsDue: gIsDue,

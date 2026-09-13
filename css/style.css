@@ -1194,3 +1194,26 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
   color: var(--accent);
 }
 #btnSyncTop.up::after { content: "↑"; }
+
+/* ---------- 시험 기록 ---------- */
+/* 한 줄에 언제 · 몇 번째 · 몇 개 틀렸는지만. 누르면 그 판의 결과 화면이 열린다. */
+.res-meta { margin: 6px 0 0; font-size: 13px; color: var(--dim); }
+.exam-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }
+.ex-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 13px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); font-family: inherit; text-align: left; cursor: pointer;
+}
+.ex-row:hover { border-color: var(--accent); }
+.ex-main { flex: 1; min-width: 0; }
+.ex-when { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ex-no { margin-left: 8px; font-size: 13px; font-weight: 600; color: var(--accent); }
+.ex-label {
+  display: block; margin-top: 2px; font-size: 12px; color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ex-side { flex: 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; }
+.ex-wrong { display: block; font-size: 14px; font-weight: 600; color: var(--no); }
+.ex-wrong.zero { color: var(--ok); }
+.ex-total { display: block; font-size: 11px; color: var(--dim); }

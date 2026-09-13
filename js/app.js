@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v74';
+  var BUILD = 'v75';
 
   /* ---------------- 화면 ---------------- */
 
@@ -40,7 +40,7 @@
   // 뒤로가기가 돌아갈 화면. 문법 안에서는 문법 홈으로, 그다음이 첫 화면이다.
   var BACK_TO = {
     home: 'pick', gram: 'pick',
-    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day',
+    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
@@ -61,6 +61,8 @@
       else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
       // 문법 학습은 챕터에서 왔는지 묶음 목록에서 왔는지에 따라 돌아갈 곳이 다르다.
       else if (view === 'gramStudy') goView(gStudyFrom || 'gramCh');
+      // 시험 기록에서 연 결과 화면이면 홈이 아니라 기록 목록으로 돌아간다.
+      else if (view === 'result' && resultFrom === 'exams') goView('exams');
       else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
     } finally {
       navLock = false;
@@ -73,6 +75,7 @@
     else if (v === 'home') { renderHome(); show('home'); }
     else if (v === 'gram') { renderGramHome(); show('gram'); }
     else if (v === 'time') { renderTime(); show('time'); }
+    else if (v === 'exams') { renderExams(); show('exams'); }
     else show(v);
   }
 
@@ -88,7 +91,7 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '문법', gramStudy: '문법', gramList: '문법'
+    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록'
   };
 
   function show(name) {
@@ -179,6 +182,7 @@
     $('globalStats').innerHTML = statHTML(s, true);
     renderProgress(s);
     renderResume();
+    $('examCount').textContent = Store.examList().length + '회';
     renderDaily();
     renderPosChips();
     renderRateChips();
@@ -1393,24 +1397,8 @@
     // 결과는 단어 단위로 센다. 무엇을 몇 번 만났는지가 아니라 무엇이 어려웠는지가 궁금한 것이다.
     var res = distinctResults();
     var perfect = res.filter(function (x) { return x.firstOk; }).length;
-    var wrong = res.filter(function (x) { return !x.firstOk; });
-
-    $('resultSub').textContent = res.length + '단어 중 ' + perfect + '개를 한 번에';
-
-    var s = { total: res.length, unknown: 0, short: 0, long: 0, 'new': 0 };
-    res.forEach(function (x) { s[Store.stageOf(x.level, 1)]++; });
-    $('resultStats').innerHTML = statHTML(s);
-
-    // 틀린 단어만 모아서 먼저 보여주고, 전체로도 넘겨볼 수 있게 한다.
-    resultAll = res;
-    resultWrong = wrong;
-    resultView = wrong.length ? 'wrong' : 'all';
-    renderResultList();
-
-    $('retryCount').textContent = wrong.length + '개';
-    $('btnRetryWrong').disabled = !wrong.length;
-    session.wrong = wrong.map(function (x) { return { day: x.day, w: x.w }; });
-    show('result');
+    saveExam(res);
+    fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에', '', 'home');
   }
 
   function resultItemHTML(x) {
@@ -1454,6 +1442,118 @@
     $('resultEmpty').hidden = list.length > 0;
     $('resultEmpty').textContent = '틀린 단어가 없습니다. 전부 맞혔어요.';
     $('resultList').innerHTML = list.map(resultItemHTML).join('');
+  }
+
+  /* ---------------- 결과 화면 채우기 ---------------- */
+  // 방금 끝낸 판과 시험 기록에서 다시 연 판이 같은 화면을 쓴다.
+  // from 은 뒤로가기가 돌아갈 곳이다. 기록에서 열었으면 기록 목록으로 돌아간다.
+  var resultRetry = [], resultFrom = 'home';
+
+  function fillResult(res, title, meta, from) {
+    var wrong = res.filter(function (x) { return !x.firstOk; });
+
+    $('resultSub').textContent = title;
+    $('resultMeta').textContent = meta || '';
+    $('resultMeta').hidden = !meta;
+
+    var s = { total: res.length, unknown: 0, short: 0, long: 0, 'new': 0 };
+    res.forEach(function (x) { s[Store.stageOf(x.level, 1)]++; });
+    $('resultStats').innerHTML = statHTML(s);
+
+    // 틀린 단어만 모아서 먼저 보여주고, 전체로도 넘겨볼 수 있게 한다.
+    resultAll = res;
+    resultWrong = wrong;
+    resultView = wrong.length ? 'wrong' : 'all';
+    renderResultList();
+
+    $('retryCount').textContent = wrong.length + '개';
+    $('btnRetryWrong').disabled = !wrong.length;
+    resultRetry = wrong.map(function (x) { return { day: x.day, w: x.w }; });
+    resultFrom = from || 'home';
+    show('result');
+  }
+
+  /* ---------------- 시험 기록 ---------------- */
+  // 한 판을 끝낼 때마다 그 판에서 무엇을 틀렸는지 남긴다. 기록일 뿐 진도는 건드리지 않는다.
+  // 단어 내용이 아니라 (Day, 번호, 글자) 참조만 남긴다. 쌓여도 가볍고 기기가 달라도 맞는다.
+
+  var EXAM_DIR = { jp2ko: '일본어 → 뜻', ko2jp: '뜻 → 일본어', timed: '타임어택' };
+
+  function saveExam(res) {
+    if (!session || session.recorded || !res.length) return;
+    session.recorded = true;
+    Store.addExam({
+      at: Date.now(),
+      label: session.label || '학습',
+      dir: session.timed ? 'timed' : (session.dir || 'jp2ko'),
+      it: res.map(function (x) {
+        var o = { d: x.day, w: x.w.word, t: x.tries || 1, l: x.level || 0 };
+        if (x.w.no != null) o.n = x.w.no;
+        if (x.firstOk) o.f = 1;
+        if (x.r) o.r = 1;
+        if (x.known) o.k = 1;
+        return o;
+      })
+    });
+  }
+
+  function examItems(rec) {
+    var it = rec.it;
+    if (it && !Array.isArray(it)) it = Object.keys(it).map(function (k) { return it[k]; });
+    return (it || []).filter(Boolean);
+  }
+
+  // 날짜마다 몇 번째 시험인지 매긴다. 폰과 PC 기록이 섞여도 시각 순서대로 센다.
+  function numberedExams() {
+    var perDay = {};
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return Store.examList().map(function (rec) {
+      var d = new Date(rec.at);
+      var date = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+      perDay[date] = (perDay[date] || 0) + 1;
+      return { rec: rec, date: date, time: p(d.getHours()) + ':' + p(d.getMinutes()), no: perDay[date] };
+    });
+  }
+
+  function examMeta(rec) {
+    return (rec.label || '학습') + (EXAM_DIR[rec.dir] ? ' · ' + EXAM_DIR[rec.dir] : '');
+  }
+
+  function renderExams() {
+    var rows = numberedExams().reverse();   // 최근 것이 위
+    $('examsSub').textContent = rows.length + '회';
+    $('examsEmpty').hidden = rows.length > 0;
+    $('examList').innerHTML = rows.map(function (x) {
+      var items = examItems(x.rec);
+      var wrong = items.filter(function (o) { return !o.f; }).length;
+      return '<button class="ex-row" data-id="' + esc(x.rec.id) + '">' +
+        '<span class="ex-main">' +
+          '<span class="ex-when">' + x.date + ' ' + x.time + '</span>' +
+          '<span class="ex-no">' + x.no + '회</span>' +
+          '<span class="ex-label">' + esc(examMeta(x.rec)) + '</span>' +
+        '</span>' +
+        '<span class="ex-side">' +
+          '<span class="ex-wrong' + (wrong ? '' : ' zero') + '">' + (wrong ? '틀림 ' + wrong : '다 맞힘') + '</span>' +
+          '<span class="ex-total">' + items.length + '단어</span>' +
+        '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  function openExam(id) {
+    var x = null;
+    numberedExams().forEach(function (e) { if (e.rec.id === id) x = e; });
+    if (!x) return;
+    var res = [];
+    examItems(x.rec).forEach(function (o) {
+      var w = Store.findWord(o.d, o.n != null ? o.n : null, o.w);
+      if (!w) return;   // 그 사이 단어 데이터가 바뀌어 못 찾으면 뺀다
+      res.push({ day: o.d, w: w, r: !!o.r, m: !!o.r, level: o.l || 0,
+                 known: !!o.k, tries: o.t || 1, firstOk: !!o.f });
+    });
+    var perfect = res.filter(function (e) { return e.firstOk; }).length;
+    fillResult(res, x.date + ' ' + x.time + ' · ' + x.no + '회',
+      examMeta(x.rec) + ' · ' + res.length + '단어 중 ' + perfect + '개를 한 번에', 'exams');
   }
 
   /* ---------------- 검색 ---------------- */
@@ -1647,6 +1747,7 @@
     var bits = [];
     if (m.theirs) bits.push('진도 ' + m.theirs + '개');
     if (m.dates) bits.push('공부 시간 ' + m.dates + '일');
+    if (m.exams) bits.push('시험 기록 ' + m.exams + '회');
     // 이어하기가 왜 왔는지/왜 안 왔는지는 따로 적는다. 제일 헷갈리는 자리다.
     var note = Store.sessionNote();
     bits.push(note || '이어하기 변화 없음');
@@ -3040,9 +3141,15 @@
     $('tabAll').addEventListener('click', function () { resultView = 'all'; renderResultList(); });
 
     $('btnRetryWrong').addEventListener('click', function () {
-      startSession(session.wrong, '틀린 단어 다시');
+      startSession(resultRetry, '틀린 단어 다시');
     });
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
+    // 시험 기록. 줄을 누르면 그 판의 결과 화면이 그대로 열린다.
+    $('btnExamLog').addEventListener('click', function () { renderExams(); show('exams'); });
+    $('examList').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.ex-row');
+      if (b) openExam(b.dataset.id);
+    });
     // 결과 목록도 카드로 한 장씩 넘겨 볼 수 있다. 틀린 것을 다시 읽는 게 핵심이라.
     $('btnResultBrowse').addEventListener('click', function () {
       var list = (resultView === 'wrong') ? resultWrong : resultAll;

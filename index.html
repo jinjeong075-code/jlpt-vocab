@@ -101,6 +101,10 @@
       <span class="bb-title">흔들리는 단어</span>
       <span class="bb-sub" id="shakyCount">0개</span>
     </button>
+    <button class="big-btn" id="btnExamLog">
+      <span class="bb-title">시험 기록</span>
+      <span class="bb-sub" id="examCount">0회</span>
+    </button>
   </div>
 
   <div class="rand-card">
@@ -272,6 +276,7 @@
 <section id="viewResult" class="view">
   <div class="hero">
     <h1 id="resultSub">학습 완료</h1>
+    <p class="res-meta" id="resultMeta" hidden></p>
   </div>
   <div class="stat-grid" id="resultStats"></div>
   <div class="res-tabs" id="resultTabs" hidden>
@@ -290,6 +295,17 @@
     <button class="big-btn primary" id="btnRetryWrong"><span class="bb-title">틀린 것 다시</span><span class="bb-sub" id="retryCount"></span></button>
     <button class="big-btn" id="btnResultHome"><span class="bb-title">홈으로</span><span class="bb-sub">&nbsp;</span></button>
   </div>
+</section>
+
+<!-- ============ 시험 기록 ============ -->
+<!-- 한 판을 끝낼 때마다 쌓인다. 누르면 그 판의 결과 화면이 그대로 다시 열린다. -->
+<section id="viewExams" class="view">
+  <div class="hero">
+    <h1>시험 기록</h1>
+    <p class="res-meta" id="examsSub"></p>
+  </div>
+  <p class="empty-note" id="examsEmpty" hidden>아직 끝낸 시험이 없습니다.</p>
+  <div id="examList" class="exam-list"></div>
 </section>
 
 <!-- ============ 문법 홈 ============ -->
