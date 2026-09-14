@@ -1217,3 +1217,15 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .ex-wrong { display: block; font-size: 14px; font-weight: 600; color: var(--no); }
 .ex-wrong.zero { color: var(--ok); }
 .ex-total { display: block; font-size: 11px; color: var(--dim); }
+
+/* ---------- 접두어·접미어 ---------- */
+/* 표제(悪~) 한 줄 아래에 예시 단어를 늘어놓는다. 펼칠 것 없이 한눈에 훑는다. */
+.af-item .wl-word { font-size: 18px; }
+.af-ex {
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--hair);
+}
+.af-one { font-size: 13px; }
+.af-one .af-w { font-weight: 600; }
+.af-one .af-r { margin-left: 5px; font-size: 12px; color: var(--accent); }
+.af-one .af-m { margin-left: 6px; color: var(--dim); }

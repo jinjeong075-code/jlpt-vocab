@@ -105,6 +105,10 @@
       <span class="bb-title">시험 기록</span>
       <span class="bb-sub" id="examCount">0회</span>
     </button>
+    <button class="big-btn" id="btnAffix" hidden>
+      <span class="bb-title">접두어·접미어</span>
+      <span class="bb-sub" id="affixCount"></span>
+    </button>
   </div>
 
   <div class="rand-card">
@@ -295,6 +299,20 @@
     <button class="big-btn primary" id="btnRetryWrong"><span class="bb-title">틀린 것 다시</span><span class="bb-sub" id="retryCount"></span></button>
     <button class="big-btn" id="btnResultHome"><span class="bb-title">홈으로</span><span class="bb-sub">&nbsp;</span></button>
   </div>
+</section>
+
+<!-- ============ 접두어·접미어 ============ -->
+<!-- N2 단어장에 따로 실린 표. 단어처럼 시험 보기보다 한눈에 훑어보는 용도라 목록만 둔다. -->
+<section id="viewAffix" class="view">
+  <div class="hero">
+    <h1>접두어·접미어</h1>
+    <p class="res-meta" id="affixSub"></p>
+  </div>
+  <div class="res-tabs">
+    <button class="res-tab sel" id="tabPre">접두어</button>
+    <button class="res-tab" id="tabSuf">접미어</button>
+  </div>
+  <div id="affixList" class="word-list"></div>
 </section>
 
 <!-- ============ 시험 기록 ============ -->

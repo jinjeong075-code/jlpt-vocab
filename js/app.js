@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v75';
+  var BUILD = 'v76';
 
   /* ---------------- 화면 ---------------- */
 
@@ -40,7 +40,7 @@
   // 뒤로가기가 돌아갈 화면. 문법 안에서는 문법 홈으로, 그다음이 첫 화면이다.
   var BACK_TO = {
     home: 'pick', gram: 'pick',
-    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home',
+    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
@@ -91,7 +91,7 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록'
+    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어'
   };
 
   function show(name) {
@@ -183,6 +183,10 @@
     renderProgress(s);
     renderResume();
     $('examCount').textContent = Store.examList().length + '회';
+    var af = Store.getAffixes();
+    var afN = af ? af.prefixes.length + af.suffixes.length : 0;
+    $('btnAffix').hidden = !afN;
+    if (afN) $('affixCount').textContent = afN + '개';
     renderDaily();
     renderPosChips();
     renderRateChips();
@@ -915,8 +919,8 @@
   }
 
   function hydrate(ref) {
-    var w = Store.findWord(ref.d, ref.n, ref.w);
-    return w ? { day: ref.d, w: w } : null;
+    // 두 책에 같이 실린 단어는 N2 쪽으로 옮겨졌을 수 있다. locate 가 옮겨진 곳까지 찾아 준다.
+    return Store.locate(ref.d, ref.n, ref.w);
   }
 
   // 저장된 학습을 복원한다. 단어 데이터가 바뀌어 못 찾는 항목은 버린다.
@@ -1444,6 +1448,40 @@
     $('resultList').innerHTML = list.map(resultItemHTML).join('');
   }
 
+  /* ---------------- 접두어·접미어 ---------------- */
+  // N2 단어장에 따로 실린 표를 탭으로 나눠 훑어본다. 예시 단어는 눌러서 사전으로 간다.
+  var affixTab = 'pre';
+
+  function renderAffix() {
+    var af = Store.getAffixes();
+    if (!af) return;
+    var list = affixTab === 'pre' ? af.prefixes : af.suffixes;
+    $('affixSub').textContent = '접두어 ' + af.prefixes.length + ' · 접미어 ' + af.suffixes.length;
+    $('tabPre').textContent = '접두어 ' + af.prefixes.length;
+    $('tabSuf').textContent = '접미어 ' + af.suffixes.length;
+    $('tabPre').classList.toggle('sel', affixTab === 'pre');
+    $('tabSuf').classList.toggle('sel', affixTab !== 'pre');
+    $('affixList').innerHTML = list.map(function (x) {
+      return '<div class="wl-item af-item">' +
+        '<div class="wl-head"><span class="wl-main">' +
+          '<span class="wl-word" lang="ja">' + esc(x.word) +
+            (x.reading ? '<span class="wl-reading">' + esc(x.reading) + '</span>' : '') +
+          '</span>' +
+          '<div class="wl-meaning">' + esc(x.meaning) + '</div>' +
+        '</span></div>' +
+        (x.examples.length
+          ? '<div class="af-ex">' + x.examples.map(function (e) {
+              return '<span class="af-one">' +
+                '<span class="af-w" lang="ja">' + dictHTML(e.word) + '</span>' +
+                (e.reading ? '<span class="af-r" lang="ja">' + esc(e.reading) + '</span>' : '') +
+                '<span class="af-m">' + esc(e.meaning) + '</span>' +
+              '</span>';
+            }).join('') + '</div>'
+          : '') +
+      '</div>';
+    }).join('');
+  }
+
   /* ---------------- 결과 화면 채우기 ---------------- */
   // 방금 끝낸 판과 시험 기록에서 다시 연 판이 같은 화면을 쓴다.
   // from 은 뒤로가기가 돌아갈 곳이다. 기록에서 열었으면 기록 목록으로 돌아간다.
@@ -1546,9 +1584,9 @@
     if (!x) return;
     var res = [];
     examItems(x.rec).forEach(function (o) {
-      var w = Store.findWord(o.d, o.n != null ? o.n : null, o.w);
-      if (!w) return;   // 그 사이 단어 데이터가 바뀌어 못 찾으면 뺀다
-      res.push({ day: o.d, w: w, r: !!o.r, m: !!o.r, level: o.l || 0,
+      var hit = Store.locate(o.d, o.n != null ? o.n : null, o.w);
+      if (!hit) return;   // 그 사이 단어 데이터가 바뀌어 못 찾으면 뺀다
+      res.push({ day: hit.day, w: hit.w, r: !!o.r, m: !!o.r, level: o.l || 0,
                  known: !!o.k, tries: o.t || 1, firstOk: !!o.f });
     });
     var perfect = res.filter(function (e) { return e.firstOk; }).length;
@@ -3145,6 +3183,10 @@
     });
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
     // 시험 기록. 줄을 누르면 그 판의 결과 화면이 그대로 열린다.
+    // 접두어·접미어. 탭으로 접두어와 접미어를 오간다.
+    $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
+    $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });
+    $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
     $('btnExamLog').addEventListener('click', function () { renderExams(); show('exams'); });
     $('examList').addEventListener('click', function (ev) {
       var b = ev.target.closest('.ex-row');

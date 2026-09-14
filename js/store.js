@@ -10,6 +10,9 @@
   var GSESS_KEY = 'jvocab.gsession.v1';
   var DEV_KEY   = 'jvocab.device.v1';
   var EXAM_KEY  = 'jvocab.exams.v1';
+  var MOVED_KEY = 'jvocab.moved.v1';          // 두 책에 같이 실린 단어: N3 쪽 키 -> N2 쪽 키
+  var MOVED_BK_KEY = 'jvocab.movedBackup.v1'; // 옮기기 전 N3 쪽 학습 기록. 이 기기에만 남긴다
+  var AFFIX_KEY = 'jvocab.affixes.v1';
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -77,6 +80,7 @@
   SYNCED_KEYS[SESS_KEY] = 1; SYNCED_KEYS[GSESS_KEY] = 1;
   SYNCED_KEYS[VOCAB_KEY] = 1; SYNCED_KEYS[GRAM_KEY] = 1;
   SYNCED_KEYS[EXAM_KEY] = 1;
+  SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
 
   function write(key, val) {
     try {
@@ -442,11 +446,119 @@
     return { day: Number(obj.day), title: String(obj.title || '').trim(), words: words };
   }
 
+  /* ---------- 두 책에 같이 실린 단어 ---------- */
+  // N3 단어장과 N2 단어장에는 단어와 읽기가 같은 단어가 308개 있다. N2 쪽을 남긴다.
+  // 원본을 고치지 않고 'N3 의 이 키는 N2 의 이 키로 옮겨졌다'는 표로 처리한다.
+  // 표는 동기화로 같이 넘어간다. 옛 데이터를 가진 기기가 원본 N3 를 다시 보내와도
+  // 받는 쪽이 같은 표로 다시 걸러내므로 지운 단어가 되살아나지 않는다.
+  var moved = {};
+
+  function mergeMoved(inc) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (k) {
+      if (typeof inc[k] !== 'string' || moved[k] === inc[k]) return;
+      moved[k] = inc[k];
+      n++;
+    });
+    if (n) write(MOVED_KEY, moved);
+    return n;
+  }
+
+  // 옮겨진 단어를 한 Day 에서 뺀다. 뺀 개수를 돌려준다.
+  function dropMoved(d) {
+    if (!d || !d.words) return 0;
+    var before = d.words.length;
+    d.words = d.words.filter(function (w) { return !moved[keyOf(d.day, w)]; });
+    return before - d.words.length;
+  }
+
+  function dropMovedAll() {
+    var n = 0;
+    Object.keys(days).forEach(function (k) {
+      n += dropMoved(days[k]);
+      if (!days[k].words.length) delete days[k];
+    });
+    return n;
+  }
+
+  // 옮겨진 단어에 쌓인 학습 기록을 N2 쪽으로 옮긴다.
+  // 두 기기에서 따로 옮겨질 수 있으므로 양쪽에 다 있으면 나중에 학습한 쪽을 남긴다.
+  // 횟수를 더하지 않는다. 같은 기록이 동기화로 양쪽에 와 있을 수 있어 두 번 세게 된다.
+  // 옮기기 전 기록은 이 기기에 따로 남겨 둔다.
+  function moveProgress() {
+    var bk = null, n = 0;
+    Object.keys(moved).forEach(function (oldK) {
+      var r = progress[oldK];
+      if (!r) return;
+      var newK = moved[oldK], cur = progress[newK];
+      if (!cur || (r.last || 0) > (cur.last || 0)) progress[newK] = r;
+      if (!bk) bk = read(MOVED_BK_KEY, {});
+      var prev = bk[oldK];
+      if (!prev || (r.last || 0) > (prev.last || 0)) bk[oldK] = r;
+      delete progress[oldK];
+      n++;
+    });
+    if (n) {
+      write(PROG_KEY, progress);
+      write(MOVED_BK_KEY, bk);
+    }
+    return n;
+  }
+
+  // 옛 참조(시험 기록, 이어하기)로 지금 단어를 찾는다. 옮겨진 단어면 N2 쪽을 돌려준다.
+  function locate(dayNo, no, wordText) {
+    var w = findWord(dayNo, no, wordText);
+    if (w) return { day: dayNo, w: w };
+    var to = moved[dayNo + '-' + (no != null ? no : wordText)];
+    if (!to) return null;
+    var i = to.indexOf('-');
+    var nd = Number(to.slice(0, i)), rest = to.slice(i + 1);
+    var nn = /^\d+$/.test(rest) ? Number(rest) : null;
+    w = findWord(nd, nn, nn == null ? rest : wordText);
+    return w ? { day: nd, w: w } : null;
+  }
+
+  /* ---------- 접두어·접미어 ---------- */
+  // N2 단어장에 따로 실린 표. 단어처럼 학습 기록을 두지 않고 보기만 한다.
+  var affixes = null;
+
+  function arrOf(v) {
+    if (Array.isArray(v)) return v;
+    return (v && typeof v === 'object') ? Object.keys(v).map(function (k) { return v[k]; }) : [];
+  }
+
+  // Firebase 는 배열을 객체로 돌려줄 때가 있다. 어느 모양이 와도 같은 모양으로 편다.
+  function normalizeAffixes(a) {
+    if (!a || typeof a !== 'object') return null;
+    var fix = function (list) {
+      return arrOf(list).filter(Boolean).map(function (x) {
+        return {
+          word: String(x.word || ''), reading: String(x.reading || ''), meaning: String(x.meaning || ''),
+          examples: arrOf(x.examples).filter(Boolean).map(function (e) {
+            return { word: String(e.word || ''), reading: String(e.reading || ''), meaning: String(e.meaning || '') };
+          })
+        };
+      });
+    };
+    return { title: String(a.title || ''), prefixes: fix(a.prefixes), suffixes: fix(a.suffixes) };
+  }
+
+  function affixCount(a) {
+    if (!a) return 0;
+    return arrOf(a.prefixes).length + arrOf(a.suffixes).length;
+  }
+
+  function getAffixes() { return affixes; }
+
   function addDays(list) {
     var added = 0;
     list.forEach(function (raw) {
       var d = normalizeDay(raw);
       if (!d) return;
+      // 두 책에 같이 실린 단어는 파일로 다시 넣어도 N3 쪽을 뺀다.
+      dropMoved(d);
+      if (!d.words.length) return;
       days[d.day] = d;
       added++;
     });
@@ -939,7 +1051,10 @@
       session: read(SESS_KEY, null),
       gsession: read(GSESS_KEY, null),
       // 시험 기록. 기기마다 따로 쌓이므로 받는 쪽에서 id 로 모은다.
-      exams: read(EXAM_KEY, [])
+      exams: read(EXAM_KEY, []),
+      // 두 책에 같이 실린 단어 표. 받는 기기가 옛 N3 단어를 이 표로 걸러낸다.
+      moved: moved,
+      affixes: affixes
     };
   }
 
@@ -958,10 +1073,16 @@
   function importBackup(obj) {
     var stat = { days: 0, words: 0, mine: 0, theirs: 0, dates: 0 };
 
+    // 표를 먼저 합친다. 받은 단어를 넣기 전에 걸러야 옮겨진 N3 단어가 끼어들지 않는다.
+    // 이 기기가 표를 처음 받았으면 이미 가진 단어에서도 뺀다.
+    if (mergeMoved(obj.moved) && dropMovedAll()) write(VOCAB_KEY, days);
+
     if (obj.vocab) {
       Object.keys(obj.vocab).forEach(function (k) {
         var d = normalizeDay(obj.vocab[k]);
         if (!d) return;
+        dropMoved(d);
+        if (!d.words.length) return;
         var cur = days[d.day];
         if (cur && cur.words.length > d.words.length) return;
         days[d.day] = d; stat.days++;
@@ -1019,6 +1140,8 @@
       });
       write(TIME_KEY, timeLog);
     }
+    // 옛 기기가 보낸 N3 쪽 기록이 섞여 들어왔으면 N2 쪽으로 옮긴다.
+    stat.moved = moveProgress();
     stat.time = timeTotal();
 
     // 풀다 만 학습은 합칠 수가 없다. 둘 중 나중에 저장된 쪽을 쓴다.
@@ -1032,6 +1155,11 @@
     lastGSessionNote = lastMergeNote;
     stat.resumed = (vocabTook ? 1 : 0) + (gramTook ? 1 : 0);
     stat.exams = mergeExams(obj.exams);
+    var incAffix = normalizeAffixes(obj.affixes);
+    if (affixCount(incAffix) > affixCount(affixes)) {
+      affixes = incAffix;
+      write(AFFIX_KEY, affixes);
+    }
 
     return stat;
   }
@@ -1124,6 +1252,8 @@
 
   function init() {
     days = read(VOCAB_KEY, {});
+    moved = read(MOVED_KEY, {});
+    if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
     if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
     progress = read(PROG_KEY, {});
@@ -1235,15 +1365,27 @@
       }
     });
     if (migrated) write(TIME_KEY, timeLog);
+    var vocabChanged = false;
     if (global.DEFAULT_VOCAB) {
       // 내장 데이터는 저장된 것이 없을 때만 채워 넣는다(업로드본을 덮지 않음).
       global.DEFAULT_VOCAB.forEach(function (d) {
         if (!days[d.day]) {
           var n = normalizeDay(d);
-          if (n) days[n.day] = n;
+          if (n) { days[n.day] = n; vocabChanged = true; }
         }
       });
-      write(VOCAB_KEY, days);
+    }
+    // 두 책에 같이 실린 단어는 N3 쪽을 빼고, 그 단어의 학습 기록은 N2 쪽으로 옮긴다.
+    // 켤 때마다 확인하지만 한 번 옮기고 나면 할 일이 없어 아무것도 쓰지 않는다.
+    if (dropMovedAll()) vocabChanged = true;
+    // 바뀐 것이 있을 때만 쓴다. 매번 쓰면 켤 때마다 안 올린 기록이 생긴 것처럼 보인다.
+    if (vocabChanged) write(VOCAB_KEY, days);
+    moveProgress();
+
+    affixes = normalizeAffixes(read(AFFIX_KEY, null));
+    if (affixCount(global.DEFAULT_AFFIXES) > affixCount(affixes)) {
+      affixes = normalizeAffixes(global.DEFAULT_AFFIXES);
+      write(AFFIX_KEY, affixes);
     }
   }
 
@@ -1290,6 +1432,8 @@
     allGram: allGram,
     gKeyOf: gKeyOf,
     examList: examList,
+    locate: locate,
+    getAffixes: getAffixes,
     addExam: addExam,
     gRecOf: gRecOf,
     gStageFor: gStageFor,
