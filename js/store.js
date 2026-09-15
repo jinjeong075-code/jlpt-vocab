@@ -14,6 +14,7 @@
   var MOVED_BK_KEY = 'jvocab.movedBackup.v1'; // 옮기기 전 N3 쪽 학습 기록. 이 기기에만 남긴다
   var AFFIX_KEY = 'jvocab.affixes.v1';
   var MARK_KEY  = 'jvocab.marks.v1';          // 주의할 단어: 키 -> { on, at }
+  var STORY_KEY = 'jvocab.stories.v1';        // 문단 읽기: Day -> 글
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -82,7 +83,7 @@
   SYNCED_KEYS[VOCAB_KEY] = 1; SYNCED_KEYS[GRAM_KEY] = 1;
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
-  SYNCED_KEYS[MARK_KEY] = 1;
+  SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
 
   function write(key, val) {
     try {
@@ -615,6 +616,49 @@
 
   function getAffixes() { return affixes; }
 
+  /* ---------- 문단 읽기 ---------- */
+  // 한 Day 의 단어를 모두 넣어 지은 글. 학습 기록은 두지 않고 읽기만 한다.
+  // 폰 배포본에는 들어 있지 않으므로 단어처럼 동기화로 건너간다.
+  // 같은 Day 가 둘이면 v(원본 파일을 고친 시각)가 큰 쪽을 쓴다. 글을 고쳐도 폰까지 닿게 하려는 것.
+  var stories = {};
+
+  function normalizeStory(s) {
+    if (!s || typeof s !== 'object' || !Number(s.day)) return null;
+    var paras = arrOf(s.paragraphs).filter(Boolean).map(function (p) {
+      return {
+        jp: String(p.jp || ''), ko: String(p.ko || ''),
+        words: arrOf(p.words).filter(Boolean).map(function (x) {
+          return { no: x.no != null ? Number(x.no) : null, form: String(x.form || '') };
+        })
+      };
+    }).filter(function (p) { return p.jp; });
+    if (!paras.length) return null;
+    return { day: Number(s.day), title: String(s.title || ''), v: Number(s.v || 0), paragraphs: paras };
+  }
+
+  // Firebase 는 1~50 처럼 번호 키로 된 객체를 배열로 바꿔 돌려준다. arrOf 가 어느 쪽이든 편다.
+  function mergeStories(inc) {
+    var n = 0;
+    arrOf(inc).forEach(function (raw) {
+      var s = normalizeStory(raw);
+      if (!s) return;
+      var cur = stories[s.day];
+      if (cur && (cur.v || 0) >= s.v) return;
+      stories[s.day] = s;
+      n++;
+    });
+    // 바뀐 것이 있을 때만 쓴다. 매번 쓰면 켤 때마다 안 올린 기록이 생긴 것처럼 보인다.
+    if (n) write(STORY_KEY, stories);
+    return n;
+  }
+
+  function storyList() {
+    return Object.keys(stories).map(function (k) { return stories[k]; })
+      .sort(function (a, b) { return a.day - b.day; });
+  }
+
+  function getStory(day) { return stories[day] || null; }
+
   function addDays(list) {
     var added = 0;
     list.forEach(function (raw) {
@@ -1119,7 +1163,8 @@
       // 두 책에 같이 실린 단어 표. 받는 기기가 옛 N3 단어를 이 표로 걸러낸다.
       moved: moved,
       affixes: affixes,
-      marks: marks
+      marks: marks,
+      stories: stories
     };
   }
 
@@ -1227,6 +1272,7 @@
       affixes = incAffix;
       write(AFFIX_KEY, affixes);
     }
+    stat.stories = mergeStories(obj.stories);
 
     return stat;
   }
@@ -1456,6 +1502,10 @@
       affixes = normalizeAffixes(global.DEFAULT_AFFIXES);
       write(AFFIX_KEY, affixes);
     }
+
+    stories = {};
+    mergeStories(read(STORY_KEY, {}));
+    if (global.DEFAULT_STORIES) mergeStories(global.DEFAULT_STORIES);
   }
 
   global.Store = {
@@ -1503,6 +1553,8 @@
     examList: examList,
     locate: locate,
     getAffixes: getAffixes,
+    storyList: storyList,
+    getStory: getStory,
     isMarked: isMarked,
     isMarkedKey: isMarkedKey,
     toggleMarkKey: toggleMarkKey,

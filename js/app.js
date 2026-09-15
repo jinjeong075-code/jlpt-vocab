@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v77';
+  var BUILD = 'v78';
 
   /* ---------------- 화면 ---------------- */
 
@@ -41,6 +41,7 @@
   var BACK_TO = {
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
+    stories: 'home', story: 'stories',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
@@ -63,6 +64,8 @@
       else if (view === 'gramStudy') goView(gStudyFrom || 'gramCh');
       // 시험 기록에서 연 결과 화면이면 홈이 아니라 기록 목록으로 돌아간다.
       else if (view === 'result' && resultFrom === 'exams') goView('exams');
+      // Day 목록에서 건너온 글이면 그 목록으로 돌아간다.
+      else if (view === 'story' && storyFrom === 'day') goView('day');
       else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
     } finally {
       navLock = false;
@@ -76,6 +79,7 @@
     else if (v === 'gram') { renderGramHome(); show('gram'); }
     else if (v === 'time') { renderTime(); show('time'); }
     else if (v === 'exams') { renderExams(); show('exams'); }
+    else if (v === 'stories') { renderStories(); show('stories'); }
     else show(v);
   }
 
@@ -91,7 +95,8 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어'
+    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
+    stories: '문단 읽기', story: '문단 읽기'
   };
 
   function show(name) {
@@ -187,6 +192,9 @@
     var afN = af ? af.prefixes.length + af.suffixes.length : 0;
     $('btnAffix').hidden = !afN;
     if (afN) $('affixCount').textContent = afN + '개';
+    var stN = Store.storyList().length;
+    $('btnStory').hidden = !stN;
+    if (stN) $('storyCount').textContent = stN + ' Day';
     renderDaily();
     renderPosChips();
     renderRateChips();
@@ -341,6 +349,10 @@
     $('btnStudyDue').disabled = !due.length;
     // '느린 단어' 목록에서만 한꺼번에 지우는 버튼을 낸다.
     $('btnClearSlow').hidden = (d.title !== '느린 단어');
+    // 한 Day 를 통째로 볼 때만 그 Day 의 글로 건너가는 버튼을 낸다.
+    var oneDay = (currentDays.length === 1 && d.title === dayLabel(currentDays)) ? currentDays[0] : 0;
+    $('btnDayStory').hidden = !(oneDay && Store.getStory(oneDay));
+    $('btnDayStory').dataset.day = oneDay || '';
 
     $('dayWordList').innerHTML = entries.map(function (e) {
       return itemHTML(e.day, e.w, showDay);
@@ -1522,6 +1534,151 @@
           : '') +
       '</div>';
     }).join('');
+  }
+
+  /* ---------------- 문단 읽기 ---------------- */
+  // 한 Day 의 단어를 모두 넣어 지은 글을 읽는다. 채점하지 않고 진도도 건드리지 않는다.
+  // 처음에는 한자만 보인다. 읽는 법을 떠올려 본 뒤 뜻 보기를 누르면
+  // 그 문단에만 후리가나와 해석, 들어 있는 단어가 나온다.
+  // 외울 단어는 글 속에 색으로 표시해 두고, 뜻을 연 뒤에는 눌러서 상세 창을 띄울 수 있다.
+  var storyDay = 0, storyFrom = 'stories';
+  var storyWords = [];   // 지금 화면에 그린 단어들. data-w 가 이 배열의 자리다.
+
+  // Day 제목은 단어장 쪽을 따른다. 글 파일의 제목은 짧게 적어 둔 것이라.
+  function storyDayTitle(s) {
+    var d = Store.getDay(s.day);
+    return (d && d.title) || s.title;
+  }
+
+  function renderStories() {
+    var list = Store.storyList(), n = 0;
+    list.forEach(function (s) { s.paragraphs.forEach(function (p) { n += p.words.length; }); });
+    $('storiesSub').textContent = list.length + ' Day · ' + n + '단어';
+    $('storyGrid').innerHTML = list.map(function (s) {
+      return '<button class="day-cell" data-day="' + s.day + '">' +
+        '<span class="dn">DAY ' + s.day + '</span>' +
+        '<span class="dt">' + esc(storyDayTitle(s)) + '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  // 漢字[かな] 를 글자 단위로 편다. 후리가나가 붙은 덩어리는 한 칸, 나머지는 한 글자가 한 칸.
+  function storyUnits(jp) {
+    var units = [], last = 0, r = rubyRe(), x;
+    var plain = function (t) {
+      for (var i = 0; i < t.length; i++) units.push({ b: t.charAt(i), rt: '' });
+    };
+    while ((x = r.exec(jp)) !== null) {
+      plain(jp.slice(last, x.index));
+      units.push({ b: x[1], rt: x[2] });
+      last = x.index + x[0].length;
+    }
+    plain(jp.slice(last));
+    return units;
+  }
+
+  // 단어마다 글 속 어느 칸에 있는지 찾아 칸의 주인을 정한다.
+  // 칸 경계에 딱 맞고 아직 주인이 없는 자리를 먼저 쓴다. 音楽 속의 楽 같은 곳을 피하려는 것.
+  // 그런 자리가 없으면(二年生 속의 年生) 처음 나온 자리를 쓴다.
+  function storyOwners(units, words, idx) {
+    var plain = '', at = [], isStart = {}, isEnd = {};
+    units.forEach(function (u) {
+      isStart[plain.length] = 1;
+      at.push(plain.length);
+      plain += u.b;
+      isEnd[plain.length] = 1;
+    });
+    var owner = units.map(function () { return -1; });
+    var free = function (s, e) {
+      for (var i = 0; i < units.length; i++) {
+        if (at[i] < e && at[i] + units[i].b.length > s && owner[i] > -1) return false;
+      }
+      return true;
+    };
+    words.forEach(function (x, wi) {
+      var f = x.form;
+      if (!f || idx[wi] < 0) return;
+      var pos = -1, first = -1, k = plain.indexOf(f);
+      while (k > -1) {
+        if (first < 0) first = k;
+        if (isStart[k] && isEnd[k + f.length] && free(k, k + f.length)) { pos = k; break; }
+        k = plain.indexOf(f, k + 1);
+      }
+      if (pos < 0) pos = first;
+      if (pos < 0) return;
+      var end = pos + f.length;
+      units.forEach(function (u, i) {
+        if (owner[i] < 0 && at[i] < end && at[i] + u.b.length > pos) owner[i] = idx[wi];
+      });
+    });
+    return owner;
+  }
+
+  function storyUnitHTML(u) {
+    return u.rt ? '<ruby>' + esc(u.b) + '<rt>' + esc(u.rt) + '</rt></ruby>' : esc(u.b);
+  }
+
+  function storyParaHTML(day, p) {
+    var idx = p.words.map(function (x) {
+      var hit = x.no != null ? Store.locate(day, x.no, null) : null;
+      if (!hit) return -1;
+      storyWords.push(hit);
+      return storyWords.length - 1;
+    });
+    var units = storyUnits(p.jp);
+    var owner = storyOwners(units, p.words, idx);
+
+    var text = '', i = 0;
+    while (i < units.length) {
+      var o = owner[i];
+      if (o < 0) { text += storyUnitHTML(units[i]); i++; continue; }
+      var s = '';
+      while (i < units.length && owner[i] === o) { s += storyUnitHTML(units[i]); i++; }
+      text += '<mark data-w="' + o + '">' + s + '</mark>';
+    }
+
+    var list = idx.filter(function (n) { return n > -1; }).map(function (n) {
+      var e = storyWords[n];
+      return '<button type="button" class="ds-item" data-w="' + n + '">' +
+        '<span class="ds-item-w" lang="ja">' + esc(e.w.word) + '</span>' +
+        '<span class="ds-item-r" lang="ja">' + esc(readingOf(e.w) || '') + '</span>' +
+        '<span class="ds-item-m">' + esc(e.w.meaning) + '</span>' +
+      '</button>';
+    }).join('');
+
+    return '<div class="st-para">' +
+      '<p class="st-jp" lang="ja">' + text + '</p>' +
+      '<div class="st-more" hidden>' +
+        '<p class="st-ko">' + esc(p.ko) + '</p>' +
+        '<div class="ds-list st-words">' + list + '</div>' +
+      '</div>' +
+      '<button type="button" class="mini-btn go st-toggle">뜻 보기</button>' +
+    '</div>';
+  }
+
+  function openStory(day, from) {
+    var s = Store.getStory(day);
+    if (!s) return;
+    if (from) storyFrom = from;
+    storyDay = day;
+    storyWords = [];
+    var n = 0;
+    s.paragraphs.forEach(function (p) { n += p.words.length; });
+    $('storyTitle').textContent = 'DAY ' + day;
+    $('storySub').textContent = storyDayTitle(s) + ' · ' + n + '단어';
+    $('storyParas').innerHTML = s.paragraphs.map(function (p) { return storyParaHTML(day, p); }).join('');
+
+    var list = Store.storyList(), at = -1;
+    list.forEach(function (x, i) { if (x.day === day) at = i; });
+    var nav = function (btn, x, label) {
+      btn.hidden = !x;
+      btn.dataset.day = x ? x.day : '';
+      btn.textContent = x ? label.replace('#', x.day) : '';
+    };
+    nav($('stPrev'), list[at - 1], '‹ DAY #');
+    nav($('stNext'), list[at + 1], 'DAY # ›');
+    show('story');
+    window.scrollTo(0, 0);
   }
 
   /* ---------------- 결과 화면 채우기 ---------------- */
@@ -3243,6 +3400,34 @@
     $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
     $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });
     $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
+    // 문단 읽기. 홈에서는 Day 목록으로, Day 화면에서는 그 Day 의 글로 바로 간다.
+    $('btnStory').addEventListener('click', function () { renderStories(); show('stories'); });
+    $('storyGrid').addEventListener('click', function (ev) {
+      var c = ev.target.closest('.day-cell');
+      if (c) openStory(Number(c.dataset.day), 'stories');
+    });
+    $('btnDayStory').addEventListener('click', function () {
+      var n = Number(this.dataset.day);
+      if (n) openStory(n, 'day');
+    });
+    $('stPrev').addEventListener('click', function () { if (this.dataset.day) openStory(Number(this.dataset.day)); });
+    $('stNext').addEventListener('click', function () { if (this.dataset.day) openStory(Number(this.dataset.day)); });
+    $('storyParas').addEventListener('click', function (ev) {
+      var box = ev.target.closest('.st-para');
+      if (!box) return;
+      if (ev.target.closest('.st-toggle')) {
+        var open = !box.classList.contains('open');
+        box.classList.toggle('open', open);
+        box.querySelector('.st-more').hidden = !open;
+        box.querySelector('.st-toggle').textContent = open ? '뜻 숨기기' : '뜻 보기';
+        return;
+      }
+      // 뜻을 열기 전에는 단어를 눌러도 아무 일이 없다. 읽는 법이 먼저 새어 나오면 안 된다.
+      if (!box.classList.contains('open')) return;
+      var m = ev.target.closest('[data-w]');
+      var e = m ? storyWords[Number(m.dataset.w)] : null;
+      if (e) dsOpen(e.w);
+    });
     $('btnExamLog').addEventListener('click', function () { renderExams(); show('exams'); });
     $('examList').addEventListener('click', function (ev) {
       var b = ev.target.closest('.ex-row');

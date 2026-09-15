@@ -113,6 +113,10 @@
       <span class="bb-title">접두어·접미어</span>
       <span class="bb-sub" id="affixCount"></span>
     </button>
+    <button class="big-btn" id="btnStory" hidden>
+      <span class="bb-title">문단 읽기</span>
+      <span class="bb-sub" id="storyCount"></span>
+    </button>
   </div>
 
   <div class="rand-card">
@@ -220,6 +224,7 @@
   <div class="section-head">
     <h2>단어 목록</h2>
     <div class="head-actions">
+      <button class="mini-btn go" id="btnDayStory" hidden>문단 읽기</button>
       <button class="mini-btn go" id="btnBrowse">넘기며 보기</button>
     </div>
   </div>
@@ -318,6 +323,29 @@
     <button class="res-tab" id="tabSuf">접미어</button>
   </div>
   <div id="affixList" class="word-list"></div>
+</section>
+
+<!-- ============ 문단 읽기 ============ -->
+<!-- 한 Day 의 단어를 모두 넣어 지은 글. 처음에는 한자만 보이고,
+     뜻 보기를 누른 문단에만 후리가나·해석·단어가 나온다. -->
+<section id="viewStories" class="view">
+  <div class="hero">
+    <h1>문단 읽기</h1>
+    <p class="res-meta" id="storiesSub"></p>
+  </div>
+  <div id="storyGrid" class="day-grid"></div>
+</section>
+
+<section id="viewStory" class="view">
+  <div class="day-head">
+    <h1 id="storyTitle">DAY 00</h1>
+    <p class="sub" id="storySub"></p>
+  </div>
+  <div id="storyParas" class="st-list"></div>
+  <div class="st-nav">
+    <button class="mini-btn" id="stPrev"></button>
+    <button class="mini-btn go" id="stNext"></button>
+  </div>
 </section>
 
 <!-- ============ 시험 기록 ============ -->
@@ -608,6 +636,7 @@
 
 <script src="data/vocab.js"></script>
 <script src="data/grammar.js"></script>
+<script src="data/stories.js"></script>
 <script src="data/kanji.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/store.js"></script>

@@ -725,6 +725,26 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 .peek-mark.no { color: var(--no); }
 
 /* ---------- 넘기며 보기 ---------- */
+/* ---------- 문단 읽기 ---------- */
+.st-list { display: flex; flex-direction: column; gap: 10px; }
+.st-para {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px 12px;
+}
+.st-para.open { border-color: var(--accent); }
+.st-jp { margin: 0; font-size: 18px; line-height: 2; font-family: var(--jp); }
+/* 뜻 보기 전에는 후리가나를 아예 그리지 않는다. 자리만 비워 두면 줄 간격이 벌어져 읽기 거슬린다. */
+.st-para:not(.open) .st-jp rt { display: none; }
+.st-para.open .st-jp { line-height: 2.6; }
+.st-jp mark { background: transparent; color: var(--accent); }
+.st-para.open .st-jp mark { cursor: pointer; }
+.st-ko { margin: 12px 0 0; font-size: 14px; line-height: 1.7; color: var(--dim); }
+.st-words { margin-top: 10px; border-top: 1px solid var(--hair); }
+.st-toggle { display: block; margin: 10px 0 0 auto; }
+.st-nav { display: flex; justify-content: space-between; gap: 8px; margin: 14px 0 24px; }
+.st-nav .mini-btn { padding: 10px 14px; font-size: 13px; }
+.st-nav #stNext { margin-left: auto; }
+
 .br-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 12px; }
 .br-btn {
   padding: 12px; border-radius: var(--radius); cursor: pointer; font-family: inherit;
