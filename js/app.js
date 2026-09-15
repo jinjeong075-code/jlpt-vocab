@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v80';
+  var BUILD = 'v81';
 
   /* ---------------- 화면 ---------------- */
 
@@ -59,6 +59,7 @@
       else if (view === 'browse') goView(browseFrom);
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
+      else if (view === 'day' && setReturn.length) backFromSet();
       else if (view === 'gramList' && gSetStack.length) applyGSet(gSetStack.pop());
       // 문법 학습은 챕터에서 왔는지 묶음 목록에서 왔는지에 따라 돌아갈 곳이 다르다.
       else if (view === 'gramStudy') goView(gStudyFrom || 'gramCh');
@@ -326,11 +327,34 @@
     // 같은 화면에서 더 좁혀 들어가는 경우(DAY 20 → 단기기억)에는
     // 화면이 바뀌지 않아 show() 가 히스토리를 쌓지 않는다. 직접 쌓아 둔다.
     if (view === 'day' && setDesc) { setStack.push(setDesc); pushNav(); }
-    else setStack = [];
+    else {
+      // 넘기며 보기·결과 화면처럼 목록이 아닌 곳에서 건너왔으면, 뒤로가기가 그 화면으로 돌아가야 한다.
+      // 그 밑에 깔려 있던 목록도 함께 적어 둔다. 그 화면에서 한 번 더 뒤로 가면 원래 목록이 나와야 한다.
+      // 홈에서 연 것은 돌아갈 곳이 홈이라 적을 것이 없다.
+      if (view !== 'home' && view !== 'pick') {
+        setReturn.push({ view: view, desc: setDesc, stack: setStack, days: currentDays.slice() });
+      } else {
+        setReturn = [];
+      }
+      setStack = [];
+    }
     applySet(d);
   }
 
-  function applySet(d) {
+  // 목록이 아닌 화면에서 목록으로 건너왔던 자리. 뒤로가기가 하나씩 꺼내 쓴다.
+  var setReturn = [];
+
+  function backFromSet() {
+    var r = setReturn.pop();
+    setStack = r.stack || [];
+    currentDays = r.days || [];
+    // 화면은 옮기지 않고, 밑에 깔린 목록만 원래대로 되돌려 둔다.
+    if (r.desc) applySet(r.desc, true);
+    else setDesc = null;
+    goView(r.view);
+  }
+
+  function applySet(d, quiet) {
     var entries = d.entries, showDay = d.showDay;
     currentSet = { entries: entries.slice(), label: d.title };
     setDesc = d;
@@ -358,7 +382,7 @@
     $('dayWordList').innerHTML = entries.map(function (e) {
       return itemHTML(e.day, e.w, showDay);
     }).join('');
-    show('day');
+    if (!quiet) show('day');
   }
 
   function renderDays(dayNums) {
