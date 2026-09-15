@@ -101,6 +101,10 @@
       <span class="bb-title">흔들리는 단어</span>
       <span class="bb-sub" id="shakyCount">0개</span>
     </button>
+    <button class="big-btn" id="btnMarkedStudy">
+      <span class="bb-title">주의할 단어</span>
+      <span class="bb-sub" id="markedCount">아직 없음</span>
+    </button>
     <button class="big-btn" id="btnExamLog">
       <span class="bb-title">시험 기록</span>
       <span class="bb-sub" id="examCount">0회</span>
@@ -256,6 +260,7 @@
       <span id="cardBadge" class="badge">미학습</span>
       <span class="card-meta-right">
         <span id="cardNo" class="card-no"></span>
+        <button type="button" class="mark-btn" id="btnMark" title="주의할 단어 (*)" aria-label="주의할 단어">★</button>
         <!-- 정답을 본 뒤에만 나온다. 풀기 전에 열면 읽는 법이 새어 시험이 되지 않는다. -->
         <button type="button" class="card-detail" id="btnCardDetail" hidden>상세</button>
       </span>

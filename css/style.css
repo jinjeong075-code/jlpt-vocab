@@ -1229,3 +1229,18 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .af-one .af-w { font-weight: 600; }
 .af-one .af-r { margin-left: 5px; font-size: 12px; color: var(--accent); }
 .af-one .af-m { margin-left: 6px; color: var(--dim); }
+
+/* ---------- 주의할 단어 별 ---------- */
+/* 꺼진 별은 흐리게 두어 카드를 어지럽히지 않고, 켜진 별만 노랗게 눈에 띈다. */
+.mark-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--dim); opacity: .4;
+  font-size: 18px; line-height: 1; font-family: inherit; cursor: pointer;
+  transition: opacity .12s, color .12s, transform .12s;
+}
+.mark-btn:hover { opacity: .75; }
+.mark-btn.on { color: var(--warn); opacity: 1; }
+.mark-btn:active { transform: scale(.88); }
+.mark-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mark-btn.sm { width: 26px; height: 26px; font-size: 15px; }

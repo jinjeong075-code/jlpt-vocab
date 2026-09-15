@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v76';
+  var BUILD = 'v77';
 
   /* ---------------- 화면 ---------------- */
 
@@ -207,6 +207,9 @@
     var shaky = Store.shakyList();
     $('shakyCount').textContent = shaky.length ? shaky.length + '개' : '아직 없음';
     $('btnShakyStudy').disabled = !shaky.length;
+    var marked = Store.markedList();
+    $('markedCount').textContent = marked.length ? marked.length + '개' : '아직 없음';
+    $('btnMarkedStudy').disabled = !marked.length;
 
     var slow = Store.slowList();
     $('btnSlowList').hidden = !slow.length;
@@ -608,6 +611,7 @@
           '</span>' +
           '<div class="wl-meaning">' + esc(w.meaning) + '</div>' +
         '</span>' +
+        markBtnHTML(day, w, 'sm') +
         '<span class="wl-side">' + Store.STAGE_LABEL[st] + rateHTML(r) +
           (showDay ? '<span class="wl-day">DAY ' + day + '</span>' : (r.seen ? '<span class="wl-day">Lv.' + r.level + '</span>' : '')) +
         '</span>' +
@@ -688,7 +692,7 @@
       '<div class="card">' +
         '<div class="card-meta">' +
           '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-          '<span class="card-no">DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '') + '</span>' +
+          '<span class="card-meta-right"><span class="card-no">DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '') + '</span>' + markBtnHTML(e.day, e.w) + '</span>' +
         '</div>' +
         '<div class="jp-word" lang="ja">' + dictHTML(e.w.word, 'big') + '</div>' +
         '<div class="answer-box">' +
@@ -991,6 +995,9 @@
     $('cardBadge').textContent = Store.STAGE_LABEL[st];
     $('cardBadge').className = 'badge ' + st;
     $('cardNo').textContent = 'DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '');
+    $('btnMark').dataset.mark = Store.keyOf(e.day, e.w);
+    $('btnMark').classList.toggle('on', Store.isMarked(e.day, e.w));
+    $('btnMark').setAttribute('aria-pressed', Store.isMarked(e.day, e.w));
     $('jpWord').innerHTML = dictHTML(e.w.word, 'big');
     $('ansReading').textContent = readingOf(e.w) || e.w.word;
     $('ansMeaning').innerHTML = posHTML(e.w.pos) + esc(e.w.meaning);
@@ -1165,7 +1172,7 @@
     var h = '<div class="card">' +
       '<div class="card-meta">' +
         '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-        '<span class="card-no">DAY ' + e.day + (w.no ? ' · ' + w.no : '') + '</span>' +
+        '<span class="card-meta-right"><span class="card-no">DAY ' + e.day + (w.no ? ' · ' + w.no : '') + '</span>' + markBtnHTML(e.day, w) + '</span>' +
       '</div>' +
       '<div class="rev-ko">' + posHTML(w.pos) + esc(w.meaning) + '</div>';
 
@@ -1282,7 +1289,7 @@
       '<div class="card">' +
         '<div class="card-meta">' +
           '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-          '<span class="card-no">DAY ' + x.day + (x.w.no ? ' · ' + x.w.no : '') + '</span>' +
+          '<span class="card-meta-right"><span class="card-no">DAY ' + x.day + (x.w.no ? ' · ' + x.w.no : '') + '</span>' + markBtnHTML(x.day, x.w) + '</span>' +
         '</div>' +
         '<div class="jp-word" lang="ja">' + dictHTML(x.w.word, 'big') + '</div>' +
         '<div class="answer-box">' +
@@ -1422,6 +1429,7 @@
           '</span>' +
           '<div class="wl-meaning">' + esc(x.w.meaning) + '</div>' +
         '</span>' +
+        markBtnHTML(x.day, x.w, 'sm') +
         '<span class="wl-side">' + mark +
           '<span class="wl-day">' + Store.STAGE_LABEL[st] + '</span></span>' +
         (detail ? '<span class="wl-caret">▾</span>' : '') +
@@ -1446,6 +1454,40 @@
     $('resultEmpty').hidden = list.length > 0;
     $('resultEmpty').textContent = '틀린 단어가 없습니다. 전부 맞혔어요.';
     $('resultList').innerHTML = list.map(resultItemHTML).join('');
+  }
+
+  /* ---------------- 주의할 단어 ---------------- */
+  // 공부하다 헷갈리는 단어에 별을 붙여 따로 모은다. 진도와는 상관없다.
+  // 카드든 목록이든 어디서 누르든 같은 단어의 별이 한꺼번에 바뀐다.
+
+  function markBtnHTML(day, w, cls) {
+    var k = Store.keyOf(day, w), on = Store.isMarkedKey(k);
+    return '<button type="button" class="mark-btn' + (cls ? ' ' + cls : '') + (on ? ' on' : '') + '"' +
+      ' data-mark="' + esc(k) + '" aria-pressed="' + on + '"' +
+      ' title="주의할 단어 (*)" aria-label="주의할 단어">★</button>';
+  }
+
+  function toggleMark(k) {
+    var on = Store.toggleMarkKey(k);
+    $$('.mark-btn[data-mark]').forEach(function (b) {
+      if (b.dataset.mark !== k) return;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+    });
+    if (global_Sync()) Sync.touch();
+  }
+
+  // 지금 화면에 떠 있는 단어의 키. 키보드 * 가 이 단어의 별을 바꾼다.
+  function currentMarkKey() {
+    if (view === 'browse' && browse && browse.list && browse.list[browse.index]) {
+      var b = browse.list[browse.index];
+      return Store.keyOf(b.day, b.w);
+    }
+    if (view === 'study' && session) {
+      var e = peek !== null ? session.results[peek] : session.queue[session.index];
+      if (e) return Store.keyOf(e.day, e.w);
+    }
+    return null;
   }
 
   /* ---------------- 접두어·접미어 ---------------- */
@@ -3016,6 +3058,14 @@
     // 한자 글자는 어디에 있든 눌러서 그 한자로 건너뛴다. 단어 상세, 결과 목록, 한자 사전 패널.
     // 목록 안에서는 펼침 토글이 같이 도는 것을 막아야 하므로 캡처 단계에서 끊는다.
     document.addEventListener('click', function (ev) {
+      // 주의할 단어 별. 카드든 목록이든 여기서 받는다. 목록 펼침이 같이 돌지 않게 끊는다.
+      var mk = ev.target.closest('.mark-btn[data-mark]');
+      if (mk) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleMark(mk.dataset.mark);
+        return;
+      }
       var b = ev.target.closest('.ki-part[data-k]');
       if (b) {
         ev.preventDefault();
@@ -3138,6 +3188,12 @@
       startSession(Store.weakList(), '모르는 단어');
     });
     // 목록을 먼저 보여준다. 많이 흔들린 것부터 나오니 무엇이 문제인지 눈에 들어온다.
+    $('btnMarkedStudy').addEventListener('click', function () {
+      var list = Store.markedList();
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '주의할 단어', list.length + '단어', true);
+    });
     $('btnShakyStudy').addEventListener('click', function () {
       var list = Store.shakyList();
       currentDays = [];
@@ -3394,6 +3450,12 @@
         return;
       }
       // 넘기며 보기는 채점이 없으니 좌우 화살표와 Enter 로만 넘긴다.
+      // * = 지금 보고 있는 단어에 별을 붙이거나 뗀다. 넘기며 보기·시험·돌아보기 어디서든 먹는다.
+      // 입력란 안에서는 글자로 둔다.
+      if (ev.key === '*' && !/^(INPUT|TEXTAREA)$/.test(ev.target.tagName || '')) {
+        var markK = currentMarkKey();
+        if (markK) { ev.preventDefault(); toggleMark(markK); return; }
+      }
       if (view === 'browse') {
         if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
           ev.preventDefault(); browseGo(1);

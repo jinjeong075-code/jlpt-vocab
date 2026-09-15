@@ -13,6 +13,7 @@
   var MOVED_KEY = 'jvocab.moved.v1';          // 두 책에 같이 실린 단어: N3 쪽 키 -> N2 쪽 키
   var MOVED_BK_KEY = 'jvocab.movedBackup.v1'; // 옮기기 전 N3 쪽 학습 기록. 이 기기에만 남긴다
   var AFFIX_KEY = 'jvocab.affixes.v1';
+  var MARK_KEY  = 'jvocab.marks.v1';          // 주의할 단어: 키 -> { on, at }
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -81,6 +82,7 @@
   SYNCED_KEYS[VOCAB_KEY] = 1; SYNCED_KEYS[GRAM_KEY] = 1;
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
+  SYNCED_KEYS[MARK_KEY] = 1;
 
   function write(key, val) {
     try {
@@ -517,6 +519,68 @@
     var nn = /^\d+$/.test(rest) ? Number(rest) : null;
     w = findWord(nd, nn, nn == null ? rest : wordText);
     return w ? { day: nd, w: w } : null;
+  }
+
+  /* ---------- 주의할 단어 ---------- */
+  // 공부하다가 별을 눌러 모아 두는 목록. 진도와는 상관이 없다.
+  // 뗄 때도 뗀 시각을 남긴다. 그래야 한 기기에서 뗀 것이 받기로 다른 기기에서도 떨어진다.
+  // 합칠 때는 단어마다 나중에 누른 쪽을 따른다.
+  var marks = {};
+
+  function isMarkedKey(k) { return !!(marks[k] && marks[k].on); }
+  function isMarked(day, w) { return isMarkedKey(keyOf(day, w)); }
+
+  function toggleMarkKey(k) {
+    var on = !isMarkedKey(k);
+    marks[k] = { on: on ? 1 : 0, at: Date.now() };
+    write(MARK_KEY, marks);
+    return on;
+  }
+
+  function mergeMarks(inc) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (k) {
+      var r = inc[k];
+      if (!r || typeof r !== 'object') return;
+      var cur = marks[k];
+      if (cur && (cur.at || 0) >= (r.at || 0)) return;
+      marks[k] = { on: r.on ? 1 : 0, at: r.at || 0 };
+      n++;
+    });
+    if (n) write(MARK_KEY, marks);
+    return n;
+  }
+
+  // 옮겨진 단어에 붙은 별도 N2 쪽으로 옮긴다. 양쪽에 있으면 나중에 누른 쪽을 따른다.
+  function moveMarks() {
+    var n = 0;
+    Object.keys(moved).forEach(function (oldK) {
+      var r = marks[oldK];
+      if (!r) return;
+      var newK = moved[oldK], cur = marks[newK];
+      if (!cur || (r.at || 0) > (cur.at || 0)) marks[newK] = r;
+      delete marks[oldK];
+      n++;
+    });
+    if (n) write(MARK_KEY, marks);
+    return n;
+  }
+
+  // 별 붙인 단어. 최근에 붙인 것이 위에 온다.
+  function markedList() {
+    var out = [];
+    Object.keys(marks).forEach(function (k) {
+      var r = marks[k];
+      if (!r || !r.on) return;
+      var i = k.indexOf('-');
+      var day = Number(k.slice(0, i)), rest = k.slice(i + 1);
+      var no = /^\d+$/.test(rest) ? Number(rest) : null;
+      var hit = locate(day, no, no == null ? rest : null);
+      if (hit) out.push({ day: hit.day, w: hit.w, at: r.at || 0 });
+    });
+    out.sort(function (a, b) { return b.at - a.at; });
+    return out.map(function (x) { return { day: x.day, w: x.w }; });
   }
 
   /* ---------- 접두어·접미어 ---------- */
@@ -1054,7 +1118,8 @@
       exams: read(EXAM_KEY, []),
       // 두 책에 같이 실린 단어 표. 받는 기기가 옛 N3 단어를 이 표로 걸러낸다.
       moved: moved,
-      affixes: affixes
+      affixes: affixes,
+      marks: marks
     };
   }
 
@@ -1142,6 +1207,8 @@
     }
     // 옛 기기가 보낸 N3 쪽 기록이 섞여 들어왔으면 N2 쪽으로 옮긴다.
     stat.moved = moveProgress();
+    stat.marks = mergeMarks(obj.marks);
+    moveMarks();
     stat.time = timeTotal();
 
     // 풀다 만 학습은 합칠 수가 없다. 둘 중 나중에 저장된 쪽을 쓴다.
@@ -1253,6 +1320,7 @@
   function init() {
     days = read(VOCAB_KEY, {});
     moved = read(MOVED_KEY, {});
+    marks = read(MARK_KEY, {});
     if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
     if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
@@ -1381,6 +1449,7 @@
     // 바뀐 것이 있을 때만 쓴다. 매번 쓰면 켤 때마다 안 올린 기록이 생긴 것처럼 보인다.
     if (vocabChanged) write(VOCAB_KEY, days);
     moveProgress();
+    moveMarks();
 
     affixes = normalizeAffixes(read(AFFIX_KEY, null));
     if (affixCount(global.DEFAULT_AFFIXES) > affixCount(affixes)) {
@@ -1434,6 +1503,10 @@
     examList: examList,
     locate: locate,
     getAffixes: getAffixes,
+    isMarked: isMarked,
+    isMarkedKey: isMarkedKey,
+    toggleMarkKey: toggleMarkKey,
+    markedList: markedList,
     addExam: addExam,
     gRecOf: gRecOf,
     gStageFor: gStageFor,
