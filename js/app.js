@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v78';
+  var BUILD = 'v79';
 
   /* ---------------- 화면 ---------------- */
 
@@ -192,7 +192,8 @@
     var afN = af ? af.prefixes.length + af.suffixes.length : 0;
     $('btnAffix').hidden = !afN;
     if (afN) $('affixCount').textContent = afN + '개';
-    var stN = Store.storyList().length;
+    var stDays = {}, stN = 0;
+    Store.storyList().forEach(function (s) { if (!stDays[s.day]) { stDays[s.day] = 1; stN++; } });
     $('btnStory').hidden = !stN;
     if (stN) $('storyCount').textContent = stN + ' Day';
     renderDaily();
@@ -433,11 +434,13 @@
     return kanjiMap;
   }
 
-  // 읽는 법 순으로 늘어놓으면 같은 소리로 읽히는 단어끼리 붙어서 비교하기 좋다.
+  // Day 가 낮은 것부터 늘어놓는다. 먼저 배운 단어가 위에 와야 새 단어를 아는 단어에 이어 붙이기 쉽다.
+  // 같은 Day 안에서는 책에 실린 순서(번호)대로.
   function wordsOfKanji(c) {
     var list = (kanjiIndex()[c] || []).slice();
     list.sort(function (a, b) {
-      return (readingOf(a.w) || a.w.word).localeCompare(readingOf(b.w) || b.w.word, 'ja');
+      return (a.day - b.day) || ((a.w.no || 0) - (b.w.no || 0)) ||
+        (readingOf(a.w) || a.w.word).localeCompare(readingOf(b.w) || b.w.word, 'ja');
     });
     return list;
   }
@@ -459,7 +462,7 @@
     var list = wordsOfKanji(c);
     if (!list.length) return;
     currentDays = [];
-    renderSet(list, '한자 ' + c, list.length + '단어 · 읽는 법 순', true, kanjiInfoHTML(c));
+    renderSet(list, '한자 ' + c, list.length + '단어 · Day 순', true, kanjiInfoHTML(c));
   }
 
   /* ---------------- 한자 한 글자의 사전 정보 ---------------- */
@@ -1541,7 +1544,7 @@
   // 처음에는 한자만 보인다. 읽는 법을 떠올려 본 뒤 뜻 보기를 누르면
   // 그 문단에만 후리가나와 해석, 들어 있는 단어가 나온다.
   // 외울 단어는 글 속에 색으로 표시해 두고, 뜻을 연 뒤에는 눌러서 상세 창을 띄울 수 있다.
-  var storyDay = 0, storyFrom = 'stories';
+  var storyDay = 0, storySet = 1, storyFrom = 'stories';
   var storyWords = [];   // 지금 화면에 그린 단어들. data-w 가 이 배열의 자리다.
 
   // Day 제목은 단어장 쪽을 따른다. 글 파일의 제목은 짧게 적어 둔 것이라.
@@ -1550,14 +1553,24 @@
     return (d && d.title) || s.title;
   }
 
+  // 같은 Day 의 글이 여러 편이면 한 칸으로 묶는다. 편은 글 화면의 탭에서 고른다.
+  function storyDays() {
+    var out = [], at = {};
+    Store.storyList().forEach(function (s) {
+      if (at[s.day] === undefined) { at[s.day] = out.length; out.push({ day: s.day, first: s, n: 0 }); }
+      out[at[s.day]].n++;
+    });
+    return out;
+  }
+
   function renderStories() {
-    var list = Store.storyList(), n = 0;
-    list.forEach(function (s) { s.paragraphs.forEach(function (p) { n += p.words.length; }); });
-    $('storiesSub').textContent = list.length + ' Day · ' + n + '단어';
-    $('storyGrid').innerHTML = list.map(function (s) {
-      return '<button class="day-cell" data-day="' + s.day + '">' +
-        '<span class="dn">DAY ' + s.day + '</span>' +
-        '<span class="dt">' + esc(storyDayTitle(s)) + '</span>' +
+    var days = storyDays(), total = 0;
+    days.forEach(function (d) { total += d.n; });
+    $('storiesSub').textContent = days.length + ' Day · ' + total + '편';
+    $('storyGrid').innerHTML = days.map(function (d) {
+      return '<button class="day-cell" data-day="' + d.day + '">' +
+        '<span class="dn">DAY ' + d.day + (d.n > 1 ? '<small class="st-n">' + d.n + '편</small>' : '') + '</span>' +
+        '<span class="dt">' + esc(storyDayTitle(d.first)) + '</span>' +
       '</button>';
     }).join('');
   }
@@ -1656,19 +1669,28 @@
     '</div>';
   }
 
-  function openStory(day, from) {
-    var s = Store.getStory(day);
-    if (!s) return;
+  // set 을 주지 않으면 지금 보던 편을 이어 간다. 그 Day 에 그 편이 없으면 1편부터.
+  function openStory(day, from, set) {
+    var sets = Store.storySets(day);
+    if (!sets.length) return;
+    var want = set || storySet, s = sets[0];
+    sets.forEach(function (x) { if (x.set === want) s = x; });
     if (from) storyFrom = from;
     storyDay = day;
+    storySet = s.set;
     storyWords = [];
     var n = 0;
     s.paragraphs.forEach(function (p) { n += p.words.length; });
     $('storyTitle').textContent = 'DAY ' + day;
     $('storySub').textContent = storyDayTitle(s) + ' · ' + n + '단어';
+    $('storySets').hidden = sets.length < 2;
+    $('storySets').innerHTML = sets.length < 2 ? '' : sets.map(function (x) {
+      return '<button type="button" class="res-tab' + (x.set === s.set ? ' sel' : '') + '" data-set="' + x.set + '">' +
+        x.set + '편</button>';
+    }).join('');
     $('storyParas').innerHTML = s.paragraphs.map(function (p) { return storyParaHTML(day, p); }).join('');
 
-    var list = Store.storyList(), at = -1;
+    var list = storyDays(), at = -1;
     list.forEach(function (x, i) { if (x.day === day) at = i; });
     var nav = function (btn, x, label) {
       btn.hidden = !x;
@@ -3404,11 +3426,15 @@
     $('btnStory').addEventListener('click', function () { renderStories(); show('stories'); });
     $('storyGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.day-cell');
-      if (c) openStory(Number(c.dataset.day), 'stories');
+      if (c) openStory(Number(c.dataset.day), 'stories', 1);
     });
     $('btnDayStory').addEventListener('click', function () {
       var n = Number(this.dataset.day);
-      if (n) openStory(n, 'day');
+      if (n) openStory(n, 'day', 1);
+    });
+    $('storySets').addEventListener('click', function (ev) {
+      var t = ev.target.closest('.res-tab');
+      if (t) { openStory(storyDay, null, Number(t.dataset.set)); }
     });
     $('stPrev').addEventListener('click', function () { if (this.dataset.day) openStory(Number(this.dataset.day)); });
     $('stNext').addEventListener('click', function () { if (this.dataset.day) openStory(Number(this.dataset.day)); });

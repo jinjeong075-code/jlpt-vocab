@@ -633,18 +633,24 @@
       };
     }).filter(function (p) { return p.jp; });
     if (!paras.length) return null;
-    return { day: Number(s.day), title: String(s.title || ''), v: Number(s.v || 0), paragraphs: paras };
+    return {
+      day: Number(s.day), set: Math.max(1, Number(s.set) || 1),
+      title: String(s.title || ''), v: Number(s.v || 0), paragraphs: paras
+    };
   }
 
-  // Firebase 는 1~50 처럼 번호 키로 된 객체를 배열로 바꿔 돌려준다. arrOf 가 어느 쪽이든 편다.
+  // 한 Day 에 글이 여러 편일 수 있다. 'Day-편' 을 키로 쓴다.
+  // v78 은 Day 만 키로 썼다. 그때 저장된 것은 편 번호가 없으니 1편으로 읽힌다.
+  // arrOf 는 객체든 배열이든 편다. Firebase 가 번호 키 객체를 배열로 돌려줄 때가 있다.
   function mergeStories(inc) {
     var n = 0;
     arrOf(inc).forEach(function (raw) {
       var s = normalizeStory(raw);
       if (!s) return;
-      var cur = stories[s.day];
+      var id = s.day + '-' + s.set;
+      var cur = stories[id];
       if (cur && (cur.v || 0) >= s.v) return;
-      stories[s.day] = s;
+      stories[id] = s;
       n++;
     });
     // 바뀐 것이 있을 때만 쓴다. 매번 쓰면 켤 때마다 안 올린 기록이 생긴 것처럼 보인다.
@@ -654,10 +660,15 @@
 
   function storyList() {
     return Object.keys(stories).map(function (k) { return stories[k]; })
-      .sort(function (a, b) { return a.day - b.day; });
+      .sort(function (a, b) { return a.day - b.day || a.set - b.set; });
   }
 
-  function getStory(day) { return stories[day] || null; }
+  // 그 Day 의 글들. 편 순서대로.
+  function storySets(day) {
+    return storyList().filter(function (s) { return s.day === Number(day); });
+  }
+
+  function getStory(day, set) { return stories[day + '-' + (set || 1)] || null; }
 
   function addDays(list) {
     var added = 0;
@@ -1554,6 +1565,7 @@
     locate: locate,
     getAffixes: getAffixes,
     storyList: storyList,
+    storySets: storySets,
     getStory: getStory,
     isMarked: isMarked,
     isMarkedKey: isMarkedKey,

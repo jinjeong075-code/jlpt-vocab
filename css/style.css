@@ -744,6 +744,8 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 .st-nav { display: flex; justify-content: space-between; gap: 8px; margin: 14px 0 24px; }
 .st-nav .mini-btn { padding: 10px 14px; font-size: 13px; }
 .st-nav #stNext { margin-left: auto; }
+.st-sets { flex-wrap: wrap; }
+.day-cell .st-n { font-size: 10px; font-weight: 600; color: var(--accent); margin-left: 5px; }
 
 .br-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 12px; }
 .br-btn {
