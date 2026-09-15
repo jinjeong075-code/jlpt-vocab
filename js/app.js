@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v79';
+  var BUILD = 'v80';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1659,13 +1659,14 @@
       '</button>';
     }).join('');
 
+    // 뜻 보기는 글 위에 둔다. 긴 문단이면 아래에 두었을 때 버튼을 찾아 스크롤해야 한다.
     return '<div class="st-para">' +
+      '<button type="button" class="mini-btn go st-toggle">뜻 보기</button>' +
       '<p class="st-jp" lang="ja">' + text + '</p>' +
       '<div class="st-more" hidden>' +
         '<p class="st-ko">' + esc(p.ko) + '</p>' +
         '<div class="ds-list st-words">' + list + '</div>' +
       '</div>' +
-      '<button type="button" class="mini-btn go st-toggle">뜻 보기</button>' +
     '</div>';
   }
 

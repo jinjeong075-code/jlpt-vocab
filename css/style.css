@@ -740,7 +740,7 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 .st-para.open .st-jp mark { cursor: pointer; }
 .st-ko { margin: 12px 0 0; font-size: 14px; line-height: 1.7; color: var(--dim); }
 .st-words { margin-top: 10px; border-top: 1px solid var(--hair); }
-.st-toggle { display: block; margin: 10px 0 0 auto; }
+.st-toggle { display: block; margin: 0 0 8px auto; }
 .st-nav { display: flex; justify-content: space-between; gap: 8px; margin: 14px 0 24px; }
 .st-nav .mini-btn { padding: 10px 14px; font-size: 13px; }
 .st-nav #stNext { margin-left: auto; }
