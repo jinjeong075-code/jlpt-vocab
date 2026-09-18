@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v81';
+  var BUILD = 'v82';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1685,7 +1685,11 @@
 
     // 뜻 보기는 글 위에 둔다. 긴 문단이면 아래에 두었을 때 버튼을 찾아 스크롤해야 한다.
     return '<div class="st-para">' +
-      '<button type="button" class="mini-btn go st-toggle">뜻 보기</button>' +
+      // 급수는 뜻 보기와 한 줄에 작게 둔다. 급수를 안 매긴 문단이면 버튼만 나온다.
+      '<div class="st-head">' +
+        (p.level ? '<span class="st-lv">' + esc(p.level) + '</span>' : '') +
+        '<button type="button" class="mini-btn go st-toggle">뜻 보기</button>' +
+      '</div>' +
       '<p class="st-jp" lang="ja">' + text + '</p>' +
       '<div class="st-more" hidden>' +
         '<p class="st-ko">' + esc(p.ko) + '</p>' +

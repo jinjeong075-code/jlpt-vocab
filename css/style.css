@@ -740,7 +740,13 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 .st-para.open .st-jp mark { cursor: pointer; }
 .st-ko { margin: 12px 0 0; font-size: 14px; line-height: 1.7; color: var(--dim); }
 .st-words { margin-top: 10px; border-top: 1px solid var(--hair); }
-.st-toggle { display: block; margin: 0 0 8px auto; }
+/* 문단마다 JLPT 급수를 작게 적는다. 뜻 보기 버튼과 한 줄에 둔다. */
+.st-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.st-lv {
+  font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--dim);
+  border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+}
+.st-toggle { margin-left: auto; }
 .st-nav { display: flex; justify-content: space-between; gap: 8px; margin: 14px 0 24px; }
 .st-nav .mini-btn { padding: 10px 14px; font-size: 13px; }
 .st-nav #stNext { margin-left: auto; }

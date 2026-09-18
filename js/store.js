@@ -627,6 +627,8 @@
     var paras = arrOf(s.paragraphs).filter(Boolean).map(function (p) {
       return {
         jp: String(p.jp || ''), ko: String(p.ko || ''),
+        // 문단마다 매긴 JLPT 급수. 글 화면에 작게 적는다. 없거나 이상한 값이면 비워 둔다.
+        level: /^N[1-5]$/.test(p.level) ? p.level : '',
         words: arrOf(p.words).filter(Boolean).map(function (x) {
           return { no: x.no != null ? Number(x.no) : null, form: String(x.form || '') };
         })
