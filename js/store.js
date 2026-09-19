@@ -446,7 +446,8 @@
       });
     });
     if (!words.length) return null;
-    return { day: Number(obj.day), title: String(obj.title || '').trim(), words: words };
+    // v: 단어장 원본을 고친 시각(build-vocab.ps1 이 붙인다). 같은 Day 면 v 가 큰 쪽이 새 단어장이다.
+    return { day: Number(obj.day), title: String(obj.title || '').trim(), v: Number(obj.v) || 0, words: words };
   }
 
   /* ---------- 두 책에 같이 실린 단어 ---------- */
@@ -680,6 +681,8 @@
       // 두 책에 같이 실린 단어는 파일로 다시 넣어도 N3 쪽을 뺀다.
       dropMoved(d);
       if (!d.words.length) return;
+      // 손으로 넣은 파일은 지금 넣은 것이 가장 새 단어장이다. 내장 단어장에 덮이지 않게 v 를 지금으로 둔다.
+      d.v = Date.now();
       days[d.day] = d;
       added++;
     });
@@ -1208,6 +1211,8 @@
         if (!d.words.length) return;
         var cur = days[d.day];
         if (cur && cur.words.length > d.words.length) return;
+        // 읽기·뜻을 고친 단어장(v 가 큼)이 고치기 전 백업에 되돌려지지 않게 한다.
+        if (cur && (cur.v || 0) > d.v) return;
         days[d.day] = d; stat.days++;
       });
       write(VOCAB_KEY, days);
@@ -1494,12 +1499,17 @@
     if (migrated) write(TIME_KEY, timeLog);
     var vocabChanged = false;
     if (global.DEFAULT_VOCAB) {
-      // 내장 데이터는 저장된 것이 없을 때만 채워 넣는다(업로드본을 덮지 않음).
+      // 내장 단어장은 저장된 것이 없거나, 저장본보다 새 단어장(v 가 큼)일 때 넣는다.
+      // 원본에서 읽기·뜻을 고치면 이렇게 PC 저장본이 바뀌고, 올리기로 폰까지 간다.
+      // 단어 수가 줄어드는 쪽으로는 바꾸지 않는다(손으로 더 넣은 단어를 지우지 않게).
       global.DEFAULT_VOCAB.forEach(function (d) {
-        if (!days[d.day]) {
-          var n = normalizeDay(d);
-          if (n) { days[n.day] = n; vocabChanged = true; }
-        }
+        var cur = days[d.day];
+        if (cur && (cur.v || 0) >= (Number(d.v) || 0)) return;
+        var n = normalizeDay(d);
+        if (!n) return;
+        dropMoved(n);
+        if (!n.words.length || (cur && cur.words.length > n.words.length)) return;
+        days[n.day] = n; vocabChanged = true;
       });
     }
     // 두 책에 같이 실린 단어는 N3 쪽을 빼고, 그 단어의 학습 기록은 N2 쪽으로 옮긴다.
