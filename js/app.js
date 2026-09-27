@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v89';
+  var BUILD = 'v90';
 
   /* ---------------- 화면 ---------------- */
 
@@ -433,6 +433,25 @@
     });
   }
 
+  // 같은 소리를 두 번 겹친 낱말(ぶかぶか·ちらちら·ぶかぶかだ·馬鹿馬鹿しい).
+  // 뜻이 서로 비슷비슷해서 흩어 놓으면 헷갈린다. 한자리에 모아 견주며 외우려는 것.
+  var REP_TAILS = ['', 'だ', 'する', 'しい', 'い', 'と', 'に'];
+
+  function isRepWord(word) {
+    var w = String(word || '').replace(/[（）()]/g, '');
+    for (var i = 0; i < REP_TAILS.length; i++) {
+      var t = REP_TAILS[i];
+      if (t && w.slice(-t.length) !== t) continue;
+      var s = t ? w.slice(0, w.length - t.length) : w;
+      if (s.length >= 2 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) return true;
+    }
+    return false;
+  }
+
+  function repWords() {
+    return Store.allWords().filter(function (e) { return isRepWord(e.w.word); });
+  }
+
   // 오답률로 골라 학습한다. 어느 선부터 손볼지는 그때그때 다르다.
   var RATE_STEPS = [10, 20, 30, 40, 50, 70];
 
@@ -651,12 +670,14 @@
   }
 
   function renderPosChips() {
+    var rep = repWords().length;
     $('posChips').innerHTML = POS_GROUPS.map(function (g) {
       var n = wordsOfPos(g.has).length;
       if (!n) return '';
       return '<button class="chip pos-chip pos-' + g.key + '" data-has="' + esc(g.has) + '">' +
         esc(g.label) + '<i>' + n + '</i></button>';
-    }).join('');
+    }).join('') +
+    (rep ? '<button class="chip rep-chip" id="chipRep">반복어<i>' + rep + '</i></button>' : '');
   }
 
   // 시험 기록. 왼쪽이 오래된 것, 오른쪽이 최근 것이다.
@@ -3404,6 +3425,14 @@
     });
 
     $('posChips').addEventListener('click', function (ev) {
+      // 반복어(ぶかぶか 꼴)는 품사가 아니라 낱말 모양으로 모은다.
+      if (ev.target.closest('.rep-chip')) {
+        var reps = repWords();
+        if (!reps.length) return;
+        currentDays = [];
+        renderSet(reps, '반복어', reps.length + '단어 · 전체 Day', true);
+        return;
+      }
       var chip = ev.target.closest('.pos-chip');
       if (!chip) return;
       var g = POS_GROUPS.filter(function (x) { return x.has === chip.dataset.has; })[0];

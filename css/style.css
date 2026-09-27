@@ -708,6 +708,10 @@ mark ruby rt { color: var(--accent); opacity: 1; }
 .pos-chip { flex: 0 1 auto; padding: 9px 12px; display: inline-flex; align-items: baseline; gap: 7px; }
 .pos-chip i { font-style: normal; font-size: 11px; opacity: .7; }
 .pos-chip:hover { border-color: currentColor; filter: brightness(1.25); }
+/* 반복어(ぶかぶか 꼴) 모아 보기. 품사 칩과 같은 줄에 두되 색으로 갈라 둔다. */
+.rep-chip { flex: 0 1 auto; padding: 9px 12px; display: inline-flex; align-items: baseline; gap: 7px; color: var(--accent); }
+.rep-chip i { font-style: normal; font-size: 11px; opacity: .7; }
+.rep-chip:hover { border-color: currentColor; filter: brightness(1.25); }
 
 /* ---------- 문제 카드의 예문 여러 개 ---------- */
 .qex { display: flex; gap: 9px; padding: 10px 0; }
