@@ -5,7 +5,7 @@ window.KANJI_DICT = {
 "meta": {
   "source": "KANJIDIC2 / KRADFILE - Electronic Dictionary Research and Development Group, CC BY-SA 4.0",
   "url": "https://www.edrdg.org/",
-  "built": "2026-09-27",
+  "built": "2026-09-28",
   "words": 5760,
   "count": 1695
 },
