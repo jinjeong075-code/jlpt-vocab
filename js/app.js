@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v90';
+  var BUILD = 'v91';
 
   /* ---------------- 화면 ---------------- */
 
@@ -510,6 +510,30 @@
   var KANJI_STEPS = [10, 5, 3, 1];
   var kanjiStep = 10;
 
+  // 1~2개 단어에만 쓰인 한자 가운데, 그 단어가 모두 '3개 이상 쓰인 한자'의 단어이기도 한 것.
+  // 앞 단계를 하면 그 단어를 어차피 다 보게 되므로, 마지막 '전체' 단계에서는 빼서 목록을 가볍게 한다.
+  var coveredCache = null;
+
+  function coveredKanji() {
+    if (coveredCache) return coveredCache;
+    var map = kanjiIndex();
+    var common = {};
+    Object.keys(map).forEach(function (c) { if (map[c].length >= 3) common[c] = 1; });
+    // 단어마다 '3개 이상 쓰인 한자'를 품고 있는지 미리 본다
+    var hasCommon = function (e) {
+      var ks = String(e.w.word).match(/[一-龯々]/g) || [];
+      for (var i = 0; i < ks.length; i++) if (common[ks[i]]) return true;
+      return false;
+    };
+    coveredCache = {};
+    Object.keys(map).forEach(function (c) {
+      if (map[c].length >= 3) return;
+      var all = map[c].every(hasCommon);
+      if (all) coveredCache[c] = 1;
+    });
+    return coveredCache;
+  }
+
   // 한자 한 글자의 단어들이 어디까지 외워졌는지. 단어 학습 기록을 그대로 센다.
   function kanjiStat(c) {
     var list = kanjiIndex()[c] || [];
@@ -526,9 +550,15 @@
 
   function renderKanjiList() {
     var map = kanjiIndex();
+    var covered = coveredKanji();
+    // 마지막 단계(전체)에서는 앞 단계 단어에 다 들어 있는 한자를 뺀다.
+    var inStep = function (c, min) {
+      if (map[c].length >= min) return min > 1 || !covered[c];
+      return false;
+    };
     var all = Object.keys(map);
     var counts = KANJI_STEPS.map(function (min) {
-      return all.filter(function (c) { return map[c].length >= min; }).length;
+      return all.filter(function (c) { return inStep(c, min); }).length;
     });
     $('kanjiTabs').innerHTML = KANJI_STEPS.map(function (min, i) {
       return '<button class="res-tab' + (min === kanjiStep ? ' sel' : '') + '" data-min="' + min + '">' +
@@ -536,13 +566,15 @@
     }).join('');
 
     // 많이 나오는 한자가 앞에. 같은 수면 이미 외운 것이 뒤로 가게 둔다.
-    var list = all.filter(function (c) { return map[c].length >= kanjiStep; })
+    var list = all.filter(function (c) { return inStep(c, kanjiStep); })
       .map(function (c) { return { k: c, s: kanjiStat(c) }; })
       .sort(function (a, b) { return (b.s.n - a.s.n) || (a.s.long - b.s.long) || a.k.localeCompare(b.k, 'ja'); });
 
     var done = list.filter(function (x) { return x.s.long === x.s.n; }).length;
     var due = list.reduce(function (n, x) { return n + (x.s.due ? 1 : 0); }, 0);
-    $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due;
+    var hidden = Object.keys(covered).length;
+    $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
+      (kanjiStep === 1 && hidden ? ' · 앞 단계 단어에 다 들어 있는 ' + hidden + '자는 뺌' : '');
 
     $('kanjiGrid').innerHTML = list.map(function (x) {
       var full = x.s.long === x.s.n;
