@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v91';
+  var BUILD = 'v92';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1580,6 +1580,27 @@
     var perfect = res.filter(function (x) { return x.firstOk; }).length;
     saveExam(res);
     fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에', '', 'home');
+  }
+
+  // 밀린 복습이 많을 때 여기까지만 하고 끊는다.
+  // 푼 단어는 이미 채점되어 진도에 들어갔으므로, 남은 것만 다음 '오늘의 복습' 에 다시 뜬다.
+  function stopSession() {
+    if (!session) return;
+    var res = distinctResults();
+    if (!res.length) {                 // 한 문제도 풀지 않았으면 결과를 낼 것이 없다
+      Store.clearSession();
+      goView('home');
+      return;
+    }
+    var left = Math.max(0, session.queue.length - session.index) + session.retry.length;
+    var perfect = res.filter(function (x) { return x.firstOk; }).length;
+    $('progressFill').style.width = Math.round(session.index / Math.max(1, session.total) * 100) + '%';
+    $('progressText').textContent = session.index + ' / ' + session.total;
+    saveExam(res);
+    Store.clearSession();              // 이어하기로 남기지 않는다. 남은 단어는 복습 목록에 그대로 있다.
+    if (global_Sync()) Sync.touch();
+    fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에',
+      left ? '여기까지 하고 멈췄습니다. 남은 ' + left + '단어는 복습 목록에 그대로 있습니다.' : '', 'home');
   }
 
   function resultItemHTML(x) {
@@ -3584,6 +3605,7 @@
     $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
     // 시험 기록. 줄을 누르면 그 판의 결과 화면이 그대로 열린다.
     // 접두어·접미어. 탭으로 접두어와 접미어를 오간다.
+    $('btnStopStudy').addEventListener('click', function () { stopSession(); });
     $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
     // 한자별 학습. 단계를 고르고, 한자를 누르면 그 한자가 든 단어 목록으로 간다.
     $('pkKanji').addEventListener('click', function () { goView('kanji'); });

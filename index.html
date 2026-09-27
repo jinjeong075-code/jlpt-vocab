@@ -252,7 +252,10 @@
 <section id="viewStudy" class="view">
   <div class="progress-wrap">
     <div class="progress-bar"><div id="progressFill"></div></div>
-    <div class="progress-text"><span id="progressText">0 / 0</span><span id="studyLabel"></span></div>
+    <div class="progress-text"><span id="progressText">0 / 0</span><span id="studyLabel"></span>
+      <!-- 밀린 복습이 몇백 개일 때 한 번에 다 하지 않아도 되게, 여기까지만 하고 끊는 버튼. -->
+      <button type="button" class="mini-btn" id="btnStopStudy">여기까지</button>
+    </div>
   </div>
 
   <!-- 타임어택의 남은 시간. 떠올리는 동안에만 줄어든다. -->
