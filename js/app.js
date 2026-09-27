@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v85';
+  var BUILD = 'v86';
 
   /* ---------------- 화면 ---------------- */
 
@@ -41,7 +41,7 @@
   var BACK_TO = {
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
-    stories: 'home', story: 'stories',
+    stories: 'home', story: 'stories', kanji: 'home',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
@@ -81,6 +81,7 @@
     else if (v === 'time') { renderTime(); show('time'); }
     else if (v === 'exams') { renderExams(); show('exams'); }
     else if (v === 'stories') { renderStories(); show('stories'); }
+    else if (v === 'kanji') { renderKanjiList(); show('kanji'); }
     else show(v);
   }
 
@@ -97,7 +98,7 @@
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
     gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
-    stories: '문단 읽기', story: '문단 읽기'
+    stories: '문단 읽기', story: '문단 읽기', kanji: '한자'
   };
 
   function show(name) {
@@ -197,6 +198,10 @@
     Store.storyList().forEach(function (s) { if (!stDays[s.day]) { stDays[s.day] = 1; stN++; } });
     $('btnStory').hidden = !stN;
     if (stN) $('storyCount').textContent = stN + ' Day';
+
+    var kjN = Object.keys(kanjiIndex()).length;
+    $('btnKanji').hidden = !kjN;
+    if (kjN) $('kanjiCount').textContent = kjN + '자';
     renderDaily();
     renderPosChips();
     renderRateChips();
@@ -475,6 +480,52 @@
         (readingOf(a.w) || a.w.word).localeCompare(readingOf(b.w) || b.w.word, 'ja');
     });
     return list;
+  }
+
+  /* ---------------- 한자별 학습 ---------------- */
+  // 한자를 고르면 그 한자가 든 단어만 모아 학습한다(진도는 단어 진도 그대로).
+  // 많이 나오는 한자부터 외우는 편이 남는 것이 많아, 단어 수로 단계를 나눠 보여 준다.
+  var KANJI_STEPS = [10, 5, 1];
+  var kanjiStep = 10;
+
+  function kanjiStat(c) {
+    var list = kanjiIndex()[c] || [];
+    var due = 0, long = 0;
+    list.forEach(function (e) {
+      if (Store.isDue(e.day, e.w)) due++;
+      if (Store.stageFor(e.day, e.w) === 'long') long++;
+    });
+    return { n: list.length, due: due, long: long };
+  }
+
+  function renderKanjiList() {
+    var map = kanjiIndex();
+    var all = Object.keys(map);
+    var counts = KANJI_STEPS.map(function (min) {
+      return all.filter(function (c) { return map[c].length >= min; }).length;
+    });
+    $('kanjiTabs').innerHTML = KANJI_STEPS.map(function (min, i) {
+      return '<button class="res-tab' + (min === kanjiStep ? ' sel' : '') + '" data-min="' + min + '">' +
+        (min > 1 ? '단어 ' + min + '개 이상' : '전체') + ' <i>' + counts[i] + '</i></button>';
+    }).join('');
+
+    // 많이 나오는 한자가 앞에. 같은 수면 이미 외운 것이 뒤로 가게 둔다.
+    var list = all.filter(function (c) { return map[c].length >= kanjiStep; })
+      .map(function (c) { return { k: c, s: kanjiStat(c) }; })
+      .sort(function (a, b) { return (b.s.n - a.s.n) || (a.s.long - b.s.long) || a.k.localeCompare(b.k, 'ja'); });
+
+    var done = list.filter(function (x) { return x.s.long === x.s.n; }).length;
+    var due = list.reduce(function (n, x) { return n + (x.s.due ? 1 : 0); }, 0);
+    $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due;
+
+    $('kanjiGrid').innerHTML = list.map(function (x) {
+      var full = x.s.long === x.s.n;
+      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + '" data-k="' + esc(x.k) + '">' +
+        '<span class="kj-char" lang="ja">' + esc(x.k) + '</span>' +
+        '<span class="kj-n">' + x.s.n + '</span>' +
+        (x.s.due ? '<span class="kj-due">' + x.s.due + '</span>' : '') +
+      '</button>';
+    }).join('');
   }
 
   function renderKanjiChips() {
@@ -3457,6 +3508,16 @@
     // 시험 기록. 줄을 누르면 그 판의 결과 화면이 그대로 열린다.
     // 접두어·접미어. 탭으로 접두어와 접미어를 오간다.
     $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
+    // 한자별 학습. 단계를 고르고, 한자를 누르면 그 한자가 든 단어 목록으로 간다.
+    $('btnKanji').addEventListener('click', function () { renderKanjiList(); show('kanji'); });
+    $('kanjiTabs').addEventListener('click', function (ev) {
+      var t = ev.target.closest('.res-tab');
+      if (t) { kanjiStep = Number(t.dataset.min); renderKanjiList(); }
+    });
+    $('kanjiGrid').addEventListener('click', function (ev) {
+      var c = ev.target.closest('.kj-cell');
+      if (c) openKanji(c.dataset.k);
+    });
     $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });
     $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
     // 문단 읽기. 홈에서는 Day 목록으로, Day 화면에서는 그 Day 의 글로 바로 간다.

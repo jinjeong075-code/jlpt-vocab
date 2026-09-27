@@ -398,6 +398,24 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 }
 .day-cell.locked { opacity: .3; cursor: not-allowed; }
 
+/* ---------- 한자별 학습 ---------- */
+/* 한 칸에 한자 하나. 오른쪽 위 숫자는 그 한자가 든 단어 수, 아래 점은 복습할 단어 수. */
+.kanji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+.kj-cell {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 4px 8px; cursor: pointer; font-family: inherit; color: var(--text);
+  position: relative; text-align: center;
+}
+.kj-cell:hover { border-color: var(--accent); }
+.kj-cell.done { opacity: .45; }
+.kj-char { display: block; font-size: 26px; line-height: 1.1; font-weight: 500; }
+.kj-n { display: block; margin-top: 4px; font-size: 11px; color: var(--dim); }
+.kj-due {
+  position: absolute; top: 4px; right: 5px; min-width: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: #07101f;
+  font-size: 10px; font-weight: 700; line-height: 15px;
+}
+
 /* ---------- 선택 바 ---------- */
 body.has-selbar main { padding-bottom: 156px; }
 .sel-bar {
