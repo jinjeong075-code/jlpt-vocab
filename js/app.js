@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v92';
+  var BUILD = 'v93';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1208,7 +1208,7 @@
   }
 
   function renderGap(e) {
-    var g = session.timed ? null : Store.gapPreview(e.day, e.w);
+    var g = (session.timed || isRetryNow(e)) ? null : Store.gapPreview(e.day, e.w);
     // 복습일 전에 미리 푸는 판은 일정을 건드리지 않는다. 방금 틀려서 다시 나온 단어가 그렇다.
     // 빈칸으로 두면 고장난 것처럼 보이므로 왜 비었는지를 적는다.
     $('gapOk').textContent = g ? gapDayLabel(g.okDays) : '그대로';
@@ -1519,12 +1519,19 @@
     }, { passive: true });
   }
 
+  // 이 판에서 이미 틀려 다시 나온 단어인가. 다시 나온 것을 맞히는 건 방금 본 것을 되뇌는 것이라
+  // 외웠다는 증거가 못 된다. 그래서 레벨과 복습일을 올리지 않고 기록만 남긴다(연습).
+  // 시계로만 보면 판이 길어질 때(복습이 밀려 몇백 개일 때) 한 시간이 지나 버려 레벨이 올라갔다.
+  function isRetryNow(e) {
+    return !!(session && session.miss && session.miss[sessKey(e)]);
+  }
+
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
     var e = session.queue[session.index];
     var ok = (picked.reading === 1 && picked.meaning === 1);
     var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1,
-      session.timed ? 'timed' : 'jp2ko', !!session.timed);
+      session.timed ? 'timed' : 'jp2ko', !!session.timed || isRetryNow(e));
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
     settle(e, ok || !!session.timed);
     advance();
