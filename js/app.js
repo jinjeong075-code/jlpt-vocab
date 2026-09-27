@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v86';
+  var BUILD = 'v87';
 
   /* ---------------- 화면 ---------------- */
 
@@ -215,14 +215,12 @@
       c.classList.toggle('sel', c.dataset.dir === quizDir);
     });
 
-    var due = Store.dueList(), weak = Store.weakList();
+    var due = Store.dueList();
     // 대기가 0이면 언제 다시 뜨는지 알려준다. 안 그러면 고장난 것처럼 보인다.
     $('reviewCount').textContent = due.length
       ? due.length + '개 대기'
       : nextDueText();
-    $('weakCount').textContent = weak.length + '개';
     $('btnReviewToday').disabled = !due.length;
-    $('btnWeakStudy').disabled = !weak.length;
 
     var shaky = Store.shakyList();
     $('shakyCount').textContent = shaky.length ? shaky.length + '개' : '아직 없음';
@@ -3471,9 +3469,6 @@
     });
     $('btnReviewToday').addEventListener('click', function () {
       startSession(Store.dueList(), '오늘의 복습');
-    });
-    $('btnWeakStudy').addEventListener('click', function () {
-      startSession(Store.weakList(), '모르는 단어');
     });
     // 목록을 먼저 보여준다. 많이 흔들린 것부터 나오니 무엇이 문제인지 눈에 들어온다.
     $('btnMarkedStudy').addEventListener('click', function () {
