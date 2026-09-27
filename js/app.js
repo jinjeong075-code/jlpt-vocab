@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v84';
+  var BUILD = 'v85';
 
   /* ---------------- 화면 ---------------- */
 
@@ -267,6 +267,14 @@
       if (d) d.words.forEach(function (w) { out.push({ day: d.day, w: w }); });
     });
     return out;
+  }
+
+  // 단어 하나에 붙는 Day 표시. 두 책에 같이 실려 N2 로 모은 단어는
+  // 'DAY 30→81' 처럼 원래 외우던 Day 도 같이 적는다. 펼친 적 없는 Day 의 단어가
+  // 복습에 떠도 어디서 온 것인지 바로 보이게 하려는 것이다.
+  function dayOf(day, w) {
+    var from = w ? Store.fromDay(day, w) : 0;
+    return 'DAY ' + (from ? from + '→' + day : day);
   }
 
   function dayLabel(dayNums) {
@@ -652,7 +660,7 @@
         '</span>' +
         markBtnHTML(day, w, 'sm') +
         '<span class="wl-side">' + Store.STAGE_LABEL[st] + rateHTML(r) +
-          (showDay ? '<span class="wl-day">DAY ' + day + '</span>' : (r.seen ? '<span class="wl-day">Lv.' + r.level + '</span>' : '')) +
+          (showDay ? '<span class="wl-day">' + dayOf(day, w) + '</span>' : (r.seen ? '<span class="wl-day">Lv.' + r.level + '</span>' : '')) +
         '</span>' +
         (detail ? '<span class="wl-caret">▾</span>' : '') +
       '</div>' +
@@ -731,7 +739,7 @@
       '<div class="card">' +
         '<div class="card-meta">' +
           '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-          '<span class="card-meta-right"><span class="card-no">DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '') + '</span>' + markBtnHTML(e.day, e.w) + '</span>' +
+          '<span class="card-meta-right"><span class="card-no">' + dayOf(e.day, e.w) + (e.w.no ? ' · ' + e.w.no : '') + '</span>' + markBtnHTML(e.day, e.w) + '</span>' +
         '</div>' +
         '<div class="jp-word" lang="ja">' + dictHTML(e.w.word, 'big') + '</div>' +
         '<div class="answer-box">' +
@@ -1033,7 +1041,7 @@
 
     $('cardBadge').textContent = Store.STAGE_LABEL[st];
     $('cardBadge').className = 'badge ' + st;
-    $('cardNo').textContent = 'DAY ' + e.day + (e.w.no ? ' · ' + e.w.no : '');
+    $('cardNo').textContent = dayOf(e.day, e.w) + (e.w.no ? ' · ' + e.w.no : '');
     $('btnMark').dataset.mark = Store.keyOf(e.day, e.w);
     $('btnMark').classList.toggle('on', Store.isMarked(e.day, e.w));
     $('btnMark').setAttribute('aria-pressed', Store.isMarked(e.day, e.w));
@@ -1211,7 +1219,7 @@
     var h = '<div class="card">' +
       '<div class="card-meta">' +
         '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-        '<span class="card-meta-right"><span class="card-no">DAY ' + e.day + (w.no ? ' · ' + w.no : '') + '</span>' + markBtnHTML(e.day, w) + '</span>' +
+        '<span class="card-meta-right"><span class="card-no">' + dayOf(e.day, w) + (w.no ? ' · ' + w.no : '') + '</span>' + markBtnHTML(e.day, w) + '</span>' +
       '</div>' +
       '<div class="rev-ko">' + posHTML(w.pos) + esc(w.meaning) + '</div>';
 
@@ -1328,7 +1336,7 @@
       '<div class="card">' +
         '<div class="card-meta">' +
           '<span class="badge ' + st + '">' + Store.STAGE_LABEL[st] + '</span>' +
-          '<span class="card-meta-right"><span class="card-no">DAY ' + x.day + (x.w.no ? ' · ' + x.w.no : '') + '</span>' + markBtnHTML(x.day, x.w) + '</span>' +
+          '<span class="card-meta-right"><span class="card-no">' + dayOf(x.day, x.w) + (x.w.no ? ' · ' + x.w.no : '') + '</span>' + markBtnHTML(x.day, x.w) + '</span>' +
         '</div>' +
         '<div class="jp-word" lang="ja">' + dictHTML(x.w.word, 'big') + '</div>' +
         '<div class="answer-box">' +

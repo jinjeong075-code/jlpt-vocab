@@ -463,6 +463,7 @@
     Object.keys(inc).forEach(function (k) {
       if (typeof inc[k] !== 'string' || moved[k] === inc[k]) return;
       moved[k] = inc[k];
+      movedBack = null;   // 표가 바뀌면 되짚기 표도 다시 만든다
       n++;
     });
     if (n) write(MOVED_KEY, moved);
@@ -508,6 +509,21 @@
       write(MOVED_BK_KEY, bk);
     }
     return n;
+  }
+
+  // 옮겨진 단어가 원래 N3 몇 일에 있었는지. 없으면 0.
+  // 목록과 문제 화면에 'DAY 30→81' 처럼 두 Day 를 같이 적어,
+  // 펼친 적 없는 Day 의 단어가 복습에 떠서 헷갈리는 일을 없앤다.
+  var movedBack = null;
+  function fromDay(day, w) {
+    if (!movedBack) {
+      movedBack = {};
+      Object.keys(moved).forEach(function (k) {
+        var to = moved[k];
+        if (!movedBack[to]) movedBack[to] = Number(k.slice(0, k.indexOf('-')));
+      });
+    }
+    return movedBack[keyOf(day, w)] || 0;
   }
 
   // 옛 참조(시험 기록, 이어하기)로 지금 단어를 찾는다. 옮겨진 단어면 N2 쪽을 돌려준다.
@@ -1384,6 +1400,7 @@
   function init() {
     days = read(VOCAB_KEY, {});
     moved = read(MOVED_KEY, {});
+    movedBack = null;
     marks = read(MARK_KEY, {});
     if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
@@ -1557,6 +1574,7 @@
     clearSlowKey: clearSlowKey,
     clearAllSlow: clearAllSlow,
     keyOf: keyOf,
+    fromDay: fromDay,
     learnedList: learnedList,
     markSlow: markSlow,
     shakyScore: shakyScore,
