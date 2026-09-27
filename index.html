@@ -45,6 +45,14 @@
       </span>
       <span class="pct" id="pkGramPct">0%</span>
     </button>
+    <button class="pk" id="pkKanji">
+      <span class="em" lang="ja">漢</span>
+      <span class="tx">
+        <span class="t">한자</span>
+        <span class="s" id="pkKanjiSub"></span>
+      </span>
+      <span class="pct" id="pkKanjiPct">0%</span>
+    </button>
   </div>
 </section>
 
@@ -116,10 +124,6 @@
     <button class="big-btn" id="btnStory" hidden>
       <span class="bb-title">문단 읽기</span>
       <span class="bb-sub" id="storyCount"></span>
-    </button>
-    <button class="big-btn" id="btnKanji" hidden>
-      <span class="bb-title">한자별 학습</span>
-      <span class="bb-sub" id="kanjiCount"></span>
     </button>
   </div>
 
@@ -326,6 +330,9 @@
     <p class="res-meta" id="kanjiSub"></p>
   </div>
   <div class="res-tabs" id="kanjiTabs"></div>
+  <p class="kj-legend">
+    <i class="n-long">장기기억</i><i class="n-short">단기기억</i><i class="n-unknown">모름 · 미학습</i>
+  </p>
   <div id="kanjiGrid" class="kanji-grid"></div>
 </section>
 

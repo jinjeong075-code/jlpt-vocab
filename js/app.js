@@ -41,7 +41,7 @@
   var BACK_TO = {
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
-    stories: 'home', story: 'stories', kanji: 'home',
+    stories: 'home', story: 'stories', kanji: 'pick',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
   };
 
@@ -93,6 +93,15 @@
     $('pkGramSub').textContent  = g.total + '문형';
     $('pkVocabPct').textContent = pct(v) + '%';
     $('pkGramPct').textContent  = pct(g) + '%';
+
+    // 한자는 그 한자가 든 단어를 모두 장기기억으로 넘겼을 때 다 외운 것으로 센다.
+    var map = kanjiIndex(), ks = Object.keys(map), kDone = 0;
+    ks.forEach(function (c) {
+      var all = map[c].every(function (e) { return Store.stageFor(e.day, e.w) === 'long'; });
+      if (all) kDone++;
+    });
+    $('pkKanjiSub').textContent = ks.length + '자';
+    $('pkKanjiPct').textContent = (ks.length ? Math.round(kDone / ks.length * 100) : 0) + '%';
   }
 
   var VIEW_TITLE = {
@@ -198,10 +207,6 @@
     Store.storyList().forEach(function (s) { if (!stDays[s.day]) { stDays[s.day] = 1; stN++; } });
     $('btnStory').hidden = !stN;
     if (stN) $('storyCount').textContent = stN + ' Day';
-
-    var kjN = Object.keys(kanjiIndex()).length;
-    $('btnKanji').hidden = !kjN;
-    if (kjN) $('kanjiCount').textContent = kjN + '자';
     renderDaily();
     renderPosChips();
     renderRateChips();
@@ -488,14 +493,18 @@
   var KANJI_STEPS = [10, 5, 1];
   var kanjiStep = 10;
 
+  // 한자 한 글자의 단어들이 어디까지 외워졌는지. 단어 학습 기록을 그대로 센다.
   function kanjiStat(c) {
     var list = kanjiIndex()[c] || [];
-    var due = 0, long = 0;
+    var s = { n: list.length, due: 0, long: 0, short: 0, unknown: 0 };
     list.forEach(function (e) {
-      if (Store.isDue(e.day, e.w)) due++;
-      if (Store.stageFor(e.day, e.w) === 'long') long++;
+      if (Store.isDue(e.day, e.w)) s.due++;
+      var st = Store.stageFor(e.day, e.w);
+      if (st === 'long') s.long++;
+      else if (st === 'short') s.short++;
+      else s.unknown++;          // 모름과 미학습은 한 칸으로 묶는다(홈 통계와 같은 기준)
     });
-    return { n: list.length, due: due, long: long };
+    return s;
   }
 
   function renderKanjiList() {
@@ -520,9 +529,21 @@
 
     $('kanjiGrid').innerHTML = list.map(function (x) {
       var full = x.s.long === x.s.n;
+      var t = x.s.n || 1;
+      var pct = function (n) { return (n / t * 100).toFixed(2) + '%'; };
       return '<button type="button" class="kj-cell' + (full ? ' done' : '') + '" data-k="' + esc(x.k) + '">' +
         '<span class="kj-char" lang="ja">' + esc(x.k) + '</span>' +
-        '<span class="kj-n">' + x.s.n + '</span>' +
+        // 장기기억 · 단기기억 · 모름(미학습 포함). 색은 Day 칸·홈 통계와 같다.
+        '<span class="kj-nums">' +
+          '<i class="n-long">' + x.s.long + '</i>' +
+          '<i class="n-short">' + x.s.short + '</i>' +
+          '<i class="n-unknown">' + x.s.unknown + '</i>' +
+        '</span>' +
+        '<span class="dbar">' +
+          '<i class="b-long" style="width:' + pct(x.s.long) + '"></i>' +
+          '<i class="b-short" style="width:' + pct(x.s.short) + '"></i>' +
+          '<i class="b-unknown" style="width:' + pct(x.s.unknown) + '"></i>' +
+        '</span>' +
         (x.s.due ? '<span class="kj-due">' + x.s.due + '</span>' : '') +
       '</button>';
     }).join('');
@@ -3509,7 +3530,7 @@
     // 접두어·접미어. 탭으로 접두어와 접미어를 오간다.
     $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
     // 한자별 학습. 단계를 고르고, 한자를 누르면 그 한자가 든 단어 목록으로 간다.
-    $('btnKanji').addEventListener('click', function () { renderKanjiList(); show('kanji'); });
+    $('pkKanji').addEventListener('click', function () { goView('kanji'); });
     $('kanjiTabs').addEventListener('click', function (ev) {
       var t = ev.target.closest('.res-tab');
       if (t) { kanjiStep = Number(t.dataset.min); renderKanjiList(); }
