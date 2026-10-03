@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v94';
+  var BUILD = 'v95';
 
   /* ---------------- 화면 ---------------- */
 
@@ -452,10 +452,13 @@
     return Store.allWords().filter(function (e) { return isRepWord(e.w.word); });
   }
 
-  // 한자가 한 글자도 없는 단어(おととい·ぶかぶか·コンセント).
+  // 한자가 한 글자도 없는 히라가나 단어(おととい·ぶかぶか).
   // 한자별 학습으로는 어느 칸에도 안 들어가서 영영 안 나온다. 그래서 따로 모아 둔다.
+  // 가타카나 단어(コンセント)는 따로 묶인 Day 가 있어 여기서 뺀다.
   function noKanjiWords() {
-    return Store.allWords().filter(function (e) { return !/[一-龯々]/.test(e.w.word); });
+    return Store.allWords().filter(function (e) {
+      return !/[一-龯々]/.test(e.w.word) && !/[ァ-ヺー]/.test(e.w.word);
+    });
   }
 
   // 오답률로 골라 학습한다. 어느 선부터 손볼지는 그때그때 다르다.
@@ -587,7 +590,7 @@
     var due = list.reduce(function (n, x) { return n + (x.s.due ? 1 : 0); }, 0);
     var nk = noKanjiWords().length;
     $('btnNoKanji').hidden = !nk;
-    $('btnNoKanji').textContent = '한자 없는 단어 ' + nk;
+    $('btnNoKanji').textContent = '히라가나 단어 ' + nk;
 
     var hidden = Object.keys(covered).length;
     $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
@@ -3646,7 +3649,7 @@
       var list = noKanjiWords();
       if (!list.length) return;
       currentDays = [];
-      renderSet(list, '한자 없는 단어', list.length + '단어 · 전체 Day', true);
+      renderSet(list, '히라가나 단어', list.length + '단어 · 전체 Day', true);
     });
     $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });
     $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
