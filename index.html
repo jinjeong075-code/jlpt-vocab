@@ -328,7 +328,34 @@
     <h1>한자별 학습</h1>
     <p class="res-meta" id="kanjiSub"></p>
   </div>
+  <!-- 단어 홈과 같은 진도 카드. '외웠다'의 기준은 그 한자의 단어가 모두 장기기억이 된 것. -->
+  <div class="prog-card">
+    <div class="prog-top">
+      <div>
+        <div class="prog-label">다 외운 한자</div>
+        <div class="prog-count"><b id="kjProgDone">0</b> <span id="kjProgTotal">/ 0 자</span></div>
+      </div>
+      <div class="prog-pct" id="kjProgPct">0<i>%</i></div>
+    </div>
+    <div class="prog-bar" id="kjProgSeg"></div>
+  </div>
+
   <div class="res-tabs" id="kanjiTabs"></div>
+
+  <!-- 지금 구간의 단어를 바로 학습한다. 단어 홈의 '오늘의 복습'·'전체' 와 같은 자리. -->
+  <div class="row-btns kj-actions">
+    <button class="big-btn primary" id="btnKanjiReview">
+      <span class="bb-title">이 구간 복습</span>
+      <span class="bb-sub" id="kjReviewCount">0개 대기</span>
+    </button>
+    <button class="big-btn" id="btnKanjiStudy">
+      <span class="bb-title">이 구간 전체 학습</span>
+      <span class="bb-sub" id="kjStudyCount">0단어</span>
+    </button>
+  </div>
+
+  <div class="stat-grid" id="kanjiStats"></div>
+
   <p class="kj-legend">
     <i class="n-long">장기기억</i><i class="n-short">단기기억</i><i class="n-unknown">모름 · 미학습</i>
     <!-- 한자도 가타카나도 없는 히라가나 단어는 어느 칸에도 안 들어간다. 여기서 따로 본다. -->

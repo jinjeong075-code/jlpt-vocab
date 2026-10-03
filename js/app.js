@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v95';
+  var BUILD = 'v96';
 
   /* ---------------- 화면 ---------------- */
 
@@ -95,7 +95,9 @@
     $('pkGramPct').textContent  = pct(g) + '%';
 
     // 한자는 그 한자가 든 단어를 모두 장기기억으로 넘겼을 때 다 외운 것으로 센다.
-    var map = kanjiIndex(), ks = Object.keys(map), kDone = 0;
+    // 세는 대상은 한자 화면에 실제로 나오는 글자(앞 구간 단어에 다 들어 있는 것은 뺀다).
+    var map = kanjiIndex(), covered = coveredKanji(), kDone = 0;
+    var ks = Object.keys(map).filter(function (c) { return !covered[c]; });
     ks.forEach(function (c) {
       var all = map[c].every(function (e) { return Store.stageFor(e.day, e.w) === 'long'; });
       if (all) kDone++;
@@ -525,6 +527,8 @@
     { lo: 1,  hi: 2,  label: '단어 2~1개' }
   ];
   var kanjiStep = 0;   // 지금 보고 있는 구간 번호
+  var stepWords = [];  // 그 구간 한자들이 쓰인 단어(중복 없이)
+  var stepDue = [];    // 그중 복습할 때가 된 것
 
   // 1~2개 단어에만 쓰인 한자 가운데, 그 단어가 모두 '3개 이상 쓰인 한자'의 단어이기도 한 것.
   // 앞 단계를 하면 그 단어를 어차피 다 보게 되므로, 마지막 '전체' 단계에서는 빼서 목록을 가볍게 한다.
@@ -591,6 +595,49 @@
     var nk = noKanjiWords().length;
     $('btnNoKanji').hidden = !nk;
     $('btnNoKanji').textContent = '히라가나 단어 ' + nk;
+
+    // 위 진도 카드: 한자 모드에 나오는 한자 전체 가운데 몇 자를 다 외웠는가.
+    // 한 자를 '다 외웠다'는 그 한자의 단어가 모두 장기기억이 됐다는 뜻이다.
+    var shown = all.filter(function (c) {
+      for (var i = 0; i < KANJI_STEPS.length; i++) if (inStep(c, i)) return true;
+      return false;
+    });
+    var kp = { total: shown.length, long: 0, short: 0, unknown: 0, 'new': 0 };
+    shown.forEach(function (c) {
+      var s = kanjiStat(c);
+      if (s.long === s.n) kp.long++;
+      else if (s.long || s.short) kp.short++;   // 손은 댔으나 아직 다 외우지 못한 한자
+      else kp.unknown++;
+    });
+    var pct = kp.total ? kp.long / kp.total * 100 : 0;
+    $('kjProgDone').textContent = kp.long;
+    $('kjProgTotal').textContent = '/ ' + kp.total + ' 자';
+    $('kjProgPct').innerHTML = (pct < 10 && pct > 0 ? pct.toFixed(1) : Math.round(pct)) + '<i>%</i>';
+    var seg = function (n, cls) {
+      return n ? '<i class="' + cls + '" style="width:' + (n / (kp.total || 1) * 100).toFixed(3) + '%"></i>' : '';
+    };
+    $('kjProgSeg').innerHTML = seg(kp.long, 'long') + seg(kp.short, 'short') + seg(kp.unknown, 'unknown');
+
+    // 지금 구간의 단어(한자가 여럿인 단어는 한 번만) 통계와 학습 버튼
+    stepWords = [];
+    var seen = {};
+    list.forEach(function (x) {
+      (kanjiIndex()[x.k] || []).forEach(function (e) {
+        var key = e.day + '-' + (e.w.no || e.w.word);
+        if (seen[key]) return;
+        seen[key] = 1;
+        stepWords.push(e);
+      });
+    });
+    var ws = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
+    stepWords.forEach(function (e) { ws.total++; ws[Store.stageFor(e.day, e.w)]++; });
+    $('kanjiStats').innerHTML = statHTML(ws, true);
+    var dueList = stepWords.filter(function (e) { return Store.isDue(e.day, e.w); });
+    stepDue = dueList;
+    $('kjReviewCount').textContent = dueList.length + '개 대기';
+    $('btnKanjiReview').disabled = !dueList.length;
+    $('kjStudyCount').textContent = stepWords.length + '단어';
+    $('btnKanjiStudy').disabled = !stepWords.length;
 
     var hidden = Object.keys(covered).length;
     $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
@@ -3643,6 +3690,27 @@
     $('kanjiGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.kj-cell');
       if (c) openKanji(c.dataset.k);
+    });
+    // 이 구간의 단어를 바로 학습한다. 단어 홈의 버튼들과 같은 동작이다.
+    $('btnKanjiReview').addEventListener('click', function () {
+      if (stepDue.length) startSession(stepDue.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label + ' 복습');
+    });
+    $('btnKanjiStudy').addEventListener('click', function () {
+      if (stepWords.length) startSession(stepWords.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label);
+    });
+    // 통계 칸을 누르면 그 상태의 단어만 모아 본다(단어 홈과 같다).
+    $('kanjiStats').addEventListener('click', function (ev) {
+      var b = ev.target.closest('.stat.tap');
+      if (!b) return;
+      var stage = b.dataset.stage;
+      var list = stage === 'all' ? stepWords.slice()
+        : stepWords.filter(function (e) {
+            var st = Store.stageFor(e.day, e.w);
+            return stage === 'unknown' ? (st === 'unknown' || st === 'new') : st === stage;
+          });
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '한자 ' + KANJI_STEPS[kanjiStep].label + ' · ' + STAGE_NAME[stage], list.length + '단어', true);
     });
     // 한자가 없어 어느 칸에도 안 들어가는 단어를 한자리에 모아 본다.
     $('btnNoKanji').addEventListener('click', function () {
