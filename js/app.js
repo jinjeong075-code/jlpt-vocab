@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v93';
+  var BUILD = 'v94';
 
   /* ---------------- 화면 ---------------- */
 
@@ -452,6 +452,12 @@
     return Store.allWords().filter(function (e) { return isRepWord(e.w.word); });
   }
 
+  // 한자가 한 글자도 없는 단어(おととい·ぶかぶか·コンセント).
+  // 한자별 학습으로는 어느 칸에도 안 들어가서 영영 안 나온다. 그래서 따로 모아 둔다.
+  function noKanjiWords() {
+    return Store.allWords().filter(function (e) { return !/[一-龯々]/.test(e.w.word); });
+  }
+
   // 오답률로 골라 학습한다. 어느 선부터 손볼지는 그때그때 다르다.
   var RATE_STEPS = [10, 20, 30, 40, 50, 70];
 
@@ -507,8 +513,15 @@
   /* ---------------- 한자별 학습 ---------------- */
   // 한자를 고르면 그 한자가 든 단어만 모아 학습한다(진도는 단어 진도 그대로).
   // 많이 나오는 한자부터 외우는 편이 남는 것이 많아, 단어 수로 단계를 나눠 보여 준다.
-  var KANJI_STEPS = [10, 5, 3, 1];
-  var kanjiStep = 10;
+  // 단어 수로 나눈 구간. 겹치지 않게 끊어 두어, 한 단계를 끝내면 다음 단계는 모두 새 한자다.
+  // 마지막 구간(2~1개)에서는 '앞 구간 단어에 다 들어 있는 한자'를 뺀다(coveredKanji).
+  var KANJI_STEPS = [
+    { lo: 10, hi: 0,  label: '단어 10개 이상' },   // hi 0 은 위가 없다는 뜻
+    { lo: 5,  hi: 9,  label: '단어 9~5개' },
+    { lo: 3,  hi: 4,  label: '단어 4~3개' },
+    { lo: 1,  hi: 2,  label: '단어 2~1개' }
+  ];
+  var kanjiStep = 0;   // 지금 보고 있는 구간 번호
 
   // 1~2개 단어에만 쓰인 한자 가운데, 그 단어가 모두 '3개 이상 쓰인 한자'의 단어이기도 한 것.
   // 앞 단계를 하면 그 단어를 어차피 다 보게 되므로, 마지막 '전체' 단계에서는 빼서 목록을 가볍게 한다.
@@ -551,30 +564,34 @@
   function renderKanjiList() {
     var map = kanjiIndex();
     var covered = coveredKanji();
-    // 마지막 단계(전체)에서는 앞 단계 단어에 다 들어 있는 한자를 뺀다.
-    var inStep = function (c, min) {
-      if (map[c].length >= min) return min > 1 || !covered[c];
-      return false;
+    var inStep = function (c, i) {
+      var r = KANJI_STEPS[i], n = map[c].length;
+      if (n < r.lo || (r.hi && n > r.hi)) return false;
+      return r.lo > 2 || !covered[c];   // 마지막 구간에서만 가려낸다
     };
     var all = Object.keys(map);
-    var counts = KANJI_STEPS.map(function (min) {
-      return all.filter(function (c) { return inStep(c, min); }).length;
+    var counts = KANJI_STEPS.map(function (r, i) {
+      return all.filter(function (c) { return inStep(c, i); }).length;
     });
-    $('kanjiTabs').innerHTML = KANJI_STEPS.map(function (min, i) {
-      return '<button class="res-tab' + (min === kanjiStep ? ' sel' : '') + '" data-min="' + min + '">' +
-        (min > 1 ? '단어 ' + min + '개 이상' : '전체') + ' <i>' + counts[i] + '</i></button>';
+    $('kanjiTabs').innerHTML = KANJI_STEPS.map(function (r, i) {
+      return '<button class="res-tab' + (i === kanjiStep ? ' sel' : '') + '" data-step="' + i + '">' +
+        esc(r.label) + ' <i>' + counts[i] + '</i></button>';
     }).join('');
 
     // 많이 나오는 한자가 앞에. 같은 수면 이미 외운 것이 뒤로 가게 둔다.
-    var list = all.filter(function (c) { return inStep(c, kanjiStep); })
+    var list = all.filter(function (c) { return inStep(c, kanjiStep); })   // 지금 구간의 한자만
       .map(function (c) { return { k: c, s: kanjiStat(c) }; })
       .sort(function (a, b) { return (b.s.n - a.s.n) || (a.s.long - b.s.long) || a.k.localeCompare(b.k, 'ja'); });
 
     var done = list.filter(function (x) { return x.s.long === x.s.n; }).length;
     var due = list.reduce(function (n, x) { return n + (x.s.due ? 1 : 0); }, 0);
+    var nk = noKanjiWords().length;
+    $('btnNoKanji').hidden = !nk;
+    $('btnNoKanji').textContent = '한자 없는 단어 ' + nk;
+
     var hidden = Object.keys(covered).length;
     $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
-      (kanjiStep === 1 && hidden ? ' · 앞 단계 단어에 다 들어 있는 ' + hidden + '자는 뺌' : '');
+      (KANJI_STEPS[kanjiStep].lo === 1 && hidden ? ' · 앞 구간 단어에 다 들어 있는 ' + hidden + '자는 뺌' : '');
 
     $('kanjiGrid').innerHTML = list.map(function (x) {
       var full = x.s.long === x.s.n;
@@ -3618,11 +3635,18 @@
     $('pkKanji').addEventListener('click', function () { goView('kanji'); });
     $('kanjiTabs').addEventListener('click', function (ev) {
       var t = ev.target.closest('.res-tab');
-      if (t) { kanjiStep = Number(t.dataset.min); renderKanjiList(); }
+      if (t) { kanjiStep = Number(t.dataset.step); renderKanjiList(); }
     });
     $('kanjiGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.kj-cell');
       if (c) openKanji(c.dataset.k);
+    });
+    // 한자가 없어 어느 칸에도 안 들어가는 단어를 한자리에 모아 본다.
+    $('btnNoKanji').addEventListener('click', function () {
+      var list = noKanjiWords();
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '한자 없는 단어', list.length + '단어 · 전체 Day', true);
     });
     $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });
     $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
