@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v96';
+  var BUILD = 'v97';
 
   /* ---------------- 화면 ---------------- */
 
@@ -458,7 +458,7 @@
   // 한자별 학습으로는 어느 칸에도 안 들어가서 영영 안 나온다. 그래서 따로 모아 둔다.
   // 가타카나 단어(コンセント)는 따로 묶인 Day 가 있어 여기서 뺀다.
   function noKanjiWords() {
-    return Store.allWords().filter(function (e) {
+    return kanjiModeWords().filter(function (e) {
       return !/[一-龯々]/.test(e.w.word) && !/[ァ-ヺー]/.test(e.w.word);
     });
   }
@@ -490,10 +490,17 @@
 
   var kanjiMap = null;   // 한자 → 그 한자가 들어간 단어들. 2500단어를 훑으므로 한 번만 만든다.
 
+  // 한자별 학습은 책 단어장(DAY 1~90)만 본다. DAY 91~ 은 책 밖에서 더한 보충 단어라 뺀다.
+  var KANJI_LAST_DAY = 90;
+
+  function kanjiModeWords() {
+    return Store.allWords().filter(function (e) { return e.day <= KANJI_LAST_DAY; });
+  }
+
   function kanjiIndex() {
     if (kanjiMap) return kanjiMap;
     kanjiMap = {};
-    Store.allWords().forEach(function (e) {
+    kanjiModeWords().forEach(function (e) {
       var seen = {};
       (String(e.w.word).match(/[一-龯々]/g) || []).forEach(function (c) {
         if (seen[c]) return;          // 한 단어에 같은 한자가 두 번 나와도 한 번만
