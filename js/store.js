@@ -1200,6 +1200,22 @@
     };
   }
 
+  // 다른 사람에게 줄 자료 파일. 단어·문법·글만 담고 학습 기록은 담지 않는다.
+  // 받는 쪽에서 백업으로 알아보게 progress 는 빈 채로 넣어 둔다(합쳐도 진도가 생기지 않는다).
+  function exportData() {
+    return {
+      jvocab: 1,
+      dataOnly: 1,
+      exportedAt: new Date().toISOString(),
+      vocab: days,
+      grammar: gram,
+      stories: stories,
+      moved: moved,
+      affixes: affixes,
+      progress: {}
+    };
+  }
+
   function isBackup(obj) {
     return !!(obj && obj.jvocab && obj.progress !== undefined);
   }
@@ -1621,6 +1637,7 @@
     shuffleArr: shuffleArr,
 
     exportAll: exportAll,
+    exportData: exportData,
     isBackup: isBackup,
     importBackup: importBackup,
     saveSession: saveSession,

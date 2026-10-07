@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v97';
+  var BUILD = 'v98';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3230,13 +3230,25 @@
 
   /* ---------------- 백업 내보내기 ---------------- */
 
+  // 남에게 주는 자료 파일. 단어·문법·글만 들어가고 학습 기록은 빠진다.
+  // 받는 사람은 앱을 깐 뒤 [＋ 파일 불러오기] 로 이 파일 하나만 넣으면 된다.
+  function exportDataFile() {
+    var data = Store.exportData();
+    var n = Object.keys(data.vocab || {}).length;
+    saveJson(data, '자료', ' · ' + n + ' Day');
+  }
+
   function exportBackup() {
+    saveJson(Store.exportAll(), '', '');
+  }
+
+  function saveJson(obj, tag, note) {
     var d = new Date();
     var pad = function (n) { return n < 10 ? '0' + n : n; };
-    var name = 'jvocab-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+    var name = 'jvocab-' + (tag ? tag + '-' : '') + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
                '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.json';
 
-    var blob = new Blob([JSON.stringify(Store.exportAll())], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -3245,6 +3257,7 @@
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    toast(name + ' 저장' + (note || ''));
   }
 
   /* ---------------- 유틸 ---------------- */
@@ -3874,6 +3887,7 @@
 
     $('btnUpload').addEventListener('click', function () { $('fileInput').click(); });
     $('btnBackup').addEventListener('click', exportBackup);
+    $('btnShareData').addEventListener('click', exportDataFile);
 
     $('btnHowTo').addEventListener('click', function () {
       $('pasteErr').hidden = true;
