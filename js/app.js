@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v98';
+  var BUILD = 'v99';
 
   /* ---------------- 화면 ---------------- */
 
@@ -83,6 +83,43 @@
     else if (v === 'stories') { renderStories(); show('stories'); }
     else if (v === 'kanji') { renderKanjiList(); show('kanji'); }
     else show(v);
+  }
+
+  /* ---------------- 앱으로 설치 ---------------- */
+  // 브라우저로 주소만 열면 '받는 화면' 이 따로 없어서 어떻게 까는지 모른다.
+  // 크롬이 설치할 수 있다고 알려 주면(beforeinstallprompt) 첫 화면에 버튼을 띄운다.
+  // 사파리(아이폰)는 그 신호가 없어서 '공유 → 홈 화면에 추가' 를 글로 알려 준다.
+  var installPrompt = null;
+
+  function isInstalled() {
+    return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  }
+
+  function renderInstall() {
+    var btn = $('btnInstall');
+    if (!btn) return;
+    if (isInstalled()) { btn.hidden = true; return; }
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (installPrompt) {
+      btn.hidden = false;
+      $('installSub').textContent = '홈 화면에 추가해서 앱처럼 씁니다';
+    } else if (ios) {
+      btn.hidden = false;
+      $('installSub').textContent = '아래 공유 버튼 → 홈 화면에 추가';
+    } else {
+      btn.hidden = true;
+    }
+  }
+
+  function doInstall() {
+    if (!installPrompt) {
+      toast('브라우저 메뉴에서 [앱 설치] 또는 [홈 화면에 추가] 를 누르세요');
+      return;
+    }
+    installPrompt.prompt();
+    installPrompt.userChoice.then(function (r) {
+      if (r && r.outcome === 'accepted') { installPrompt = null; renderInstall(); }
+    });
   }
 
   function renderPick() {
@@ -3703,6 +3740,14 @@
     $('btnAffix').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); show('affix'); });
     // 한자별 학습. 단계를 고르고, 한자를 누르면 그 한자가 든 단어 목록으로 간다.
     $('pkKanji').addEventListener('click', function () { goView('kanji'); });
+    $('btnInstall').addEventListener('click', doInstall);
+    window.addEventListener('beforeinstallprompt', function (ev) {
+      ev.preventDefault();          // 크롬이 제 자리에 띄우는 작은 배너 대신 우리 버튼으로 받는다
+      installPrompt = ev;
+      renderInstall();
+    });
+    window.addEventListener('appinstalled', function () { installPrompt = null; renderInstall(); });
+    renderInstall();
     $('kanjiTabs').addEventListener('click', function (ev) {
       var t = ev.target.closest('.res-tab');
       if (t) { kanjiStep = Number(t.dataset.step); renderKanjiList(); }

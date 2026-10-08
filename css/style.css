@@ -324,6 +324,19 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 .rs-info { font-size: 12px; color: var(--dim); }
 .rs-go { font-size: 12px; color: var(--accent); flex: 0 0 auto; }
 
+/* 브라우저로 처음 연 사람에게만 나오는 설치 버튼. 이어하기 버튼과 같은 모양으로 둔다. */
+.install-btn {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; margin-top: 16px; border-radius: var(--radius);
+  background: var(--panel); border: 1px solid var(--accent);
+  color: var(--text); cursor: pointer; font-family: inherit; text-align: left;
+}
+.install-btn:hover { background: var(--panel2); }
+.in-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.in-title { font-size: 14px; font-weight: 600; }
+.in-sub { font-size: 12px; color: var(--dim); }
+.in-go { font-size: 16px; color: var(--accent); flex: 0 0 auto; }
+
 /* ---------- buttons ---------- */
 /* 버튼 수가 화면마다 다르다(홈 3개, Day 2개). 폭에 맞춰 알아서 나뉘게 둔다. */
 .row-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-bottom: 24px; }
