@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v100';
+  var BUILD = 'v101';
 
   /* ---------------- 화면 ---------------- */
 
@@ -65,6 +65,11 @@
       else if (view === 'gramStudy') goView(gStudyFrom || 'gramCh');
       // 시험 기록에서 연 결과 화면이면 홈이 아니라 기록 목록으로 돌아간다.
       else if (view === 'result' && resultFrom === 'exams') goView('exams');
+      // 한자 기록만 보던 중이면 한자 화면으로 돌아간다.
+      else if (view === 'exams' && examsOnlyKanji) goView('kanji');
+      // 한자 쪽에서 시작한 학습은 한자 화면으로 돌아간다. 단어 홈으로 떨어지면 길을 잃는다.
+      else if (view === 'study' && studyFrom === 'kanji') goView('kanji');
+      else if (view === 'result' && resultFrom === 'kanji') goView('kanji');
       // Day 목록에서 건너온 글이면 그 목록으로 돌아간다.
       else if (view === 'story' && storyFrom === 'day') goView('day');
       else if (view !== 'pick') goView(BACK_TO[view] || 'pick');
@@ -81,7 +86,7 @@
     else if (v === 'time') { renderTime(); show('time'); }
     else if (v === 'exams') { renderExams(); show('exams'); }
     else if (v === 'stories') { renderStories(); show('stories'); }
-    else if (v === 'kanji') { renderKanjiList(); show('kanji'); renderKjSelBar(); }
+    else if (v === 'kanji') { examsOnlyKanji = false; renderKanjiList(); renderKjResume(); show('kanji'); renderKjSelBar(); }
     else show(v);
   }
 
@@ -652,6 +657,18 @@
     return coveredCache;
   }
 
+  // 한자 모드의 주의할 단어: ★ 를 붙인 단어 가운데 한자가 든 책 단어(DAY 1~90)만.
+  function kanjiMarked() {
+    return Store.markedList().filter(function (e) {
+      return e.day <= KANJI_LAST_DAY && /[一-龯々]/.test(e.w.word);
+    });
+  }
+
+  // 한자 모드의 시험 기록: 한자 화면에서 시작한 판만(이름이 '한자' 로 시작한다).
+  function kanjiExams() {
+    return Store.examList().filter(function (r) { return /^한자/.test(String(r.label || '')); });
+  }
+
   // 한자 한 글자의 단어들이 어디까지 외워졌는지. 단어 학습 기록을 그대로 센다.
   function kanjiStat(c) {
     var list = kanjiIndex()[c] || [];
@@ -740,6 +757,14 @@
     $('btnKanjiReview').disabled = !stepDue.length;
     $('kjStudyCount').textContent = stepWords.length + '단어';
     $('btnKanjiStudy').disabled = !stepWords.length;
+
+    // 주의할 단어와 시험 기록도 한자 쪽 것만 센다.
+    var marked = kanjiMarked();
+    $('kjMarkedCount').textContent = marked.length ? marked.length + '개' : '아직 없음';
+    $('btnKjMarked').disabled = !marked.length;
+    var exams = kanjiExams();
+    $('kjExamCount').textContent = exams.length + '회';
+    $('btnKjExams').disabled = !exams.length;
 
     var hidden = Object.keys(covered).length;
     $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
@@ -1205,10 +1230,14 @@
 
   /* ---------------- 학습 ---------------- */
 
+  // 학습을 어디서 시작했는지. 나갈 때 그 화면으로 돌아간다.
+  var studyFrom = 'home';
+
   // src 가 'kanji' 면 한자 모드에서 시작한 학습이다. 푼 단어를 한자 모드 쪽에 적어 두고,
   // 한자 모드의 복습은 그 단어들만 다시 낸다.
   function startSession(entries, label, timed, src) {
     if (!entries.length) return;
+    studyFrom = (src === 'kanji') ? 'kanji' : 'home';
     session = {
       src: src || '',
       queue: shuffle(entries.slice()),
@@ -1319,6 +1348,23 @@
     if (s) {
       $('resumeInfo').textContent = s.label + ' · ' + s.done + ' / ' + s.total;
     }
+  }
+
+  // 한자 화면의 이어하기. 한자 쪽에서 시작한 학습일 때만 나온다.
+  function renderKjResume() {
+    var s = restoreSession();
+    var mine = s && s.src === 'kanji';
+    $('btnKjResume').hidden = !mine;
+    if (mine) $('kjResumeInfo').textContent = s.label + ' · ' + s.done + ' / ' + s.total;
+  }
+
+  function resumeSession() {
+    var s = restoreSession();
+    if (!s) { goView(view === 'kanji' ? 'kanji' : 'home'); return; }
+    session = s;
+    studyFrom = (s.src === 'kanji') ? 'kanji' : 'home';
+    show('study');
+    renderCard();
   }
 
   function entriesOfDays(dayNums, onlyDue) {
@@ -1761,7 +1807,7 @@
     var res = distinctResults();
     var perfect = res.filter(function (x) { return x.firstOk; }).length;
     saveExam(res);
-    fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에', '', 'home');
+    fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에', '', studyFrom);
   }
 
   // 밀린 복습이 많을 때 여기까지만 하고 끊는다.
@@ -1771,7 +1817,7 @@
     var res = distinctResults();
     if (!res.length) {                 // 한 문제도 풀지 않았으면 결과를 낼 것이 없다
       Store.clearSession();
-      goView('home');
+      goView(studyFrom);
       return;
     }
     var left = Math.max(0, session.queue.length - session.index) + session.retry.length;
@@ -1782,7 +1828,7 @@
     Store.clearSession();              // 이어하기로 남기지 않는다. 남은 단어는 복습 목록에 그대로 있다.
     if (global_Sync()) Sync.touch();
     fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에',
-      left ? '여기까지 하고 멈췄습니다. 남은 ' + left + '단어는 복습 목록에 그대로 있습니다.' : '', 'home');
+      left ? '여기까지 하고 멈췄습니다. 남은 ' + left + '단어는 복습 목록에 그대로 있습니다.' : '', studyFrom);
   }
 
   function resultItemHTML(x) {
@@ -2141,9 +2187,13 @@
     return (rec.label || '학습') + (EXAM_DIR[rec.dir] ? ' · ' + EXAM_DIR[rec.dir] : '');
   }
 
+  // 한자 쪽에서 들어오면 한자 학습 기록만 보여 준다. 뒤로가기도 한자 화면으로 간다.
+  var examsOnlyKanji = false;
+
   function renderExams() {
     var rows = numberedExams().reverse();   // 최근 것이 위
-    $('examsSub').textContent = rows.length + '회';
+    if (examsOnlyKanji) rows = rows.filter(function (x) { return /^한자/.test(String(x.rec.label || '')); });
+    $('examsSub').textContent = rows.length + '회' + (examsOnlyKanji ? ' · 한자 학습' : '');
     $('examsEmpty').hidden = rows.length > 0;
     $('examList').innerHTML = rows.map(function (x) {
       var items = examItems(x.rec);
@@ -3531,13 +3581,8 @@
     $('btnSearchTop').addEventListener('click', openSearch);
     $('btnSearchClose').addEventListener('click', goBack);
 
-    $('btnResume').addEventListener('click', function () {
-      var s = restoreSession();
-      if (!s) { renderHome(); return; }
-      session = s;
-      show('study');
-      renderCard();
-    });
+    $('btnResume').addEventListener('click', resumeSession);
+    $('btnKjResume').addEventListener('click', resumeSession);
     $('btnTimeTop').addEventListener('click', function () {
       calDate = new Date();
       renderTime();
@@ -3821,7 +3866,11 @@
     $('btnRetryWrong').addEventListener('click', function () {
       startSession(resultRetry, '틀린 단어 다시');
     });
-    $('btnResultHome').addEventListener('click', function () { renderHome(); show('home'); });
+    // 한자 쪽에서 온 결과면 한자 화면으로 돌려보낸다.
+    $('btnResultHome').addEventListener('click', function () {
+      if (resultFrom === 'kanji') { goView('kanji'); return; }
+      renderHome(); show('home');
+    });
     // 시험 기록. 줄을 누르면 그 판의 결과 화면이 그대로 열린다.
     // 접두어·접미어. 탭으로 접두어와 접미어를 오간다.
     $('btnStopStudy').addEventListener('click', function () { stopSession(); });
@@ -3912,7 +3961,14 @@
       var e = m ? storyWords[Number(m.dataset.w)] : null;
       if (e) dsOpen(e.w);
     });
-    $('btnExamLog').addEventListener('click', function () { renderExams(); show('exams'); });
+    $('btnExamLog').addEventListener('click', function () { examsOnlyKanji = false; renderExams(); show('exams'); });
+    $('btnKjExams').addEventListener('click', function () { examsOnlyKanji = true; renderExams(); show('exams'); });
+    $('btnKjMarked').addEventListener('click', function () {
+      var list = kanjiMarked();
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '한자 · 주의할 단어', list.length + '단어', true, '', 'kanji');
+    });
     $('examList').addEventListener('click', function (ev) {
       var b = ev.target.closest('.ex-row');
       if (b) openExam(b.dataset.id);

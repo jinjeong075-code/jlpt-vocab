@@ -353,6 +353,15 @@
     <div class="prog-bar" id="kjProgSeg"></div>
   </div>
 
+  <!-- 한자 학습을 하다 나왔으면 여기서 이어서 한다. 단어 홈의 이어하기와 같다. -->
+  <button class="resume-btn" id="btnKjResume" hidden>
+    <span class="rs-main">
+      <span class="rs-label">이어서 학습</span>
+      <span class="rs-info" id="kjResumeInfo"></span>
+    </span>
+    <span class="rs-go">▶</span>
+  </button>
+
   <div class="res-tabs" id="kanjiTabs"></div>
 
   <!-- 지금 구간의 단어를 바로 학습한다. 단어 홈의 '오늘의 복습'·'전체' 와 같은 자리. -->
@@ -364,6 +373,14 @@
     <button class="big-btn" id="btnKanjiStudy">
       <span class="bb-title">이 구간 전체 학습</span>
       <span class="bb-sub" id="kjStudyCount">0단어</span>
+    </button>
+    <button class="big-btn" id="btnKjMarked">
+      <span class="bb-title">주의할 단어</span>
+      <span class="bb-sub" id="kjMarkedCount">아직 없음</span>
+    </button>
+    <button class="big-btn" id="btnKjExams">
+      <span class="bb-title">시험 기록</span>
+      <span class="bb-sub" id="kjExamCount">0회</span>
     </button>
   </div>
 
