@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v99';
+  var BUILD = 'v100';
 
   /* ---------------- 화면 ---------------- */
 
@@ -81,7 +81,7 @@
     else if (v === 'time') { renderTime(); show('time'); }
     else if (v === 'exams') { renderExams(); show('exams'); }
     else if (v === 'stories') { renderStories(); show('stories'); }
-    else if (v === 'kanji') { renderKanjiList(); show('kanji'); }
+    else if (v === 'kanji') { renderKanjiList(); show('kanji'); renderKjSelBar(); }
     else show(v);
   }
 
@@ -159,8 +159,10 @@
     $('studyBar').hidden = (name !== 'study');
     $('btnHome').hidden = (name === 'pick');
     $('btnTimeTop').hidden = (name === 'study' || name === 'gramStudy' || name === 'time');
-    $('selBar').hidden = !(name === 'home' && selected.length);
-    document.body.classList.toggle('has-selbar', name === 'home' && !!selected.length);
+    // 고른 것 바는 Day 를 고르는 홈과 한자를 고르는 한자 화면에서만 보인다.
+    var onSel = (name === 'home' && selected.length) || (name === 'kanji' && kjSel.length);
+    $('selBar').hidden = !onSel;
+    document.body.classList.toggle('has-selbar', !!onSel);
     $('topTitle').textContent = VIEW_TITLE[name] || '일본어';
     window.scrollTo(0, 0);
   }
@@ -330,6 +332,29 @@
     return 'DAY ' + dayNums[0] + ' 외 ' + (dayNums.length - 1) + '개';
   }
 
+  // 한자 화면에서 고른 한자들의 바. Day 바와 같은 자리, 같은 버튼을 쓴다.
+  function renderKjSelBar() {
+    var bar = $('selBar');
+    bar.hidden = !kjSel.length;
+    document.body.classList.toggle('has-selbar', !!kjSel.length && view === 'kanji');
+    if (!kjSel.length) return;
+    var all = wordsOfKanjiList(kjSel);
+    // 한자 모드의 복습은 한자 모드로 공부한 단어만 낸다.
+    var due = all.filter(function (e) { return Store.isKanjiSeen(e.day, e.w) && Store.isDue(e.day, e.w); });
+    var unk = byStage('unknown', all);
+    var sht = byStage('short', all);
+    $('selDays').textContent = kjLabel(kjSel);
+    $('selWords').textContent = all.length + '단어 · 복습할 것 ' + due.length + '개';
+    $('btnSelUnknown').textContent = '모름 ' + unk.length;
+    $('btnSelShort').textContent = '단기 ' + sht.length;
+    $('btnSelDue').textContent = '복습 ' + due.length;
+    $('btnSelStudy').textContent = '전체 ' + all.length;
+    $('btnSelUnknown').disabled = !unk.length;
+    $('btnSelShort').disabled = !sht.length;
+    $('btnSelDue').disabled = !due.length;
+    $('btnSelStudy').disabled = !all.length;
+  }
+
   function renderSelBar() {
     var bar = $('selBar');
     bar.hidden = !selected.length;
@@ -376,9 +401,10 @@
   var setDesc = null;    // 지금 보고 있는 묶음
   var setStack = [];     // 목록에서 더 좁혀 들어오기 전의 묶음들. 뒤로가기가 한 단계씩 되돌린다.
 
-  function renderSet(entries, title, sub, showDay, info) {
+  // src 는 이 목록이 어디서 왔는지다. 'kanji' 면 여기서 시작한 학습도 한자 모드로 센다.
+  function renderSet(entries, title, sub, showDay, info, src) {
     if (!entries.length) return;
-    var d = { entries: entries.slice(), title: title, sub: sub, showDay: !!showDay, info: info || '' };
+    var d = { entries: entries.slice(), title: title, sub: sub, showDay: !!showDay, info: info || '', src: src || '' };
     // 같은 화면에서 더 좁혀 들어가는 경우(DAY 20 → 단기기억)에는
     // 화면이 바뀌지 않아 show() 가 히스토리를 쌓지 않는다. 직접 쌓아 둔다.
     if (view === 'day' && setDesc) { setStack.push(setDesc); pushNav(); }
@@ -411,7 +437,7 @@
 
   function applySet(d, quiet) {
     var entries = d.entries, showDay = d.showDay;
-    currentSet = { entries: entries.slice(), label: d.title };
+    currentSet = { entries: entries.slice(), label: d.title, src: d.src || '' };
     setDesc = d;
 
     $('dayHeadTitle').textContent = d.title;
@@ -573,6 +599,34 @@
   var kanjiStep = 0;   // 지금 보고 있는 구간 번호
   var stepWords = [];  // 그 구간 한자들이 쓰인 단어(중복 없이)
   var stepDue = [];    // 그중 복습할 때가 된 것
+  var kjSel = [];      // 골라 둔 한자들. Day 여러 개 고르기와 같은 방식이다.
+
+  function kjIsSel(c) { return kjSel.indexOf(c) > -1; }
+
+  function kjToggle(c) {
+    var i = kjSel.indexOf(c);
+    if (i > -1) kjSel.splice(i, 1); else kjSel.push(c);
+  }
+
+  // 고른 한자들이 쓰인 단어를 중복 없이 모은다.
+  function wordsOfKanjiList(list) {
+    var out = [], seen = {};
+    list.forEach(function (c) {
+      (kanjiIndex()[c] || []).forEach(function (e) {
+        var k = e.day + '-' + (e.w.no || e.w.word);
+        if (seen[k]) return;
+        seen[k] = 1;
+        out.push(e);
+      });
+    });
+    return out;
+  }
+
+  function kjLabel(list) {
+    if (list.length === 1) return '한자 ' + list[0];
+    if (list.length <= 4) return '한자 ' + list.join('');
+    return '한자 ' + list.slice(0, 3).join('') + ' 외 ' + (list.length - 3) + '자';
+  }
 
   // 1~2개 단어에만 쓰인 한자 가운데, 그 단어가 모두 '3개 이상 쓰인 한자'의 단어이기도 한 것.
   // 앞 단계를 하면 그 단어를 어차피 다 보게 되므로, 마지막 '전체' 단계에서는 빼서 목록을 가볍게 한다.
@@ -676,10 +730,14 @@
     var ws = { total: 0, unknown: 0, short: 0, long: 0, 'new': 0 };
     stepWords.forEach(function (e) { ws.total++; ws[Store.stageFor(e.day, e.w)]++; });
     $('kanjiStats').innerHTML = statHTML(ws, true);
-    var dueList = stepWords.filter(function (e) { return Store.isDue(e.day, e.w); });
-    stepDue = dueList;
-    $('kjReviewCount').textContent = dueList.length + '개 대기';
-    $('btnKanjiReview').disabled = !dueList.length;
+
+    // 복습은 '한자 모드에서 공부한 단어' 만 낸다. Day 학습으로 본 단어는 섞지 않는다.
+    var seen = stepWords.filter(function (e) { return Store.isKanjiSeen(e.day, e.w); });
+    stepDue = seen.filter(function (e) { return Store.isDue(e.day, e.w); });
+    $('kjReviewCount').textContent = stepDue.length
+      ? stepDue.length + '개 대기 · 한자로 공부한 ' + seen.length + '단어 중'
+      : (seen.length ? '한자로 공부한 ' + seen.length + '단어, 지금은 없음' : '아직 한자로 공부한 단어가 없음');
+    $('btnKanjiReview').disabled = !stepDue.length;
     $('kjStudyCount').textContent = stepWords.length + '단어';
     $('btnKanjiStudy').disabled = !stepWords.length;
 
@@ -691,7 +749,8 @@
       var full = x.s.long === x.s.n;
       var t = x.s.n || 1;
       var pct = function (n) { return (n / t * 100).toFixed(2) + '%'; };
-      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + '" data-k="' + esc(x.k) + '">' +
+      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + (kjIsSel(x.k) ? ' sel' : '') +
+        '" data-k="' + esc(x.k) + '">' +
         '<span class="kj-char" lang="ja">' + esc(x.k) + '</span>' +
         // 장기기억 · 단기기억 · 모름(미학습 포함). 색은 Day 칸·홈 통계와 같다.
         '<span class="kj-nums">' +
@@ -726,7 +785,7 @@
     var list = wordsOfKanji(c);
     if (!list.length) return;
     currentDays = [];
-    renderSet(list, '한자 ' + c, list.length + '단어 · Day 순', true, kanjiInfoHTML(c));
+    renderSet(list, '한자 ' + c, list.length + '단어 · Day 순', true, kanjiInfoHTML(c), 'kanji');
   }
 
   /* ---------------- 한자 한 글자의 사전 정보 ---------------- */
@@ -1146,9 +1205,12 @@
 
   /* ---------------- 학습 ---------------- */
 
-  function startSession(entries, label, timed) {
+  // src 가 'kanji' 면 한자 모드에서 시작한 학습이다. 푼 단어를 한자 모드 쪽에 적어 두고,
+  // 한자 모드의 복습은 그 단어들만 다시 낸다.
+  function startSession(entries, label, timed, src) {
     if (!entries.length) return;
     session = {
+      src: src || '',
       queue: shuffle(entries.slice()),
       retry: [],                  // 이 바퀴에서 틀려 다음 바퀴로 넘길 것
       index: 0,
@@ -1188,6 +1250,7 @@
     if (!session) return;
     Store.saveSession({
       label: session.label,
+      src: session.src || '',
       dir: session.dir || 'jp2ko',
       index: session.index,
       total: session.total,
@@ -1246,7 +1309,7 @@
       miss: s.miss || {},
       timed: s.timed || 0,
       slow: 0,
-      label: s.label || '학습', dir: s.dir || 'jp2ko', results: results
+      label: s.label || '학습', src: s.src || '', dir: s.dir || 'jp2ko', results: results
     };
   }
 
@@ -1643,6 +1706,7 @@
     var ok = (picked.reading === 1 && picked.meaning === 1);
     var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1,
       session.timed ? 'timed' : 'jp2ko', !!session.timed || isRetryNow(e));
+    if (session.src === 'kanji') Store.markKanjiSeen(e.day, e.w);
     session.results.push({ day: e.day, w: e.w, r: picked.reading === 1, m: picked.meaning === 1, level: rec.level });
     settle(e, ok || !!session.timed);
     advance();
@@ -3631,21 +3695,44 @@
       selected = (selected.length === all.length) ? [] : all;
       renderHome();
     });
+    // 바의 버튼은 Day 선택과 한자 선택이 함께 쓴다. 보고 있는 화면으로 갈라 준다.
+    var onKanji = function () { return view === 'kanji'; };
+    var kjAll = function () { return wordsOfKanjiList(kjSel); };
+
     $('btnSelClear').addEventListener('click', function () {
+      if (onKanji()) { kjSel = []; renderKanjiList(); renderKjSelBar(); return; }
       selected = [];
       renderHome();
     });
-    $('btnSelView').addEventListener('click', function () { renderDays(selected); });
+    $('btnSelView').addEventListener('click', function () {
+      if (onKanji()) {
+        if (!kjSel.length) return;
+        if (kjSel.length === 1) { openKanji(kjSel[0]); return; }   // 한 자면 한자 풀이까지 보여 준다
+        currentDays = [];
+        renderSet(kjAll(), kjLabel(kjSel), kjSel.length + '자 · ' + kjAll().length + '단어', true, '', 'kanji');
+        return;
+      }
+      renderDays(selected);
+    });
     $('btnSelUnknown').addEventListener('click', function () {
+      if (onKanji()) { startSession(byStage('unknown', kjAll()), kjLabel(kjSel) + ' · 모름', 0, 'kanji'); return; }
       startSession(byStage('unknown', wordsOf(selected)), dayLabel(selected) + ' · 모름');
     });
     $('btnSelShort').addEventListener('click', function () {
+      if (onKanji()) { startSession(byStage('short', kjAll()), kjLabel(kjSel) + ' · 단기기억', 0, 'kanji'); return; }
       startSession(byStage('short', wordsOf(selected)), dayLabel(selected) + ' · 단기기억');
     });
     $('btnSelStudy').addEventListener('click', function () {
+      if (onKanji()) { startSession(kjAll(), kjLabel(kjSel), 0, 'kanji'); return; }
       startSession(entriesOfDays(selected, false), dayLabel(selected));
     });
     $('btnSelDue').addEventListener('click', function () {
+      if (onKanji()) {
+        // 한자 모드 복습: 한자 모드로 공부한 단어 가운데 복습일이 된 것
+        var due = kjAll().filter(function (e) { return Store.isKanjiSeen(e.day, e.w) && Store.isDue(e.day, e.w); });
+        startSession(due, kjLabel(kjSel) + ' 복습', 0, 'kanji');
+        return;
+      }
       startSession(entriesOfDays(selected, true), dayLabel(selected) + ' 복습');
     });
 
@@ -3675,10 +3762,11 @@
       function () { peek === null ? peekOpen(session.results.length - 1) : peekGo(-1); });
 
     $('btnStudyAll').addEventListener('click', function () {
-      startSession(currentSet.entries, currentSet.label);
+      startSession(currentSet.entries, currentSet.label, 0, currentSet.src);
     });
     $('btnStudyDue').addEventListener('click', function () {
-      startSession(currentSet.entries.filter(function (e) { return Store.isDue(e.day, e.w); }), currentSet.label + ' 복습');
+      startSession(currentSet.entries.filter(function (e) { return Store.isDue(e.day, e.w); }),
+        currentSet.label + ' 복습', 0, currentSet.src);
     });
     $('btnReviewToday').addEventListener('click', function () {
       startSession(Store.dueList(), '오늘의 복습');
@@ -3752,16 +3840,20 @@
       var t = ev.target.closest('.res-tab');
       if (t) { kanjiStep = Number(t.dataset.step); renderKanjiList(); }
     });
+    // Day 고르기와 같다: 눌러서 고르고, 바의 버튼으로 목록을 보거나 학습을 시작한다.
     $('kanjiGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.kj-cell');
-      if (c) openKanji(c.dataset.k);
+      if (!c) return;
+      kjToggle(c.dataset.k);
+      c.classList.toggle('sel', kjIsSel(c.dataset.k));
+      renderKjSelBar();
     });
     // 이 구간의 단어를 바로 학습한다. 단어 홈의 버튼들과 같은 동작이다.
     $('btnKanjiReview').addEventListener('click', function () {
-      if (stepDue.length) startSession(stepDue.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label + ' 복습');
+      if (stepDue.length) startSession(stepDue.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label + ' 복습', 0, 'kanji');
     });
     $('btnKanjiStudy').addEventListener('click', function () {
-      if (stepWords.length) startSession(stepWords.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label);
+      if (stepWords.length) startSession(stepWords.slice(), '한자 ' + KANJI_STEPS[kanjiStep].label, 0, 'kanji');
     });
     // 통계 칸을 누르면 그 상태의 단어만 모아 본다(단어 홈과 같다).
     $('kanjiStats').addEventListener('click', function (ev) {
@@ -3775,13 +3867,15 @@
           });
       if (!list.length) return;
       currentDays = [];
-      renderSet(list, '한자 ' + KANJI_STEPS[kanjiStep].label + ' · ' + STAGE_NAME[stage], list.length + '단어', true);
+      renderSet(list, '한자 ' + KANJI_STEPS[kanjiStep].label + ' · ' + STAGE_NAME[stage], list.length + '단어', true, '', 'kanji');
     });
     // 한자가 없어 어느 칸에도 안 들어가는 단어를 한자리에 모아 본다.
     $('btnNoKanji').addEventListener('click', function () {
       var list = noKanjiWords();
       if (!list.length) return;
       currentDays = [];
+      // 한자가 없어 어느 구간에도 안 들어가는 단어다. 한자 모드 복습에 올릴 자리가 없으므로
+      // 보통 학습으로 센다(한자로 공부한 단어 표에 적지 않는다).
       renderSet(list, '히라가나 단어', list.length + '단어 · 전체 Day', true);
     });
     $('tabPre').addEventListener('click', function () { affixTab = 'pre'; renderAffix(); });

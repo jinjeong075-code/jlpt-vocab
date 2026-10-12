@@ -15,6 +15,9 @@
   var AFFIX_KEY = 'jvocab.affixes.v1';
   var MARK_KEY  = 'jvocab.marks.v1';          // 주의할 단어: 키 -> { on, at }
   var STORY_KEY = 'jvocab.stories.v1';        // 문단 읽기: Day -> 글
+  // 한자별 학습으로 공부한 단어. 한자 모드의 복습은 이 단어들만 다시 낸다.
+  // 진도(레벨·복습일)는 단어 진도 하나로 쓰고, 여기엔 '한자 모드로 본 적이 있다'만 적는다.
+  var KSEEN_KEY = 'jvocab.kanjiSeen.v1';      // 키 -> 마지막으로 한자 모드에서 본 시각
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -84,6 +87,7 @@
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
   SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
+  SYNCED_KEYS[KSEEN_KEY] = 1;
 
   function write(key, val) {
     try {
@@ -537,6 +541,33 @@
     var nn = /^\d+$/.test(rest) ? Number(rest) : null;
     w = findWord(nd, nn, nn == null ? rest : wordText);
     return w ? { day: nd, w: w } : null;
+  }
+
+  /* ---------- 한자 모드로 공부한 단어 ---------- */
+  // 한자 칸에서 시작한 학습에만 적는다. 한자 모드의 복습은 이 표에 있는 단어 가운데
+  // 복습일이 된 것만 낸다. 그래서 Day 학습으로 본 단어가 한자 쪽 복습에 섞이지 않는다.
+  var kseen = {};
+
+  function markKanjiSeen(day, word) {
+    var k = keyOf(day, word);
+    kseen[k] = Date.now();
+    write(KSEEN_KEY, kseen);
+  }
+
+  function isKanjiSeen(day, word) { return !!kseen[keyOf(day, word)]; }
+
+  function kanjiSeenCount() { return Object.keys(kseen).length; }
+
+  // 기기끼리는 합집합으로 모은다. 한쪽에서 본 것을 다른 쪽에서 안 본 것으로 되돌리지 않는다.
+  function mergeKanjiSeen(inc) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (k) {
+      var t = Number(inc[k]) || 1;
+      if (!kseen[k] || kseen[k] < t) { kseen[k] = t; n++; }
+    });
+    if (n) write(KSEEN_KEY, kseen);
+    return n;
   }
 
   /* ---------- 주의할 단어 ---------- */
@@ -1196,7 +1227,8 @@
       moved: moved,
       affixes: affixes,
       marks: marks,
-      stories: stories
+      stories: stories,
+      kanjiSeen: kseen
     };
   }
 
@@ -1323,6 +1355,7 @@
       write(AFFIX_KEY, affixes);
     }
     stat.stories = mergeStories(obj.stories);
+    stat.kanjiSeen = mergeKanjiSeen(obj.kanjiSeen);
 
     return stat;
   }
@@ -1418,6 +1451,7 @@
     moved = read(MOVED_KEY, {});
     movedBack = null;
     marks = read(MARK_KEY, {});
+    kseen = read(KSEEN_KEY, {});
     if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
     if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
@@ -1617,6 +1651,9 @@
     isMarkedKey: isMarkedKey,
     toggleMarkKey: toggleMarkKey,
     markedList: markedList,
+    markKanjiSeen: markKanjiSeen,
+    isKanjiSeen: isKanjiSeen,
+    kanjiSeenCount: kanjiSeenCount,
     addExam: addExam,
     gRecOf: gRecOf,
     gStageFor: gStageFor,
