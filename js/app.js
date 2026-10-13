@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v102';
+  var BUILD = 'v103';
 
   /* ---------------- 화면 ---------------- */
 
@@ -2352,6 +2352,26 @@
     return Math.floor(s / 86400) + '일 전';
   }
 
+  // 클라우드에 지금 올라와 있는 것. 받기를 누르기 전에도 보이게 겉표지만 읽어 온다.
+  // '올리기 13시간 전' 은 이 기기가 올린 때라서, 폰에서 방금 올린 것과 헷갈렸다.
+  function renderCloud() {
+    var el = $('syncCloud');
+    if (!el) return;
+    el.textContent = '확인 중…';
+    Sync.peek().then(function (r) {
+      if (!r || r.offline) { el.textContent = '인터넷이 끊겨 있어 확인 못 함'; return; }
+      if (r.signedOut) { el.textContent = '로그인하면 보입니다'; return; }
+      if (r.err) { el.textContent = '확인 실패 — ' + r.err; return; }
+      if (!r.at) { el.textContent = '아직 아무것도 없음'; return; }
+      var t = new Date(r.at).getTime();
+      var who = r.device
+        ? (r.device === Store.deviceId() ? '이 기기' : '다른 기기')
+        : '';
+      el.textContent = fmtAgo(t) + ' 올린 것' + (who ? ' · ' + who : '') +
+        (t > (Sync.status().lastDown || 0) ? ' · 아직 안 받음' : ' · 받아 둠');
+    }).catch(function () { el.textContent = '확인 실패'; });
+  }
+
   function renderSync(st) {
     $('btnSyncTop').hidden = !st.configured;
     if (!st.configured) return;
@@ -2584,6 +2604,7 @@
       $('syncPanel').hidden = false;
       renderSwVersion();
       renderSync(Sync.status());
+      renderCloud();
     });
     $('btnSyncClose').addEventListener('click', goBack);
     $('syncPanel').addEventListener('click', function (ev) {
@@ -2615,6 +2636,7 @@
       Sync.down()
         .then(function () {
           renderHome();
+          renderCloud();
           // 이어하기가 어떻게 됐는지는 제일 헷갈리는 자리다. 작은 글씨 말고 크게 알린다.
           var note = Store.sessionNote();
           if (note) toast(note);
@@ -2629,7 +2651,7 @@
                    '다른 기기에만 있던 기록은 사라집니다. 계속할까요?')) return;
       showSyncErr('syncErr2', '');
       Sync.up()
-        .then(function () { renderHome(); })
+        .then(function () { renderHome(); renderCloud(); })
         .catch(function (e) { showSyncErr('syncErr2', syncError(e)); });
     });
 

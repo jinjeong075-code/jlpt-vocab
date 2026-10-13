@@ -201,6 +201,25 @@
     });
   }
 
+  // 클라우드에 올라와 있는 것의 겉표지만 읽는다(언제·어느 기기). 몇 백 바이트라 가볍다.
+  // 받기를 누르기 전에 '지금 올라와 있는 것' 을 보여 주려는 것.
+  function peek() {
+    if (!navigator.onLine) return Promise.resolve({ offline: true });
+    return ready().then(function (ok) {
+      if (!ok) return { signedOut: true };
+      return load().then(function (f) {
+        return Promise.all([
+          f.get(f.ref(f.db, path() + '/exportedAt')),
+          f.get(f.ref(f.db, path() + '/device'))
+        ]).then(function (s) {
+          return { at: s[0].exists() ? s[0].val() : '', device: s[1].exists() ? s[1].val() : '' };
+        });
+      });
+    }).catch(function (e) {
+      return { err: String((e && e.code) || (e && e.message) || e).slice(0, 120) };
+    });
+  }
+
   function up() {
     if (busy || !navigator.onLine) return blocked('up');
     phase = 'up'; lastResult = null; emit();
@@ -269,6 +288,7 @@
     sync: sync,
     down: down,
     up: up,
+    peek: peek,
     touch: touch
   };
 })(window);

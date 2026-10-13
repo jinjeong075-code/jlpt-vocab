@@ -1651,6 +1651,7 @@
     isMarkedKey: isMarkedKey,
     toggleMarkKey: toggleMarkKey,
     markedList: markedList,
+    deviceId: function () { return deviceId; },
     markKanjiSeen: markKanjiSeen,
     isKanjiSeen: isKanjiSeen,
     kanjiSeenCount: kanjiSeenCount,

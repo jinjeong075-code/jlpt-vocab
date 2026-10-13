@@ -628,6 +628,9 @@
 
     <div id="syncIn" class="sheet-body" hidden>
       <div class="sync-row"><span class="sync-k">계정</span><span class="sync-v" id="syncWho"></span></div>
+      <!-- 클라우드에 지금 올라와 있는 것. 받기를 누르기 전에도 보여야 한다.
+           아래 받기·올리기 줄은 '이 기기' 기준이라 클라우드 상태와 헷갈렸다. -->
+      <div class="sync-row"><span class="sync-k">클라우드</span><span class="sync-v" id="syncCloud">확인 중…</span></div>
 
       <!-- 동기화는 '받기 → 합치기 → 올리기' 두 걸음이다. 어디까지 됐는지 따로 보여준다.
            순서를 바꾸면 안 된다. 먼저 올리면 다른 기기가 쌓은 기록을 덮어쓴다. -->
