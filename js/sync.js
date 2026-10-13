@@ -134,8 +134,44 @@
   // 한쪽 기기가 이상해졌을 때 '올리기만' 하거나 '받기만' 할 수 있어야
   // 성한 쪽을 지키면서 고칠 수 있다. 묶여 있으면 받는 순간 덮어써진다.
 
+  // 왜 아무 일도 안 일어났는지 적어 둔다. 조용히 끝나면 누른 사람이 영문을 모른다.
+  function blocked(which) {
+    var why = !user ? '로그인되어 있지 않습니다' : (!navigator.onLine ? '인터넷이 끊겨 있습니다' : '다른 동기화가 도는 중입니다');
+    lastResult = { failedAt: which, downAt: 0, upAt: 0, found: false, merged: null, from: '', err: why };
+    emit();
+    return Promise.resolve(null);
+  }
+
+  // 앱을 켜고 바로 누르면 로그인이 아직 되살아나지 않아 user 가 비어 있다.
+  // 그대로 돌려보내면 아무 일도 안 일어난 것처럼 보이므로, 되살아날 때까지 잠깐 기다린다.
+  // (실제로 PC 에서 켜자마자 받기를 눌러 9월 27일 이후 받기가 안 되고 있었다)
+  function ready() {
+    if (user) return Promise.resolve(true);
+    if (!read(EMAIL_KEY)) return Promise.resolve(false);   // 로그인한 적이 없으면 기다릴 것이 없다
+    return load().then(function () {
+      return new Promise(function (res) {
+        var waited = 0;
+        var tick = function () {
+          if (user) return res(true);
+          waited += 200;
+          if (waited > 10000) return res(false);
+          setTimeout(tick, 200);
+        };
+        tick();
+      });
+    }).catch(function () { return false; });
+  }
+
   function down() {
-    if (!user || busy || !navigator.onLine) return Promise.resolve(null);
+    if (busy || !navigator.onLine) return blocked('down');
+    phase = 'down'; lastResult = null; emit();        // 기다리는 동안에도 '받는 중' 으로 보인다
+    return ready().then(function (ok) {
+      if (!ok) { phase = ''; return blocked('down'); }
+      return doDown();
+    });
+  }
+
+  function doDown() {
     busy = true; phase = 'down'; lastResult = null; emit();
 
     var res = { found: false, merged: null, from: '', downAt: 0, upAt: 0 };
@@ -157,14 +193,24 @@
       busy = false; phase = ''; emit();
       return res;
     }).catch(function (e) {
-      lastResult = { failedAt: 'down', downAt: 0, upAt: 0, found: false, merged: null, from: '' };
+      // 왜 실패했는지 남긴다. '실패' 만 보이면 고칠 단서가 없다.
+      lastResult = { failedAt: 'down', downAt: 0, upAt: 0, found: false, merged: null, from: '',
+                     err: String((e && e.code) || (e && e.message) || e).slice(0, 120) };
       busy = false; phase = ''; emit();
       throw e;
     });
   }
 
   function up() {
-    if (!user || busy || !navigator.onLine) return Promise.resolve(null);
+    if (busy || !navigator.onLine) return blocked('up');
+    phase = 'up'; lastResult = null; emit();
+    return ready().then(function (ok) {
+      if (!ok) { phase = ''; return blocked('up'); }
+      return doUp();
+    });
+  }
+
+  function doUp() {
     busy = true; phase = 'up'; lastResult = null; emit();
 
     var res = { found: false, merged: null, from: '', downAt: 0, upAt: 0 };
@@ -178,7 +224,8 @@
       busy = false; phase = ''; emit();
       return res;
     }).catch(function (e) {
-      lastResult = { failedAt: 'up', downAt: 0, upAt: 0, found: false, merged: null, from: '' };
+      lastResult = { failedAt: 'up', downAt: 0, upAt: 0, found: false, merged: null, from: '',
+                     err: String((e && e.code) || (e && e.message) || e).slice(0, 120) };
       busy = false; phase = ''; emit();
       throw e;
     });
@@ -187,7 +234,7 @@
   // 자동 동기화는 여전히 받고 나서 올린다. 그래야 두 기기가 합쳐진다.
   // 사람이 누르는 버튼만 나뉘어 있다.
   function sync() {
-    if (!user || busy || !navigator.onLine) return Promise.resolve(null);
+    if (busy || !navigator.onLine) return Promise.resolve(null);
     return down().then(function (res) {
       return up().then(function () { return res ? res.merged : null; });
     });

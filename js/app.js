@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v101';
+  var BUILD = 'v102';
 
   /* ---------------- 화면 ---------------- */
 
@@ -2376,6 +2376,8 @@
 
     $('syncOut').hidden = st.signedIn;
     $('syncIn').hidden = !st.signedIn;
+    // 로그인 화면에서는 받기·올리기 줄이 가려져 있다. 막힌 이유를 여기서라도 알려 준다.
+    if (!st.signedIn && st.result && st.result.err) showSyncErr('syncErr', st.result.err);
     $('syncBuild').textContent = BUILD;
     // v45 가 잘못 올린 것을 v47 이 되돌렸다. 무엇이 걸렸는지 볼 수 있게 한다.
     var undone = Store.undoneWords();
@@ -2440,7 +2442,10 @@
       $('syncDownNote').textContent = (r && r.downAt)
         ? (r.found ? cloudNote(r) + ' — ' + mergeNote(r.merged) : '클라우드에 아직 아무것도 없음')
         : '';
-      if (r && r.failedAt === 'down') { down.className = 'sync-step fail'; $('syncDownNote').textContent = '실패'; }
+      if (r && r.failedAt === 'down') {
+        down.className = 'sync-step fail';
+        $('syncDownNote').textContent = '실패' + (r.err ? ' — ' + r.err : '');
+      }
     }
 
     // 올리기
@@ -2457,7 +2462,7 @@
       // 받기는 됐는데 올리기가 안 된 상태. 이게 제일 헷갈리던 자리라 못 박아 둔다.
       if (r && r.failedAt === 'up') {
         up.className = 'sync-step fail';
-        $('syncUpNote').textContent = '실패 — 이 기기 기록이 아직 안 올라갔습니다';
+        $('syncUpNote').textContent = '실패' + (r.err ? ' — ' + r.err : ' — 이 기기 기록이 아직 안 올라갔습니다');
       }
     }
   }
