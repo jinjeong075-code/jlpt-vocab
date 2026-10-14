@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v104';
+  var BUILD = 'v105';
 
   /* ---------------- 화면 ---------------- */
 
@@ -312,6 +312,23 @@
     var i = selected.indexOf(n);
     if (i > -1) selected.splice(i, 1); else selected.push(n);
     selected.sort(function (a, b) { return a - b; });
+  }
+
+  // 한 칸만 눌러도 한 판 분량이 모이게, 화면에 이어지는 뒤 칸들을 함께 고른다.
+  // 100단어가 모이면 멈추고, 다음 칸을 더해 120단어를 넘기게 되면 더하지 않는다.
+  // 아무것도 고르지 않았을 때만 이어 붙인다. 하나라도 골라 둔 뒤에는 누른 칸만 켜고 끈다.
+  var CHAIN_MIN = 100, CHAIN_MAX = 120;
+
+  function chainPick(keys, from, countOf) {
+    var at = keys.indexOf(from);
+    var out = [from], total = countOf(out);
+    for (var j = at + 1; j < keys.length && total < CHAIN_MIN; j++) {
+      var next = out.concat([keys[j]]);
+      var n = countOf(next);          // 한자는 단어가 겹치므로 그때마다 중복 없이 다시 센다
+      if (n > CHAIN_MAX) break;
+      out = next; total = n;
+    }
+    return out;
   }
 
   function wordsOf(dayNums) {
@@ -3629,8 +3646,17 @@
       var cell = ev.target.closest('.day-cell');
       if (!cell) return;
       var n = Number(cell.dataset.day);
-      toggleSel(n);
-      cell.classList.toggle('sel', isSel(n));
+      if (!selected.length) {
+        var order = $$('#dayGrid .day-cell').map(function (c) { return Number(c.dataset.day); });
+        selected = chainPick(order, n, function (l) { return wordsOf(l).length; });
+        selected.sort(function (a, b) { return a - b; });
+        $$('#dayGrid .day-cell').forEach(function (c) {
+          c.classList.toggle('sel', isSel(Number(c.dataset.day)));
+        });
+      } else {
+        toggleSel(n);
+        cell.classList.toggle('sel', isSel(n));
+      }
       $('btnSelAll').textContent =
         (selected.length === Store.allDays().length && selected.length) ? '선택 해제' : '전체 선택';
       renderSelBar();
@@ -3921,8 +3947,16 @@
     $('kanjiGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.kj-cell');
       if (!c) return;
-      kjToggle(c.dataset.k);
-      c.classList.toggle('sel', kjIsSel(c.dataset.k));
+      if (!kjSel.length) {
+        var order = $$('#kanjiGrid .kj-cell').map(function (x) { return x.dataset.k; });
+        kjSel = chainPick(order, c.dataset.k, function (l) { return wordsOfKanjiList(l).length; });
+        $$('#kanjiGrid .kj-cell').forEach(function (x) {
+          x.classList.toggle('sel', kjIsSel(x.dataset.k));
+        });
+      } else {
+        kjToggle(c.dataset.k);
+        c.classList.toggle('sel', kjIsSel(c.dataset.k));
+      }
       renderKjSelBar();
     });
     // 이 구간의 단어를 바로 학습한다. 단어 홈의 버튼들과 같은 동작이다.
