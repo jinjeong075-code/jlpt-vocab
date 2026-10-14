@@ -940,10 +940,11 @@
   // 복습일이 되기 전에 연습으로 푸는 판은 일정을 건드리지 않으므로 null 을 준다.
   function gapPreview(day, word) {
     var r = recOf(day, word);
-    if (!gradeDue(r)) return null;
+    var due = gradeDue(r);
     var up = Math.min(MAX_LEVEL, (r.level || 0) + 1);
     var miss = Math.min((r.miss || 0) + 1, RETRY_HOURS.length);
     return {
+      early: !due,                   // 복습일 전이면 맞혀도 그대로다(틀리면 내려간다)
       okDays: INTERVALS[up],
       okLong: up >= LONG_LEVEL,      // 이번에 맞히면 장기기억으로 넘어가는가
       noHours: RETRY_HOURS[miss - 1] // 0 은 시간이 아니라 '다음날'
@@ -964,7 +965,11 @@
     if (readingOk) r.rO++; else r.rX++;
     if (meaningOk) r.mO++; else r.mX++;
 
-    if (noSchedule || !onTime) {
+    // 맞힌 것은 복습일이 됐을 때만 레벨을 올린다. 미리 풀어 올리면 간격 반복이 무너진다.
+    // 틀린 것은 복습일 전이라도 내린다. 지금 모른다는 것은 그 자체로 증거다.
+    // (한자별 학습처럼 복습일과 상관없이 모아 푸는 판에서 틀려도 그대로여서 이상했다)
+    var practice = noSchedule || (!onTime && readingOk && meaningOk);
+    if (practice) {
       // 연습이다. 기록만 남기고 레벨도 복습일도 그대로 둔다.
     } else if (readingOk && meaningOk) {
       r.miss = 0;
@@ -988,7 +993,7 @@
 
     // 일정을 안 건드리는 판에서는 '장기기억에서 떨어졌다'도 세지 않는다.
     // 실제로 떨어지지 않았는데 흔들리는 단어로 잡히면 안 된다.
-    logAttempt(r, wasLong && !noSchedule && onTime, readingOk && meaningOk,
+    logAttempt(r, wasLong && !practice, readingOk && meaningOk,
                readingOk || meaningOk, onTime, mode || 'jp2ko');
     r.seen++;
     r.last = Date.now();

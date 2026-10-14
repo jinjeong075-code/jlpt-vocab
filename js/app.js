@@ -17,7 +17,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v103';
+  var BUILD = 'v104';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1429,10 +1429,10 @@
 
   function renderGap(e) {
     var g = (session.timed || isRetryNow(e)) ? null : Store.gapPreview(e.day, e.w);
-    // 복습일 전에 미리 푸는 판은 일정을 건드리지 않는다. 방금 틀려서 다시 나온 단어가 그렇다.
-    // 빈칸으로 두면 고장난 것처럼 보이므로 왜 비었는지를 적는다.
-    $('gapOk').textContent = g ? gapDayLabel(g.okDays) : '그대로';
-    $('gapOk').className = 'ox-gap' + (g && g.okLong ? ' long' : '');
+    // 타임어택과 이 판에서 다시 나온 단어는 아무것도 안 바뀐다('그대로').
+    // 복습일 전에 미리 푸는 단어는 맞히면 그대로, 틀리면 내려간다. 그대로 적어 준다.
+    $('gapOk').textContent = (!g || g.early) ? '그대로' : gapDayLabel(g.okDays);
+    $('gapOk').className = 'ox-gap' + (g && !g.early && g.okLong ? ' long' : '');
     $('gapNo').textContent = g ? gapHourLabel(g.noHours) : '그대로';
     $('gapNo').className = 'ox-gap';
   }
@@ -1748,7 +1748,8 @@
 
   function next() {
     if (picked.reading === null || picked.meaning === null) return;
-    var e = session.queue[session.index];
+    var e = session && session.queue[session.index];
+    if (!e) return;                 // 판이 이미 끝난 뒤에 버튼이 한 번 더 눌린 경우
     var ok = (picked.reading === 1 && picked.meaning === 1);
     var rec = Store.grade(e.day, e.w, picked.reading === 1, picked.meaning === 1,
       session.timed ? 'timed' : 'jp2ko', !!session.timed || isRetryNow(e));
