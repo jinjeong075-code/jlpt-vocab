@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v108';
+  var BUILD = 'v109';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3989,7 +3989,55 @@
       if (t) { kanjiStep = Number(t.dataset.step); renderKanjiList(); }
     });
     // Day 고르기와 같다: 눌러서 고르고, 바의 버튼으로 목록을 보거나 학습을 시작한다.
+    // 마우스로 쭉 훑어서 여러 한자를 한 번에 고른다. 하나씩 누르는 것이 번거로워서다.
+    // 시작한 칸이 꺼져 있으면 지나가는 칸을 켜고, 켜져 있으면 끈다(지우개처럼 쓸 수 있다).
+    // 손가락(터치)은 그대로 둔다. 쓸어 넘기기가 화면 넘기기와 겹치면 목록을 못 내린다.
+    var kjDrag = null;        // { on: true|false, last: '한자', n: 칸 수 }
+    var kjDragDid = false;    // 방금 끌어서 골랐다. 뒤따라오는 click 은 무시한다.
+
+    function kjPaint(c) {
+      if (!c || c.dataset.k === kjDrag.last) return;
+      kjDrag.last = c.dataset.k;
+      if (kjIsSel(c.dataset.k) !== kjDrag.on) {
+        kjToggle(c.dataset.k);
+        c.classList.toggle('sel', kjIsSel(c.dataset.k));
+        kjDrag.n++;
+        renderKjSelBar();
+      }
+    }
+
+    $('kanjiGrid').addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
+      var c = ev.target.closest('.kj-cell');
+      if (!c) return;
+      // 시작 칸은 아직 건드리지 않는다. 그냥 누른 것이면 click 이 하던 일을 그대로 해야 한다.
+      kjDrag = { on: !kjIsSel(c.dataset.k), last: '', n: 0, from: c };
+      ev.preventDefault();      // 끌 때 글자가 잡히지 않게
+    });
+
+    $('kanjiGrid').addEventListener('pointermove', function (ev) {
+      if (!kjDrag || ev.pointerType !== 'mouse') return;
+      var c = ev.target.closest ? ev.target.closest('.kj-cell') : null;
+      if (!c) {   // 칸 사이 틈을 지날 때를 위해 좌표로도 한 번 찾아 본다
+        var el = document.elementFromPoint(ev.clientX, ev.clientY);
+        c = el && el.closest ? el.closest('.kj-cell') : null;
+      }
+      if (!c || c === kjDrag.from) return;      // 아직 시작 칸 안이면 누른 것일 뿐이다
+      if (!kjDrag.n) kjPaint(kjDrag.from);      // 움직인 순간 시작 칸부터 칠한다
+      kjPaint(c);
+    });
+
+    var kjDragEnd = function () {
+      if (!kjDrag) return;
+      kjDragDid = kjDrag.n > 0;
+      kjDrag = null;
+    };
+    $('kanjiGrid').addEventListener('pointerup', kjDragEnd);
+    window.addEventListener('pointerup', kjDragEnd);
+    window.addEventListener('pointercancel', kjDragEnd);
+
     $('kanjiGrid').addEventListener('click', function (ev) {
+      if (kjDragDid) { kjDragDid = false; return; }   // 끌어서 고른 뒤에 따라오는 click
       var c = ev.target.closest('.kj-cell');
       if (!c) return;
       if (!kjSel.length) {
