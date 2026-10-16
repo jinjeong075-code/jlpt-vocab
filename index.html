@@ -57,6 +57,15 @@
 
   <!-- 브라우저로 처음 연 사람에게만 보인다. 누르면 홈 화면에 앱으로 깔린다.
        이미 깔아서 앱으로 연 사람에게는 나오지 않는다. -->
+  <!-- 풀다 만 학습은 첫 화면에서도 보여야 한다. 모드를 고르고 들어가야 알 수 있으면 잊는다. -->
+  <button class="resume-btn" id="btnPkResume" hidden>
+    <span class="rs-main">
+      <span class="rs-label">이어서 학습</span>
+      <span class="rs-info" id="pkResumeInfo"></span>
+    </span>
+    <span class="rs-go">▶</span>
+  </button>
+
   <button class="install-btn" id="btnInstall" hidden>
     <span class="in-main">
       <span class="in-title">앱으로 설치</span>

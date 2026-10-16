@@ -8,6 +8,7 @@
   var TIME_KEY  = 'jvocab.time.v1';
   var SESS_KEY  = 'jvocab.session.v1';
   var GSESS_KEY = 'jvocab.gsession.v1';
+  var LAST_STUDY_KEY = 'jvocab.lastStudy.v1';  // 마지막으로 하던 학습(끝난 뒤에도 남는다)
   var DEV_KEY   = 'jvocab.device.v1';
   var EXAM_KEY  = 'jvocab.exams.v1';
   var MOVED_KEY = 'jvocab.moved.v1';          // 두 책에 같이 실린 단어: N3 쪽 키 -> N2 쪽 키
@@ -1183,6 +1184,11 @@
     write(SESS_KEY, { cleared: 1, savedAt: Date.now() });
   }
 
+  // 끝났거나 끊긴 학습도 '무엇을 하고 있었는지' 는 남긴다.
+  // 이어하기가 해제돼도 같은 묶음을 한 번에 다시 열 수 있어야 한다.
+  function saveLastStudy(s) { s.at = Date.now(); write(LAST_STUDY_KEY, s); }
+  function loadLastStudy() { return read(LAST_STUDY_KEY, null); }
+
   // 문법도 따로 이어하기를 둔다. 단어를 풀다 문법으로 넘어가도 둘 다 남아야 한다.
   function saveGSession(s) { s.savedAt = Date.now(); write(GSESS_KEY, s); }
   function loadGSession() {
@@ -1686,6 +1692,8 @@
     saveSession: saveSession,
     loadSession: loadSession,
     clearSession: clearSession,
+    saveLastStudy: saveLastStudy,
+    loadLastStudy: loadLastStudy,
     findWord: findWord,
     addTime: addTime,
     timeOn: timeOn,

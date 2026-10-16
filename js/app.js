@@ -14,10 +14,11 @@
   var searchOpen = false;   // 검색 패널이 떠 있는지
   var resultAll = [], resultWrong = [], resultView = 'wrong';  // 결과 화면 탭
   var navLock = false;      // 뒤로가기 처리 중에는 히스토리를 쌓지 않는다
+  var pkResume = '';        // 첫 화면의 이어서 학습이 가리키는 곳. '' | 'word' | 'gram'
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v105';
+  var BUILD = 'v106';
 
   /* ---------------- 화면 ---------------- */
 
@@ -146,6 +147,23 @@
     });
     $('pkKanjiSub').textContent = ks.length + '자';
     $('pkKanjiPct').textContent = (ks.length ? Math.round(kDone / ks.length * 100) : 0) + '%';
+
+    // 풀다 만 것이 있으면 여기서도 보여 준다. 단어·한자는 한 자리를 같이 쓰고,
+    // 문법은 따로 저장되므로 둘 다 있으면 나중에 저장된 쪽을 낸다.
+    var w = restoreSession();
+    var raw = Store.loadSession();
+    var gs = Store.loadGSession();
+    var gOk = !!(gs && gs.queue && gs.index < gs.queue.length);
+    pkResume = (gOk && (!w || (gs.savedAt || 0) > ((raw && raw.savedAt) || 0))) ? 'gram' : 'word';
+    if (pkResume === 'gram') {
+      $('btnPkResume').hidden = false;
+      $('btnPkResume').querySelector('.rs-label').textContent = '이어서 학습';
+      $('pkResumeInfo').textContent =
+        (G_NAME[gs.mode] || '문법') + ' · ' + gs.label + ' · ' + (gs.index + 1) + ' / ' + gs.queue.length;
+    } else {
+      // 단어·한자는 한 자리를 같이 쓴다. 풀다 만 것이 없으면 마지막으로 하던 묶음을 낸다.
+      if (!fillResume('btnPkResume', 'pkResumeInfo', false)) pkResume = '';
+    }
   }
 
   var VIEW_TITLE = {
@@ -1359,25 +1377,78 @@
     };
   }
 
-  function renderResume() {
-    var s = restoreSession();
-    $('btnResume').hidden = !s;
-    if (s) {
-      $('resumeInfo').textContent = s.label + ' · ' + s.done + ' / ' + s.total;
-    }
+  // 끝났거나 끊긴 학습도 '무엇을 하던 것인지' 는 남긴다.
+  // 이어하기가 해제된 뒤에도 같은 묶음을 한 번에 다시 열 수 있어야 한다.
+  function rememberLast() {
+    if (!session) return;
+    Store.saveLastStudy({
+      label: session.label,
+      src: session.src || '',
+      dir: session.dir || 'jp2ko',
+      total: session.total,
+      refs: session.queue.concat(session.retry || []).map(refOf)
+    });
   }
 
-  // 한자 화면의 이어하기. 한자 쪽에서 시작한 학습일 때만 나온다.
-  function renderKjResume() {
-    var s = restoreSession();
-    var mine = s && s.src === 'kanji';
-    $('btnKjResume').hidden = !mine;
-    if (mine) $('kjResumeInfo').textContent = s.label + ' · ' + s.done + ' / ' + s.total;
+  // 마지막으로 하던 학습. 그 기록이 없는 옛 판에서는 마지막 시험 기록으로 대신한다
+  // (시험 기록에는 그 판에서 실제로 푼 단어가 들어 있다).
+  function lastStudySet() {
+    var s = Store.loadLastStudy();
+    var refs = s && s.refs;
+    if (!refs || !refs.length) {
+      var ex = Store.examList();
+      var e = ex.length ? ex[ex.length - 1] : null;
+      var it = e ? examItems(e) : [];
+      if (!it.length) return null;
+      refs = it.map(function (x) { return { d: x.d, n: x.n, w: x.w }; });
+      s = {
+        label: e.label || '마지막 학습',
+        src: /^한자/.test(String(e.label || '')) ? 'kanji' : '',
+        dir: e.dir === 'timed' ? 'jp2ko' : (e.dir || 'jp2ko')
+      };
+    }
+    var list = [];
+    refs.forEach(function (r) { var w = hydrate(r); if (w) list.push(w); });
+    if (!list.length) return null;
+    return { label: s.label || '마지막 학습', src: s.src || '', dir: s.dir || 'jp2ko', list: list };
   }
+
+  // 이어하기 버튼 하나를 채운다. 풀다 만 것이 있으면 그것, 없으면 마지막으로 하던 학습.
+  // onlyKanji 는 한자 화면용. 한자 쪽에서 시작한 것만 받는다.
+  function fillResume(btnId, infoId, onlyKanji) {
+    var b = $(btnId), lab = b.querySelector('.rs-label');
+    var s = restoreSession();
+    if (s && (!onlyKanji || s.src === 'kanji')) {
+      b.hidden = false;
+      if (lab) lab.textContent = '이어서 학습';
+      $(infoId).textContent = s.label + ' · ' + s.done + ' / ' + s.total;
+      return 'live';
+    }
+    var l = lastStudySet();
+    if (l && (!onlyKanji || l.src === 'kanji')) {
+      b.hidden = false;
+      if (lab) lab.textContent = '마지막 학습 다시';
+      $(infoId).textContent = l.label + ' · ' + l.list.length + '단어';
+      return 'last';
+    }
+    b.hidden = true;
+    return '';
+  }
+
+  function renderResume() { fillResume('btnResume', 'resumeInfo', false); }
+
+  // 한자 화면의 이어하기. 한자 쪽에서 시작한 학습일 때만 나온다.
+  function renderKjResume() { fillResume('btnKjResume', 'kjResumeInfo', true); }
 
   function resumeSession() {
     var s = restoreSession();
-    if (!s) { goView(view === 'kanji' ? 'kanji' : 'home'); return; }
+    if (!s) {
+      // 풀다 만 것이 없으면 마지막으로 하던 묶음을 그대로 다시 낸다.
+      var l = lastStudySet();
+      if (l) { startSession(l.list, l.label, 0, l.src); return; }
+      goView(view === 'kanji' ? 'kanji' : 'home');
+      return;
+    }
     session = s;
     studyFrom = (s.src === 'kanji') ? 'kanji' : 'home';
     show('study');
@@ -1813,6 +1884,7 @@
   }
 
   function renderResult() {
+    rememberLast();       // 무엇을 하던 판인지는 남긴다('마지막 학습 다시')
     Store.clearSession(); // 다 풀었으므로 이어하기 대상이 아니다
     // 여기서 자동으로 올리지 않는다. 올리기는 클라우드를 이 기기 내용으로 덮는 일이라,
     // 다른 기기가 올려 둔 이어하기를 말없이 지워 버린다. 실제로 그것 때문에
@@ -1834,6 +1906,7 @@
     if (!session) return;
     var res = distinctResults();
     if (!res.length) {                 // 한 문제도 풀지 않았으면 결과를 낼 것이 없다
+      rememberLast();
       Store.clearSession();
       goView(studyFrom);
       return;
@@ -1843,6 +1916,7 @@
     $('progressFill').style.width = Math.round(session.index / Math.max(1, session.total) * 100) + '%';
     $('progressText').textContent = session.index + ' / ' + session.total;
     saveExam(res);
+    rememberLast();
     Store.clearSession();              // 이어하기로 남기지 않는다. 남은 단어는 복습 목록에 그대로 있다.
     if (global_Sync()) Sync.touch();
     fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에',
@@ -3628,6 +3702,16 @@
 
     $('btnResume').addEventListener('click', resumeSession);
     $('btnKjResume').addEventListener('click', resumeSession);
+    // 첫 화면의 이어서 학습. 단어든 한자든 문법이든 풀던 자리로 바로 들어간다.
+    $('btnPkResume').addEventListener('click', function () {
+      if (pkResume === 'gram') {
+        if (!restoreGSession()) { renderPick(); return; }
+        show('gramStudy');
+        renderGramCard();
+        return;
+      }
+      resumeSession();
+    });
     $('btnTimeTop').addEventListener('click', function () {
       calDate = new Date();
       renderTime();
