@@ -745,20 +745,43 @@
   // 한 Day 에 글이 여러 편일 수 있다. 'Day-편' 을 키로 쓴다.
   // v78 은 Day 만 키로 썼다. 그때 저장된 것은 편 번호가 없으니 1편으로 읽힌다.
   // arrOf 는 객체든 배열이든 편다. Firebase 가 번호 키 객체를 배열로 돌려줄 때가 있다.
-  function mergeStories(inc) {
+  // 내장본(data/stories.js)에 있는 글의 판. 저장소에 또 둘 필요가 없는 것들이다.
+  var builtinStories = {};
+
+  function mergeStories(inc, builtin) {
     var n = 0;
     arrOf(inc).forEach(function (raw) {
       var s = normalizeStory(raw);
       if (!s) return;
       var id = s.day + '-' + s.set;
+      if (builtin) builtinStories[id] = s.v || 0;
       var cur = stories[id];
       if (cur && (cur.v || 0) >= s.v) return;
       stories[id] = s;
       n++;
     });
     // 바뀐 것이 있을 때만 쓴다. 매번 쓰면 켤 때마다 안 올린 기록이 생긴 것처럼 보인다.
-    if (n) write(STORY_KEY, stories);
+    if (n) persistStories();
     return n;
+  }
+
+  // 저장소에는 '내장본에 없는 글' 만 남긴다.
+  // PC 앱은 data/stories.js 가 원본이라, 같은 글을 저장소에 또 두면 자리만 먹는다(260만 자,
+  // 한도의 절반). 폰 배포본은 내장본이 비어 있으므로 지금까지처럼 전부 저장된다.
+  // 올리기는 메모리에 합쳐진 글 전부를 보내므로 폰으로 가는 데는 달라지는 것이 없다.
+  function persistStories() {
+    var keep = {}, n = 0;
+    Object.keys(stories).forEach(function (id) {
+      var s = stories[id];
+      if (builtinStories[id] != null && builtinStories[id] >= (s.v || 0)) return;
+      keep[id] = s; n++;
+    });
+    var cur = null;
+    try { cur = localStorage.getItem(STORY_KEY); } catch (e) {}
+    // 남길 것이 없으면 아예 비운다. 지우는 것은 '바뀜' 으로 치지 않는다(올릴 거리가 아니다).
+    if (!n) { try { if (cur) localStorage.removeItem(STORY_KEY); } catch (e) {} return; }
+    if (cur === JSON.stringify(keep)) return;   // 같은 것을 또 쓰면 안 올린 기록이 생긴 척한다
+    write(STORY_KEY, keep);
   }
 
   function storyList() {
@@ -1657,8 +1680,11 @@
     }
 
     stories = {};
+    // 내장본(data/stories.js)을 먼저 읽는다. 그래야 저장본에서 같은 글을 걸러 낼 수 있다.
+    // 이 글들은 저장소에 복사하지 않는다. 파일에 이미 있으니 두 벌 둘 이유가 없다.
+    if (global.DEFAULT_STORIES) mergeStories(global.DEFAULT_STORIES, true);
     mergeStories(read(STORY_KEY, {}));
-    if (global.DEFAULT_STORIES) mergeStories(global.DEFAULT_STORIES);
+    persistStories();      // 저장소에 남아 있던 중복을 덜어낸다(PC 에서 260만 자)
   }
 
   global.Store = {
