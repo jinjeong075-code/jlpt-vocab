@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v106';
+  var BUILD = 'v107';
 
   /* ---------------- 화면 ---------------- */
 
@@ -1310,9 +1310,11 @@
 
   function refOf(e) { return { d: e.day, n: e.w.no, w: e.w.word }; }
 
+  var saveWarned = false;
+
   function persistSession() {
     if (!session) return;
-    Store.saveSession({
+    var ok = Store.saveSession({
       label: session.label,
       src: session.src || '',
       dir: session.dir || 'jp2ko',
@@ -1328,6 +1330,13 @@
         return { d: x.day, n: x.w.no, w: x.w.word, r: x.r, m: x.m, level: x.level };
       })
     });
+    // 저장이 안 되면 이어하기도 없다. 모르고 지나가면 공부한 자리를 잃는다.
+    if (!ok && !saveWarned) {
+      saveWarned = true;
+      var si = Store.storageInfo();
+      toast('저장 공간이 꽉 차 이어하기를 저장하지 못했습니다 (' +
+        Math.round(si.used / 1024) + 'KB / ' + Math.round(si.limit / 1024) + 'KB)');
+    }
   }
 
   function hydrate(ref) {
@@ -1377,59 +1386,15 @@
     };
   }
 
-  // 끝났거나 끊긴 학습도 '무엇을 하던 것인지' 는 남긴다.
-  // 이어하기가 해제된 뒤에도 같은 묶음을 한 번에 다시 열 수 있어야 한다.
-  function rememberLast() {
-    if (!session) return;
-    Store.saveLastStudy({
-      label: session.label,
-      src: session.src || '',
-      dir: session.dir || 'jp2ko',
-      total: session.total,
-      refs: session.queue.concat(session.retry || []).map(refOf)
-    });
-  }
-
-  // 마지막으로 하던 학습. 그 기록이 없는 옛 판에서는 마지막 시험 기록으로 대신한다
-  // (시험 기록에는 그 판에서 실제로 푼 단어가 들어 있다).
-  function lastStudySet() {
-    var s = Store.loadLastStudy();
-    var refs = s && s.refs;
-    if (!refs || !refs.length) {
-      var ex = Store.examList();
-      var e = ex.length ? ex[ex.length - 1] : null;
-      var it = e ? examItems(e) : [];
-      if (!it.length) return null;
-      refs = it.map(function (x) { return { d: x.d, n: x.n, w: x.w }; });
-      s = {
-        label: e.label || '마지막 학습',
-        src: /^한자/.test(String(e.label || '')) ? 'kanji' : '',
-        dir: e.dir === 'timed' ? 'jp2ko' : (e.dir || 'jp2ko')
-      };
-    }
-    var list = [];
-    refs.forEach(function (r) { var w = hydrate(r); if (w) list.push(w); });
-    if (!list.length) return null;
-    return { label: s.label || '마지막 학습', src: s.src || '', dir: s.dir || 'jp2ko', list: list };
-  }
-
-  // 이어하기 버튼 하나를 채운다. 풀다 만 것이 있으면 그것, 없으면 마지막으로 하던 학습.
+  // 이어하기 버튼 하나를 채운다. 풀다 만 것이 있을 때만 나온다.
   // onlyKanji 는 한자 화면용. 한자 쪽에서 시작한 것만 받는다.
   function fillResume(btnId, infoId, onlyKanji) {
-    var b = $(btnId), lab = b.querySelector('.rs-label');
+    var b = $(btnId);
     var s = restoreSession();
     if (s && (!onlyKanji || s.src === 'kanji')) {
       b.hidden = false;
-      if (lab) lab.textContent = '이어서 학습';
       $(infoId).textContent = s.label + ' · ' + s.done + ' / ' + s.total;
       return 'live';
-    }
-    var l = lastStudySet();
-    if (l && (!onlyKanji || l.src === 'kanji')) {
-      b.hidden = false;
-      if (lab) lab.textContent = '마지막 학습 다시';
-      $(infoId).textContent = l.label + ' · ' + l.list.length + '단어';
-      return 'last';
     }
     b.hidden = true;
     return '';
@@ -1442,13 +1407,7 @@
 
   function resumeSession() {
     var s = restoreSession();
-    if (!s) {
-      // 풀다 만 것이 없으면 마지막으로 하던 묶음을 그대로 다시 낸다.
-      var l = lastStudySet();
-      if (l) { startSession(l.list, l.label, 0, l.src); return; }
-      goView(view === 'kanji' ? 'kanji' : 'home');
-      return;
-    }
+    if (!s) { goView(view === 'kanji' ? 'kanji' : 'home'); return; }
     session = s;
     studyFrom = (s.src === 'kanji') ? 'kanji' : 'home';
     show('study');
@@ -1884,7 +1843,6 @@
   }
 
   function renderResult() {
-    rememberLast();       // 무엇을 하던 판인지는 남긴다('마지막 학습 다시')
     Store.clearSession(); // 다 풀었으므로 이어하기 대상이 아니다
     // 여기서 자동으로 올리지 않는다. 올리기는 클라우드를 이 기기 내용으로 덮는 일이라,
     // 다른 기기가 올려 둔 이어하기를 말없이 지워 버린다. 실제로 그것 때문에
@@ -1906,7 +1864,6 @@
     if (!session) return;
     var res = distinctResults();
     if (!res.length) {                 // 한 문제도 풀지 않았으면 결과를 낼 것이 없다
-      rememberLast();
       Store.clearSession();
       goView(studyFrom);
       return;
@@ -1916,7 +1873,6 @@
     $('progressFill').style.width = Math.round(session.index / Math.max(1, session.total) * 100) + '%';
     $('progressText').textContent = session.index + ' / ' + session.total;
     saveExam(res);
-    rememberLast();
     Store.clearSession();              // 이어하기로 남기지 않는다. 남은 단어는 복습 목록에 그대로 있다.
     if (global_Sync()) Sync.touch();
     fillResult(res, res.length + '단어 중 ' + perfect + '개를 한 번에',
@@ -2491,6 +2447,11 @@
     // 로그인 화면에서는 받기·올리기 줄이 가려져 있다. 막힌 이유를 여기서라도 알려 준다.
     if (!st.signedIn && st.result && st.result.err) showSyncErr('syncErr', st.result.err);
     $('syncBuild').textContent = BUILD;
+    var si = Store.storageInfo();
+    var pct = Math.round(si.used / si.limit * 100);
+    $('syncStore').textContent = Math.round(si.used / 1024) + ' / ' + Math.round(si.limit / 1024) + 'KB · ' + pct + '%' +
+      (si.err ? ' · 저장 실패함' : '');
+    $('syncStore').classList.toggle('bad', pct >= 95 || !!si.err);
     // v45 가 잘못 올린 것을 v47 이 되돌렸다. 무엇이 걸렸는지 볼 수 있게 한다.
     var undone = Store.undoneWords();
     $('undoRow').hidden = !undone.length;

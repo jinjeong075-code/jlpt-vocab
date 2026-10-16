@@ -90,11 +90,63 @@
   SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
   SYNCED_KEYS[KSEEN_KEY] = 1;
 
+  // 저장 공간이 꽉 차면 setItem 이 예외를 던진다. 예전에는 그것을 조용히 삼켰는데,
+  // 그 바람에 이어하기가 저장되지 않는데도 아무 말이 없었다(실제로 그렇게 됐다).
+  // 이제는 버려도 되는 것부터 비우고 한 번 더 해 보고, 그래도 안 되면 자취를 남긴다.
+  var lastWriteErr = null;
+  var DEAD_KEYS = ['jvocab.backup.prereset.v1'];   // 쓰지 않게 된 옛 백업
+
+  function put(key, s) {
+    localStorage.setItem(key, s);
+    if (SYNCED_KEYS[key]) localStorage.setItem(CHANGED_KEY, String(Date.now()));
+  }
+
   function write(key, val) {
+    var s = JSON.stringify(val);
     try {
-      localStorage.setItem(key, JSON.stringify(val));
-      if (SYNCED_KEYS[key]) localStorage.setItem(CHANGED_KEY, String(Date.now()));
+      put(key, s);
+      return true;
+    } catch (e) {
+      if (makeRoom(s.length + key.length)) {
+        try { put(key, s); return true; } catch (e2) {}
+      }
+      lastWriteErr = { key: key, at: Date.now(), need: s.length, err: String((e && e.name) || e) };
+      return false;
+    }
+  }
+
+  // 자리를 만든다. 지워도 되는 것부터, 그다음은 오래된 시험 기록.
+  // 풀던 학습을 잃는 것보다 옛 기록이 줄어드는 편이 낫다.
+  function makeRoom(need) {
+    var freed = 0;
+    DEAD_KEYS.forEach(function (k) {
+      try {
+        var v = localStorage.getItem(k);
+        if (v) { localStorage.removeItem(k); freed += v.length + k.length; }
+      } catch (e) {}
+    });
+    if (freed >= need) return true;
+    try {
+      var a = examArr(read(EXAM_KEY, []));
+      if (a.length > 50) {
+        a.sort(function (x, y) { return x.at - y.at; });
+        localStorage.setItem(EXAM_KEY, JSON.stringify(a.slice(-Math.max(50, Math.floor(a.length / 2)))));
+        return true;
+      }
     } catch (e) {}
+    return freed > 0;
+  }
+
+  // 지금 얼마나 쓰고 있는지. 한도는 크로미움 기준 5MB(문자 수).
+  function storageInfo() {
+    var used = 0;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        used += k.length + (localStorage.getItem(k) || '').length;
+      }
+    } catch (e) {}
+    return { used: used, limit: 5242880, err: lastWriteErr };
   }
 
   function lastChange() {
@@ -1168,7 +1220,7 @@
   // 다 풀고 지울 때도 그냥 지우지 않고 '지웠다'는 표시를 남긴다.
   // 그래야 그 사실도 동기화로 건너가서, 다른 기기가 이미 끝난 학습을
   // 이어하기로 다시 띄우지 않는다.
-  function saveSession(s) { s.savedAt = Date.now(); write(SESS_KEY, s); }
+  function saveSession(s) { s.savedAt = Date.now(); return write(SESS_KEY, s); }
 
   function loadSession() {
     var s = read(SESS_KEY, null);
@@ -1186,8 +1238,6 @@
 
   // 끝났거나 끊긴 학습도 '무엇을 하고 있었는지' 는 남긴다.
   // 이어하기가 해제돼도 같은 묶음을 한 번에 다시 열 수 있어야 한다.
-  function saveLastStudy(s) { s.at = Date.now(); write(LAST_STUDY_KEY, s); }
-  function loadLastStudy() { return read(LAST_STUDY_KEY, null); }
 
   // 문법도 따로 이어하기를 둔다. 단어를 풀다 문법으로 넘어가도 둘 다 남아야 한다.
   function saveGSession(s) { s.savedAt = Date.now(); write(GSESS_KEY, s); }
@@ -1458,6 +1508,8 @@
   /* ---------- 초기화 ---------- */
 
   function init() {
+    // 쓰지 않게 된 옛 백업은 켤 때 비운다. 자리를 많이 먹는다(28만 자).
+    DEAD_KEYS.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
     days = read(VOCAB_KEY, {});
     moved = read(MOVED_KEY, {});
     movedBack = null;
@@ -1692,8 +1744,7 @@
     saveSession: saveSession,
     loadSession: loadSession,
     clearSession: clearSession,
-    saveLastStudy: saveLastStudy,
-    loadLastStudy: loadLastStudy,
+    storageInfo: storageInfo,
     findWord: findWord,
     addTime: addTime,
     timeOn: timeOn,

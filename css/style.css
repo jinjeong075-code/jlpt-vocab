@@ -988,6 +988,7 @@ kbd {
 .sync-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
 .sync-k { color: var(--dim); }
 .sync-v { text-align: right; word-break: break-all; }
+.sync-v.bad { color: var(--no, #e07b7b); }
 
 /* 설치된 서비스워커 버전. 앱 버전과 다르면 옛것이 앉아 있다는 뜻이라 눈에 띄게 둔다. */
 .sync-v .sw-v { margin-right: 8px; color: var(--dim); }
