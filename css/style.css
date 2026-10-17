@@ -1328,3 +1328,96 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .mark-btn:active { transform: scale(.88); }
 .mark-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mark-btn.sm { width: 26px; height: 26px; font-size: 15px; }
+
+/* ---------- 시험 대비 (대학 수업) ---------- */
+.mid-head { margin-top: 14px; margin-bottom: 10px; }
+.mid-h1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mid-title { font-size: 17px; font-weight: 700; }
+.mid-dday { font-size: 15px; font-weight: 700; color: var(--warn); }
+.mid-h2 { font-size: 13px; color: var(--dim); margin-top: 4px; }
+.mid-h3 { font-size: 12px; color: var(--dim); margin-top: 6px; }
+.dbar.mid-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 10px; background: var(--panel2); }
+.dbar.mid-bar i { display: block; height: 100%; }
+#viewMid .chips { margin-top: 0; }
+#viewMid .chip i { font-style: normal; color: var(--dim); margin-left: 3px; }
+.mid-lessons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+.mid-ls { background: var(--panel); border: 1px solid var(--hair); border-radius: var(--radius); padding: 13px 14px 12px; }
+.mid-ls-h { display: flex; align-items: baseline; gap: 10px; }
+.mid-ls-no { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--accent); }
+.mid-ls-t { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+.mid-ls-t [lang="ja"], .mid-nh [lang="ja"] { font-family: var(--jp); }
+.mid-ls-ko { font-size: 12px; color: var(--dim); font-weight: 400; }
+.mid-ls-st { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
+.mid-ls-btns { display: flex; gap: 6px; margin-top: 11px; }
+.mid-ls-btns .chip { flex: 1; text-align: center; }
+
+/* 정리 */
+.mid-nh { font-size: 18px; font-weight: 700; margin: 16px 2px 2px; }
+.mid-facts { margin: 0; padding-left: 18px; line-height: 1.75; font-size: 14px; }
+.mid-facts li { margin-bottom: 5px; }
+.mid-g .ex-jp { font-size: 15px; }
+.mid-gp { font-family: var(--jp); font-size: 18px; font-weight: 700; }
+.mid-gm { font-size: 13px; color: var(--accent); margin: 3px 0 8px; }
+.mid-intext { display: flex; gap: 10px; font-size: 13px; padding-top: 9px; margin-top: 6px; border-top: 1px solid var(--hair); }
+.mid-intext .k { flex: 0 0 40px; font-size: 11px; color: var(--dim); }
+.mid-intext [lang="ja"] { font-family: var(--jp); line-height: 1.8; }
+.mid-xl { font-size: 13px; line-height: 1.75; margin: 7px 0 0; }
+.mid-qa { background: var(--panel); border: 1px solid var(--hair); border-radius: var(--radius); padding: 11px 13px; margin-bottom: 6px; cursor: pointer; }
+.mid-qa .ex-jp { margin: 0; font-size: 15px; }
+.mid-qa-a { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--hair); }
+.mid-qa-a .ex-jp { color: var(--ok); }
+.next-btn.mid-go { margin: 6px 0 28px; }
+
+/* 단어 */
+.mid-wt { width: 100%; border-collapse: collapse; margin: 2px 0 28px; }
+.mid-wt td { padding: 8px 6px; border-bottom: 1px solid var(--hair); font-size: 14px; vertical-align: top; }
+.mid-wt td.w { font-family: var(--jp); font-size: 16px; font-weight: 600; white-space: nowrap; }
+.mid-wt td.r { font-family: var(--jp); color: var(--rt); }
+.mid-wt td.m { color: var(--dim); }
+.mid-wt.hide-r td.r:not(.peek), .mid-wt.hide-m td.m:not(.peek) {
+  color: transparent; background: var(--panel2); border-radius: 4px; cursor: pointer;
+}
+
+/* 문제 */
+.mid-psg {
+  font-family: var(--jp); font-size: 15px; line-height: 1.95; padding: 11px 13px; margin-top: 12px;
+  background: var(--panel2); border-radius: 8px; border-left: 3px solid var(--line);
+}
+.mid-qt { font-family: var(--jp); font-size: 17px; line-height: 1.9; margin: 14px 0 2px; }
+.mid-qko { font-size: 13px; color: var(--dim); margin: 0 0 4px; }
+.mid-kobtn { background: none; border: none; color: var(--dim); font-size: 12px; padding: 2px 0; cursor: pointer; font-family: inherit; }
+.mid-kobtn:hover { color: var(--accent); }
+.mid-u { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.gopt.mid-opt { display: flex; gap: 10px; align-items: baseline; line-height: 1.7; }
+.mid-on { flex: 0 0 auto; color: var(--dim); font-family: inherit; }
+.mid-ot { flex: 1; min-width: 0; }
+.gopt.mid-opt.sel, .gopt.mid-opt.sel .mid-on { color: var(--accent); }
+.gopt.mid-opt.right .mid-on { color: var(--ok); }
+.gopt.mid-opt.wrong .mid-on { color: var(--no); }
+.mid-why { font-size: 13px; line-height: 1.75; margin: 8px 0 0; }
+.mid-why.dim { color: var(--dim); }
+#midTimer { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--warn); }
+
+/* 결과 */
+.mid-kinds { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 16px; }
+.mid-kd { font-size: 12px; color: var(--dim); background: var(--panel); border: 1px solid var(--hair); border-radius: 6px; padding: 4px 8px; }
+.mid-kd b { color: var(--text); margin-left: 6px; }
+.mid-rl { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.mid-ri { background: var(--panel); border: 1px solid var(--hair); border-radius: var(--radius); padding: 10px 12px; }
+.mid-ri.bad { border-color: rgba(224,123,123,.35); }
+.mid-ri-h { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.mid-ri-m { flex: 0 0 auto; font-weight: 700; font-size: 13px; }
+.mid-ri.ok .mid-ri-m { color: var(--ok); }
+.mid-ri.bad .mid-ri-m { color: var(--no); }
+.mid-ri-n { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
+.mid-ri-q { flex: 1; min-width: 0; font-family: var(--jp); font-size: 14px; line-height: 1.7; }
+.mid-ri-d { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
+.mid-ri-d .mid-psg { margin-top: 0; margin-bottom: 8px; font-size: 14px; }
+.mid-ro { display: flex; gap: 8px; font-family: var(--jp); font-size: 14px; padding: 3px 0; line-height: 1.6; }
+.mid-ro.right, .mid-ro.right .mid-on { color: var(--ok); }
+.mid-ro.wrong, .mid-ro.wrong .mid-on { color: var(--no); }
+/* 채점 뒤에 붙는 출처가 길어도 유형 배지는 한 줄로 */
+.mid-q .card-meta { align-items: flex-start; gap: 10px; }
+.mid-q .badge { white-space: nowrap; flex: 0 0 auto; }
+.mid-q .card-no { text-align: right; line-height: 1.5; }
+.mid-u.mid-ph { margin: 0 2px; }

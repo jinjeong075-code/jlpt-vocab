@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v109';
+  var BUILD = 'v110';
 
   /* ---------------- 화면 ---------------- */
 
@@ -43,7 +43,8 @@
     home: 'pick', gram: 'pick',
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
     stories: 'home', story: 'stories', kanji: 'pick',
-    gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram'
+    gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram',
+    mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid'
   };
 
   function handleBack() {
@@ -87,6 +88,7 @@
     else if (v === 'time') { renderTime(); show('time'); }
     else if (v === 'exams') { renderExams(); show('exams'); }
     else if (v === 'stories') { renderStories(); show('stories'); }
+    else if (v === 'mid')  { renderMid(); show('mid'); }
     else if (v === 'kanji') { examsOnlyKanji = false; renderKanjiList(); renderKjResume(); show('kanji'); renderKjSelBar(); }
     else show(v);
   }
@@ -148,6 +150,15 @@
     $('pkKanjiSub').textContent = ks.length + '자';
     $('pkKanjiPct').textContent = (ks.length ? Math.round(kDone / ks.length * 100) : 0) + '%';
 
+    // 시험 대비: 자료가 있을 때만. 숫자는 맞힌 문제 비율(마지막 시도 기준).
+    var ed = Store.examData();
+    $('pkMid').hidden = !ed;
+    if (ed) {
+      var es = midStat(midQs());
+      $('pkMidSub').textContent = ((ed.info && ed.info.short) || '시험') + ' · ' + midDday();
+      $('pkMidPct').textContent = (es.n ? Math.round(es.ok / es.n * 100) : 0) + '%';
+    }
+
     // 풀다 만 것이 있으면 여기서도 보여 준다. 단어·한자는 한 자리를 같이 쓰고,
     // 문법은 따로 저장되므로 둘 다 있으면 나중에 저장된 쪽을 낸다.
     var w = restoreSession();
@@ -169,7 +180,8 @@
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
     gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
-    stories: '문단 읽기', story: '문단 읽기', kanji: '한자'
+    stories: '문단 읽기', story: '문단 읽기', kanji: '한자',
+    mid: '시험 대비', midNote: '시험 대비', midWords: '시험 대비', midQuiz: '시험 대비'
   };
 
   function show(name) {
@@ -3654,9 +3666,508 @@
     return a;
   }
 
+  /* ---------------- 시험 대비 (대학 수업) ---------------- */
+  // 대학 일본어 수업 중간고사 대비. 자료는 Store.examData() 한 곳에서만 온다
+  // (PC 는 data/exam.js 내장본, 폰은 받기로 받은 것). 이 파일에는 책 내용을 두지 않는다.
+  // 푼 기록은 단어 진도와 따로 Store.examProg 에 쌓는다.
+  // 과별·유형별 연습은 고르는 즉시 채점하고, 모의고사는 시험처럼 끝에 한꺼번에 채점한다.
+
+  var MID_KIND = {
+    content: 'A 독해 · 내용', grammar: 'A 독해 · 문법', reading: 'A 단어 · 읽기',
+    word: 'A 단어 · 뜻', blank: 'B 문법 · 빈칸', usage: 'B 문법 · 문장 찾기'
+  };
+  var MID_KIND_ORDER = ['content', 'grammar', 'reading', 'word', 'blank', 'usage'];
+  var MID_NUM = ['①', '②', '③', '④'];
+  // 모의고사 25문제를 이만큼씩 뽑는다. 범위가 네 과 + 2과 추가자료라 고르게 나눴다.
+  var MID_QUOTA = { L2: 5, EX: 2, L6: 6, L9: 6, L10: 6 };
+
+  var mid = null;        // 지금 푸는 판 { mode, list, idx, picks, label, start, deadline, done }
+  var midTick = null;    // 모의고사 시계
+
+  function midData() { return Store.examData(); }
+  function midQs() { var d = midData(); return (d && d.questions) || []; }
+  function midSetOf(q) { return q.set || ('L' + q.lesson); }
+  function midSetName(set) { return set === 'EX' ? '2과 추가자료' : String(set).replace('L', '') + '과'; }
+  function midIsWord(q) { return /^W:/.test(q.id); }   // 단어 목록으로 그 자리에서 만든 문제(기록 안 함)
+
+  function midLesson(set) {
+    var d = midData();
+    return d ? (d.lessons || []).filter(function (L) { return L.set === set; })[0] : null;
+  }
+
+  function midDday() {
+    var d = midData();
+    if (!d || !d.info || !d.info.date) return '';
+    var ex = new Date(d.info.date);
+    var a = new Date(ex.getFullYear(), ex.getMonth(), ex.getDate());
+    var now = new Date();
+    var b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var n = Math.round((a - b) / 86400000);
+    return n > 0 ? 'D-' + n : (n === 0 ? 'D-DAY' : '끝남');
+  }
+
+  // 마지막으로 푼 결과 기준. 다시 풀어 맞히면 틀린 문제에서 빠진다.
+  function midStat(list) {
+    var p = Store.examProg(), s = { n: list.length, done: 0, ok: 0, bad: 0 };
+    list.forEach(function (q) {
+      var r = p[q.id];
+      if (!r) return;
+      s.done++;
+      if (r.ok) s.ok++; else s.bad++;
+    });
+    return s;
+  }
+
+  function midWrongList() {
+    var p = Store.examProg();
+    return midQs().filter(function (q) { return p[q.id] && !p[q.id].ok; });
+  }
+
+  function midBar(s) {
+    var t = s.n || 1;
+    return '<span class="dbar mid-bar">' +
+      '<i class="b-long" style="width:' + (s.ok / t * 100).toFixed(2) + '%"></i>' +
+      '<i class="b-unknown" style="width:' + (s.bad / t * 100).toFixed(2) + '%"></i></span>';
+  }
+
+  // 밑줄(__말__)을 그려 준다. 빈칸 （　　） 은 글자 그대로 둔다.
+  function midText(s) {
+    return esc(String(s || '')).replace(/__(.+?)__/g, function (all, w) {
+      // 지시문의 「__　__の読み方」 처럼 비어 있는 밑줄은 시험지처럼 넓은 자리로 그린다.
+      return /^[\s　]*$/.test(w) ? '<u class="mid-u mid-ph">　　　</u>' : '<u class="mid-u">' + w + '</u>';
+    });
+  }
+
+  function renderMid() {
+    var d = midData();
+    $('btnMidMock').disabled = !d;
+    if (!d) {
+      $('midHead').innerHTML = '<div class="card mid-head"><p class="sub">자료가 아직 없습니다. PC 에서 올리기 → 이 기기에서 받기.</p></div>';
+      $('midKinds').innerHTML = '';
+      $('midLessons').innerHTML = '';
+      $('btnMidResume').hidden = true;
+      $('btnMidWrong').disabled = true;
+      return;
+    }
+    var info = d.info || {}, all = midQs(), s = midStat(all);
+    $('midHead').innerHTML =
+      '<div class="card mid-head">' +
+        '<div class="mid-h1"><span class="mid-title">' + esc(info.title || '시험') + '</span>' +
+          '<span class="mid-dday">' + midDday() + '</span></div>' +
+        (info.when ? '<div class="mid-h2">' + esc(info.when) + '</div>' : '') +
+        (info.format ? '<div class="mid-h2">' + esc(info.format) + '</div>' : '') +
+        midBar(s) +
+        '<div class="mid-h3">풀어 본 문제 ' + s.done + ' / ' + s.n + ' · 맞힘 ' + s.ok + ' · 틀림 ' + s.bad + '</div>' +
+      '</div>';
+
+    var live = mid && mid.mode === 'mock' && !mid.done;
+    $('btnMidResume').hidden = !live;
+    if (live) {
+      $('midResumeInfo').textContent =
+        mid.picks.filter(function (x) { return x != null; }).length + ' / ' + mid.list.length + ' 답함';
+    }
+    $('midMockSub').textContent = (info.count || 25) + '문제 · ' + (info.minutes || 60) + '분 · 과별로 고르게';
+    var wrong = midWrongList();
+    $('midWrongSub').textContent = wrong.length ? wrong.length + '문제' : '아직 없음';
+    $('btnMidWrong').disabled = !wrong.length;
+
+    $('midKinds').innerHTML = MID_KIND_ORDER.map(function (k) {
+      var n = all.filter(function (q) { return q.kind === k; }).length;
+      return n ? '<button class="chip" data-kind="' + k + '">' + MID_KIND[k] + ' <i>' + n + '</i></button>' : '';
+    }).join('');
+
+    $('midLessons').innerHTML = (d.lessons || []).map(function (L) {
+      var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
+      var st = midStat(qs);
+      var words = (L.vocab || []).length;
+      return '<div class="mid-ls">' +
+        '<div class="mid-ls-h">' +
+          '<span class="mid-ls-no">' + esc(L.no) + '</span>' +
+          '<span class="mid-ls-t"><span lang="ja">' + esc(L.jp || '') + '</span> <span class="mid-ls-ko">' + esc(L.ko || '') + '</span></span>' +
+          (qs.length ? '<span class="mid-ls-st">' + st.ok + ' / ' + st.n + '</span>' : '') +
+        '</div>' + (qs.length ? midBar(st) : '') +
+        '<div class="mid-ls-btns">' +
+          '<button class="chip" data-act="note" data-set="' + L.set + '">정리</button>' +
+          (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
+          (qs.length ? '<button class="chip" data-act="quiz" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  function midHeadHTML(L) {
+    return '<div class="mid-nh"><span class="mid-ls-no">' + esc(L.no) + '</span> ' +
+      '<span lang="ja">' + esc(L.jp || '') + '</span> <span class="mid-ls-ko">' + esc(L.ko || '') + '</span></div>';
+  }
+
+  function openMidNote(set) {
+    var L = midLesson(set);
+    if (!L) return;
+    var h = midHeadHTML(L);
+    if ((L.facts || []).length) {
+      h += '<div class="secto">본문 핵심</div><ul class="mid-facts">' +
+        L.facts.map(function (f) { return '<li>' + midText(f) + '</li>'; }).join('') + '</ul>';
+    }
+    if ((L.grammar || []).length) {
+      h += '<div class="secto">문형</div>';
+      L.grammar.forEach(function (g, i) {
+        h += '<div class="card mid-g">' +
+          '<div class="mid-gp" lang="ja">' + MID_NUM[i] + ' ' + esc(g.pattern) + '</div>' +
+          '<div class="mid-gm">' + esc(g.meaning) + '</div>' +
+          (g.usage ? grow('용법', esc(g.usage), 'dim') : '') +
+          (g.connection ? grow('접속', esc(g.connection), '') : '') +
+          (g.examples || []).map(function (e) {
+            return '<div class="ex"><p class="ex-jp" lang="ja">' + midText(e.jp) + '</p><p class="ex-ko">' + esc(e.ko) + '</p></div>';
+          }).join('') +
+          (g.in_text ? '<div class="mid-intext"><span class="k">본문</span><span lang="ja">' + midText(g.in_text) + '</span></div>' : '') +
+        '</div>';
+      });
+    }
+    (L.extra || []).forEach(function (x, i) {
+      if (!i) h += '<div class="secto">추가자료</div>';
+      h += '<div class="card mid-g"><div class="mid-gp">' + midText(x.h) + '</div>' +
+        (x.lines || []).map(function (l) { return '<p class="mid-xl">' + midText(l) + '</p>'; }).join('') + '</div>';
+    });
+    if ((L.reading || []).length) {
+      h += '<div class="secto">독해문제 · 누르면 답</div>';
+      L.reading.forEach(function (r, i) {
+        h += '<div class="mid-qa"><p class="ex-jp" lang="ja">' + (i + 1) + '. ' + midText(r.q) + '</p>' +
+          '<div class="mid-qa-a" hidden><p class="ex-jp" lang="ja">' + midText(r.a) + '</p>' +
+          (r.ko ? '<p class="ex-ko">' + esc(r.ko) + '</p>' : '') + '</div></div>';
+      });
+    }
+    var n = midQs().filter(function (q) { return midSetOf(q) === set; }).length;
+    if (n) h += '<button class="next-btn mid-go" data-act="quiz" data-set="' + set + '">이 과 문제 ' + n + '개 풀기</button>';
+    $('midNote').innerHTML = h;
+    show('midNote');
+  }
+
+  function openMidWords(set) {
+    var L = midLesson(set);
+    if (!L || !(L.vocab || []).length) return;
+    var h = midHeadHTML(L) +
+      '<div class="chips">' +
+        '<button class="chip" data-hide="r">읽기 가리기</button>' +
+        '<button class="chip" data-hide="m">뜻 가리기</button>' +
+        '<button class="chip ta-go" data-act="wquiz" data-set="' + set + '">읽기 퀴즈</button>' +
+      '</div>' +
+      '<table class="mid-wt" id="midWT"><tbody>' +
+      L.vocab.map(function (v) {
+        var r = (v.reading && v.reading !== v.word) ? v.reading : '';
+        return '<tr><td class="w" lang="ja">' + esc(v.word) + '</td><td class="r" lang="ja">' + esc(r) +
+          '</td><td class="m">' + esc(v.meaning) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    $('midWords').innerHTML = h;
+    show('midWords');
+  }
+
+  // 단어 목록에서 읽기 문제를 그 자리에서 만든다. 오답은 같은 과 단어의 읽기.
+  function midWordQuiz(set) {
+    var L = midLesson(set);
+    if (!L) return;
+    var pool = (L.vocab || []).filter(function (v) {
+      return /[一-龯々]/.test(v.word) && v.reading && v.reading !== v.word;
+    });
+    var readings = [];
+    pool.forEach(function (v) { if (readings.indexOf(v.reading) < 0) readings.push(v.reading); });
+    if (readings.length < 4) return;
+    var list = shuffle(pool.slice()).map(function (v) {
+      var others = shuffle(readings.filter(function (r) { return r !== v.reading; })).slice(0, 3);
+      var opts = shuffle([v.reading].concat(others));
+      return {
+        id: 'W:' + set + ':' + v.word, set: set, part: 'A', kind: 'reading', src: '단어 목록', passage: '',
+        q: '__' + v.word + '__の読み方として正しいものを選びなさい。', q_ko: v.meaning,
+        opts: opts, ans: opts.indexOf(v.reading), why: v.word + '（' + v.reading + '）= ' + v.meaning
+      };
+    });
+    midStart('practice', list, midSetName(set) + ' 단어 읽기');
+  }
+
+  function midMock() {
+    var all = midQs(), p = Store.examProg(), out = [];
+    // 아직 안 푼 것 → 틀린 것 → 맞힌 것 순으로. 같은 무리 안에서는 섞는다.
+    var rank = function (q) { var r = p[q.id]; return !r ? 0 : (r.ok ? 2 : 1); };
+    var byRank = function (list) { return shuffle(list.slice()).sort(function (a, b) { return rank(a) - rank(b); }); };
+    Object.keys(MID_QUOTA).forEach(function (set) {
+      var pool = all.filter(function (q) { return midSetOf(q) === set; });
+      var A = byRank(pool.filter(function (q) { return q.part === 'A'; }));
+      var B = byRank(pool.filter(function (q) { return q.part !== 'A'; }));
+      var n = MID_QUOTA[set];
+      var na = Math.min(A.length, Math.round(n * 0.6));
+      var pick = A.slice(0, na).concat(B.slice(0, n - na));
+      var rest = A.slice(na).concat(B.slice(n - na));
+      while (pick.length < n && rest.length) pick.push(rest.shift());
+      out = out.concat(pick);
+    });
+    midStart('mock', out, '모의고사');
+  }
+
+  function midStart(mode, list, label) {
+    if (!list.length) return;
+    stopMidTick();
+    var d = midData() || {}, mins = (d.info && d.info.minutes) || 60;
+    mid = {
+      mode: mode, list: list, idx: 0, label: label, done: false, showKo: false,
+      picks: list.map(function () { return null; }),
+      start: Date.now(), deadline: mode === 'mock' ? Date.now() + mins * 60000 : 0
+    };
+    $('midTimer').textContent = '';
+    show('midQuiz');
+    if (mode === 'mock') startMidTick();
+    renderMidQ();
+  }
+
+  function startMidTick() {
+    stopMidTick();
+    var tick = function () {
+      if (!mid || mid.mode !== 'mock' || mid.done) { stopMidTick(); return; }
+      var left = mid.deadline - Date.now();
+      if (left <= 0) {
+        stopMidTick();
+        // 다른 화면에 가 있으면 돌아왔을 때 마감한다.
+        if (view === 'midQuiz') { toast('시간이 끝나 제출했습니다'); finishMid(); }
+        return;
+      }
+      var mm = Math.floor(left / 60000), ss = Math.floor(left % 60000 / 1000);
+      $('midTimer').textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;
+    };
+    tick();
+    midTick = setInterval(tick, 1000);
+  }
+
+  function stopMidTick() { if (midTick) { clearInterval(midTick); midTick = null; } }
+
+  function renderMidQ() {
+    var m = mid;
+    if (!m) return;
+    if (m.done) { renderMidResult(); return; }
+    var q = m.list[m.idx], pick = m.picks[m.idx];
+    var graded = m.mode === 'practice' && pick != null;
+    $('midCount').textContent = (m.idx + 1) + ' / ' + m.list.length;
+    $('midFill').style.width = (m.idx / m.list.length * 100) + '%';
+    $('midLabel').textContent = m.label;
+
+    var h = '<div class="card mid-q">' +
+      '<div class="card-meta"><span class="badge">' + (MID_KIND[q.kind] || '') + '</span>' +
+        '<span class="card-no">' + midSetName(midSetOf(q)) + (graded && q.src ? ' · ' + esc(q.src) : '') + '</span></div>';
+    if (q.passage) h += '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>';
+    h += '<p class="mid-qt" lang="ja">' + midText(q.q) + '</p>';
+    if (q.q_ko) {
+      h += (m.showKo || graded) ? '<p class="mid-qko">' + esc(q.q_ko) + '</p>'
+                                : '<button class="mid-kobtn" id="midKo">뜻 보기</button>';
+    }
+    h += '<div class="gopts">';
+    q.opts.forEach(function (o, i) {
+      var cls = '';
+      if (graded) cls = (i === q.ans) ? ' right' : (i === pick ? ' wrong' : '');
+      else if (pick === i) cls = ' sel';
+      h += '<button class="gopt mid-opt' + cls + '" data-i="' + i + '"><span class="mid-on">' + MID_NUM[i] + '</span>' +
+        '<span class="mid-ot">' + midText(o) + '</span></button>';
+    });
+    h += '</div>';
+
+    if (graded) {
+      var ok = pick === q.ans;
+      h += '<div class="gjudge ' + (ok ? 'right' : 'wrong') + '">' + (ok ? '정답' : '틀림 · 정답 ' + MID_NUM[q.ans]) + '</div>';
+      if (q.why) h += '<p class="mid-why">' + midText(q.why) + '</p>';
+      h += '<button class="next-btn" id="midNext">' + (m.idx === m.list.length - 1 ? '결과 보기' : '다음') + ' <kbd>Enter</kbd></button>';
+    }
+    if (m.mode === 'mock') {
+      var answered = m.picks.filter(function (x) { return x != null; }).length;
+      var last = m.idx === m.list.length - 1;
+      h += '<div class="br-nav">' +
+        '<button class="br-btn" id="midPrev"' + (m.idx === 0 ? ' disabled' : '') + '>이전</button>' +
+        (last ? '<button class="br-btn primary" id="midSubmit">제출 · ' + answered + '/' + m.list.length + ' 답함</button>'
+              : '<button class="br-btn primary" id="midNext">다음</button>') +
+        '</div>';
+      if (!last) h += '<button class="known-btn" id="midSubmit">지금 제출하고 채점 · ' + answered + '/' + m.list.length + ' 답함</button>';
+    }
+    h += '</div>';
+    $('midStage').innerHTML = h;
+
+    $$('#midStage .mid-opt').forEach(function (b) {
+      b.addEventListener('click', function () { midPick(Number(b.dataset.i)); });
+    });
+    if ($('midKo')) $('midKo').addEventListener('click', function () { mid.showKo = true; renderMidQ(); });
+    if ($('midNext')) $('midNext').addEventListener('click', midNext);
+    if ($('midPrev')) $('midPrev').addEventListener('click', function () { midGo(-1); });
+    if ($('midSubmit')) $('midSubmit').addEventListener('click', midSubmit);
+  }
+
+  function midPick(i) {
+    var m = mid;
+    if (!m || m.done) return;
+    var q = m.list[m.idx];
+    if (m.mode === 'practice') {
+      if (m.picks[m.idx] != null) return;          // 한 번 고르면 채점 끝. 바꿔서 맞힌 척하지 않는다
+      m.picks[m.idx] = i;
+      if (!midIsWord(q)) {
+        Store.examGrade(q.id, i === q.ans);
+        if (global_Sync()) Sync.touch();
+      }
+    } else {
+      m.picks[m.idx] = i;                            // 모의고사는 제출 전까지 바꿀 수 있다
+    }
+    renderMidQ();
+  }
+
+  function midGo(d) {
+    var m = mid;
+    if (!m || m.done) return;
+    var n = m.idx + d;
+    if (n < 0 || n >= m.list.length) return;
+    m.idx = n; m.showKo = false;
+    renderMidQ();
+  }
+
+  function midNext() {
+    var m = mid;
+    if (!m || m.done) return;
+    if (m.mode === 'practice' && m.picks[m.idx] == null) return;
+    if (m.idx < m.list.length - 1) { midGo(1); return; }
+    if (m.mode === 'practice') finishMid();
+  }
+
+  function midSubmit() {
+    var m = mid;
+    if (!m || m.done) return;
+    var left = m.picks.filter(function (x) { return x == null; }).length;
+    if (left && !confirm(left + '문제를 안 풀었습니다. 그래도 제출할까요?')) return;
+    finishMid();
+  }
+
+  function finishMid() {
+    var m = mid;
+    if (!m || m.done) return;
+    stopMidTick();
+    m.done = true;
+    m.end = Date.now();
+    if (m.mode === 'mock') {
+      // 안 푼 문제도 시험에서는 틀린 것이다. 틀린 문제로 모아 다시 풀게 한다.
+      m.list.forEach(function (q, i) { Store.examGrade(q.id, m.picks[i] === q.ans); });
+      if (global_Sync()) Sync.touch();
+    }
+    renderMidQ();
+  }
+
+  function renderMidResult() {
+    var m = mid, n = m.list.length, right = 0, byKind = {};
+    m.list.forEach(function (q, i) {
+      var ok = m.picks[i] === q.ans;
+      if (ok) right++;
+      var k = byKind[q.kind] || (byKind[q.kind] = { n: 0, ok: 0 });
+      k.n++; if (ok) k.ok++;
+    });
+    $('midCount').textContent = n + ' / ' + n;
+    $('midFill').style.width = '100%';
+    $('midTimer').textContent = '';
+    var mins = Math.max(1, Math.round(((m.end || Date.now()) - m.start) / 60000));
+    var h = '<div class="gdone"><div class="gdone-em">' + right + ' / ' + n + '</div>' +
+      '<div class="gdone-t">' + Math.round(right / n * 100) + '점</div>' +
+      '<div class="gdone-s">' + esc(m.label) + ' · ' + mins + '분</div></div>';
+    h += '<div class="mid-kinds">' + MID_KIND_ORDER.filter(function (k) { return byKind[k]; }).map(function (k) {
+      return '<span class="mid-kd">' + MID_KIND[k] + '<b>' + byKind[k].ok + '/' + byKind[k].n + '</b></span>';
+    }).join('') + '</div>';
+    h += '<div class="mid-rl">';
+    m.list.forEach(function (q, i) {
+      var pick = m.picks[i], ok = pick === q.ans;
+      // 틀린 것은 펼쳐 둔다. 결과 화면에서 바로 확인하는 게 할 일이다.
+      h += '<div class="mid-ri ' + (ok ? 'ok' : 'bad') + '">' +
+        '<div class="mid-ri-h"><span class="mid-ri-m">' + (ok ? 'O' : 'X') + '</span>' +
+          '<span class="mid-ri-n">' + (i + 1) + '</span>' +
+          '<span class="mid-ri-q" lang="ja">' + midText(q.q) + '</span></div>' +
+        '<div class="mid-ri-d"' + (ok ? ' hidden' : '') + '>' +
+          (q.passage ? '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>' : '') +
+          q.opts.map(function (o, j) {
+            return '<div class="mid-ro' + (j === q.ans ? ' right' : (j === pick ? ' wrong' : '')) + '">' +
+              '<span class="mid-on">' + MID_NUM[j] + '</span><span lang="ja">' + midText(o) + '</span></div>';
+          }).join('') +
+          (pick == null ? '<p class="mid-why dim">안 풀고 넘어감</p>' : '') +
+          (q.why ? '<p class="mid-why">' + midText(q.why) + '</p>' : '') +
+          '<p class="card-no">' + midSetName(midSetOf(q)) + (q.src ? ' · ' + esc(q.src) : '') + ' · ' + (MID_KIND[q.kind] || '') + '</p>' +
+        '</div></div>';
+    });
+    h += '</div>';
+    var wrongQs = m.list.filter(function (q, i) { return m.picks[i] !== q.ans; });
+    if (wrongQs.length) h += '<button class="next-btn" id="midRetry">틀린 ' + wrongQs.length + '문제 다시 풀기</button>';
+    h += '<button class="known-btn" id="midBack">시험 대비로</button>';
+    $('midStage').innerHTML = h;
+    $$('#midStage .mid-ri-h').forEach(function (el) {
+      el.addEventListener('click', function () { var dd = el.nextElementSibling; dd.hidden = !dd.hidden; });
+    });
+    if ($('midRetry')) $('midRetry').addEventListener('click', function () {
+      midStart('practice', shuffle(wrongQs.slice()), m.label + ' · 틀린 것');
+    });
+    $('midBack').addEventListener('click', function () { goView('mid'); });
+  }
+
+  // 숫자 1~4 로 고르고 Enter 로 넘긴다. 모의고사는 ← → 로 오간다.
+  function midKey(ev) {
+    var m = mid;
+    if (!m || m.done) return;
+    var k = ev.key;
+    if (k >= '1' && k <= '4') { ev.preventDefault(); midPick(Number(k) - 1); return; }
+    if (k === 'Enter' || k === ' ') { ev.preventDefault(); midNext(); return; }
+    if (m.mode === 'mock' && k === 'ArrowRight') { ev.preventDefault(); midGo(1); return; }
+    if (m.mode === 'mock' && k === 'ArrowLeft')  { ev.preventDefault(); midGo(-1); }
+  }
+
+  function bindMid() {
+    $('pkMid').addEventListener('click', function () { goView('mid'); });
+    $('btnMidMock').addEventListener('click', function () {
+      if (mid && mid.mode === 'mock' && !mid.done && !confirm('풀던 모의고사를 버리고 새로 시작할까요?')) return;
+      midMock();
+    });
+    $('btnMidResume').addEventListener('click', function () {
+      if (!mid || mid.done) { renderMid(); return; }
+      show('midQuiz');
+      if (mid.mode === 'mock') {
+        if (Date.now() >= mid.deadline) { toast('시간이 끝나 제출했습니다'); finishMid(); return; }
+        startMidTick();
+      }
+      renderMidQ();
+    });
+    $('btnMidWrong').addEventListener('click', function () {
+      midStart('practice', shuffle(midWrongList().slice()), '틀린 문제');
+    });
+    $('midKinds').addEventListener('click', function (ev) {
+      var c = ev.target.closest('.chip');
+      if (!c) return;
+      var k = c.dataset.kind;
+      midStart('practice', shuffle(midQs().filter(function (q) { return q.kind === k; })), MID_KIND[k]);
+    });
+    // 과 카드·정리·단어 화면의 버튼은 data-act 하나로 받는다.
+    ['midLessons', 'midNote', 'midWords'].forEach(function (id) {
+      $(id).addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-act]');
+        if (b) {
+          var set = b.dataset.set, act = b.dataset.act;
+          if (act === 'note') openMidNote(set);
+          else if (act === 'words') openMidWords(set);
+          else if (act === 'wquiz') midWordQuiz(set);
+          else if (act === 'quiz') {
+            midStart('practice', midQs().filter(function (q) { return midSetOf(q) === set; }), midSetName(set));
+          }
+          return;
+        }
+        var hide = ev.target.closest('[data-hide]');
+        if (hide) {
+          hide.classList.toggle('sel');
+          $('midWT').classList.toggle('hide-' + hide.dataset.hide, hide.classList.contains('sel'));
+          $$('#midWT td.peek').forEach(function (td) { td.classList.remove('peek'); });
+          return;
+        }
+        var td = ev.target.closest('#midWT td');
+        if (td) { td.classList.toggle('peek'); return; }
+        var qa = ev.target.closest('.mid-qa');
+        if (qa) { var a = qa.querySelector('.mid-qa-a'); a.hidden = !a.hidden; }
+      });
+    });
+  }
+
   /* ---------------- 이벤트 ---------------- */
 
   function bind() {
+    bindMid();
     $('btnHome').addEventListener('click', function () { goBack(); });
     $('btnSearchTop').addEventListener('click', openSearch);
     $('btnSearchClose').addEventListener('click', goBack);
@@ -4309,6 +4820,7 @@
       // 그 칸의 Enter 는 그 칸이 직접 받아 처리한다.
       var t = ev.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      if (view === 'midQuiz') { midKey(ev); return; }
       if (view === 'gramStudy') {
         // 돌아보는 중에는 좌우로만 움직인다.
         if (gPeek !== null) {

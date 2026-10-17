@@ -53,6 +53,15 @@
       </span>
       <span class="pct" id="pkKanjiPct">0%</span>
     </button>
+    <!-- 대학 수업 시험 대비. 자료가 있을 때만 보인다(PC 내장본, 폰은 받기로). -->
+    <button class="pk" id="pkMid" hidden>
+      <span class="em" lang="ja">試</span>
+      <span class="tx">
+        <span class="t">시험 대비</span>
+        <span class="s" id="pkMidSub"></span>
+      </span>
+      <span class="pct" id="pkMidPct">0%</span>
+    </button>
   </div>
 
   <!-- 브라우저로 처음 연 사람에게만 보인다. 누르면 홈 화면에 앱으로 깔린다.
@@ -345,6 +354,49 @@
 <!-- ============ 한자별 학습 ============ -->
 <!-- 한자를 고르면 그 한자가 든 단어만 모아 학습한다. 진도는 단어 진도를 그대로 쓴다.
      많이 나오는 한자부터 보라고 단계를 나눠 둔다. -->
+<!-- ===== 시험 대비(대학 수업) ===== -->
+<!-- 내용은 전부 data/exam.js 에서 온다. 여기엔 틀만 둔다(배포본에 책 내용이 남지 않게). -->
+<section id="viewMid" class="view">
+  <div id="midHead"></div>
+  <button class="resume-btn" id="btnMidResume" hidden>
+    <span class="rs-main">
+      <span class="rs-label">모의고사 이어서</span>
+      <span class="rs-info" id="midResumeInfo"></span>
+    </span>
+    <span class="rs-go">▶</span>
+  </button>
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnMidMock">
+      <span class="bb-title">모의고사 25문제</span>
+      <span class="bb-sub" id="midMockSub"></span>
+    </button>
+    <button class="big-btn" id="btnMidWrong">
+      <span class="bb-title">틀린 문제</span>
+      <span class="bb-sub" id="midWrongSub"></span>
+    </button>
+  </div>
+  <div class="secto">유형별로 풀기</div>
+  <div class="chips" id="midKinds"></div>
+  <div class="secto">과별</div>
+  <div class="mid-lessons" id="midLessons"></div>
+</section>
+
+<section id="viewMidNote" class="view">
+  <div id="midNote"></div>
+</section>
+
+<section id="viewMidWords" class="view">
+  <div id="midWords"></div>
+</section>
+
+<section id="viewMidQuiz" class="view">
+  <div class="progress-wrap">
+    <div class="progress-bar"><i id="midFill"></i></div>
+    <div class="progress-text"><span id="midCount">0 / 0</span><span id="midLabel"></span><span id="midTimer"></span></div>
+  </div>
+  <div id="midStage"></div>
+</section>
+
 <section id="viewKanji" class="view">
   <div class="hero">
     <h1>한자별 학습</h1>
@@ -733,6 +785,7 @@
 <script src="data/vocab.js"></script>
 <script src="data/grammar.js"></script>
 <script src="data/stories.js"></script>
+<script src="data/exam.js"></script>
 <script src="data/kanji.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/store.js"></script>

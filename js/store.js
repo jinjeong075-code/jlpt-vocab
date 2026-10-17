@@ -623,6 +623,63 @@
     return n;
   }
 
+  /* ---------- 시험 대비(대학 수업) ---------- */
+  // 수업 교재로 만든 정리·예상 문제. 책 내용이라 배포본에는 없고 PC 에만 data/exam.js 로 들어 있다.
+  // 폰은 올리기·받기로 받아 저장소에 둔다. 문서 판(v)이 큰 쪽을 쓴다.
+  // 푼 기록(examProg)은 단어 진도와 따로 둔다. 시험이 끝나면 통째로 의미가 없어지는 기록이라 섞지 않는다.
+  var EXAMD_KEY = 'jvocab.examData.v1';
+  var EXAMP_KEY = 'jvocab.examProg.v1';
+  var examData = null;      // { v, info, lessons, questions }
+  var examBuiltinV = 0;     // 내장본의 판. 같은 판이면 저장소에 또 두지 않는다
+  var examProg = {};        // 문제 id -> { n: 푼 횟수, ok: 마지막에 맞혔나 1/0, w: 틀린 횟수, at }
+  SYNCED_KEYS[EXAMP_KEY] = 1;   // 푼 기록이 생기면 '올릴 것 있음' 으로 보인다
+
+  function mergeExamData(inc) {
+    if (!inc || typeof inc !== 'object' || !inc.questions) return 0;
+    if (examData && (Number(examData.v) || 0) >= (Number(inc.v) || 0)) return 0;
+    examData = inc;
+    persistExamData();
+    return 1;
+  }
+
+  function persistExamData() {
+    if (!examData) return;
+    if (examBuiltinV && (Number(examData.v) || 0) <= examBuiltinV) {
+      try { localStorage.removeItem(EXAMD_KEY); } catch (e) {}
+      return;
+    }
+    write(EXAMD_KEY, examData);
+  }
+
+  function examGrade(id, ok) {
+    var p = examProg[id] || { n: 0, ok: 0, w: 0, at: 0 };
+    p.n++; p.ok = ok ? 1 : 0; if (!ok) p.w++; p.at = Date.now();
+    examProg[id] = p;
+    write(EXAMP_KEY, examProg);
+  }
+
+  // 기기마다 푼 기록은 문제마다 나중에 푼 쪽을 따른다. 횟수는 큰 쪽을 남긴다.
+  function mergeExamProg(inc) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (id) {
+      var a = examProg[id], b = inc[id];
+      if (!b || !b.at) return;
+      if (!a || b.at > a.at) {
+        examProg[id] = { n: Math.max(b.n || 0, a ? a.n : 0), ok: b.ok ? 1 : 0,
+                         w: Math.max(b.w || 0, a ? a.w : 0), at: b.at };
+        n++;
+      }
+    });
+    if (n) write(EXAMP_KEY, examProg);
+    return n;
+  }
+
+  function examResetProg(ids) {
+    (ids || Object.keys(examProg)).forEach(function (id) { delete examProg[id]; });
+    write(EXAMP_KEY, examProg);
+  }
+
   /* ---------- 주의할 단어 ---------- */
   // 공부하다가 별을 눌러 모아 두는 목록. 진도와는 상관이 없다.
   // 뗄 때도 뗀 시각을 남긴다. 그래야 한 기기에서 뗀 것이 받기로 다른 기기에서도 떨어진다.
@@ -1312,7 +1369,10 @@
       affixes: affixes,
       marks: marks,
       stories: stories,
-      kanjiSeen: kseen
+      kanjiSeen: kseen,
+      // 수업 시험 대비 자료와 푼 기록. 폰은 이것으로만 자료를 받는다.
+      examData: examData,
+      examProg: examProg
     };
   }
 
@@ -1440,6 +1500,8 @@
     }
     stat.stories = mergeStories(obj.stories);
     stat.kanjiSeen = mergeKanjiSeen(obj.kanjiSeen);
+    stat.examData = mergeExamData(obj.examData);
+    stat.examProg = mergeExamProg(obj.examProg);
 
     return stat;
   }
@@ -1685,6 +1747,18 @@
     if (global.DEFAULT_STORIES) mergeStories(global.DEFAULT_STORIES, true);
     mergeStories(read(STORY_KEY, {}));
     persistStories();      // 저장소에 남아 있던 중복을 덜어낸다(PC 에서 260만 자)
+
+    // 시험 대비 자료: 내장본(PC)과 저장본(폰, 또는 받은 새 판) 중 판이 큰 쪽.
+    examData = null; examBuiltinV = 0;
+    if (global.DEFAULT_EXAM && global.DEFAULT_EXAM.questions) {
+      examData = global.DEFAULT_EXAM;
+      examBuiltinV = Number(examData.v) || 0;
+    }
+    var exStored = read(EXAMD_KEY, null);
+    if (exStored && exStored.questions && (!examData || (Number(exStored.v) || 0) > (Number(examData.v) || 0)))
+      examData = exStored;                 // 켤 때마다 다시 쓰지 않는다(읽기만)
+    if (examBuiltinV) persistExamData();   // PC: 내장본과 같은 판이 저장소에 남아 있으면 비운다
+    examProg = read(EXAMP_KEY, {}) || {};
   }
 
   global.Store = {
@@ -1734,6 +1808,10 @@
     locate: locate,
     getAffixes: getAffixes,
     storyList: storyList,
+    examData: function () { return examData; },
+    examProg: function () { return examProg; },
+    examGrade: examGrade,
+    examResetProg: examResetProg,
     storySets: storySets,
     getStory: getStory,
     isMarked: isMarked,
