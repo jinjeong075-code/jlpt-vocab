@@ -360,7 +360,7 @@
   <div id="midHead"></div>
   <button class="resume-btn" id="btnMidResume" hidden>
     <span class="rs-main">
-      <span class="rs-label">모의고사 이어서</span>
+      <span class="rs-label" id="midResumeLabel">이어서 풀기</span>
       <span class="rs-info" id="midResumeInfo"></span>
     </span>
     <span class="rs-go">▶</span>
@@ -389,12 +389,79 @@
   <div id="midWords"></div>
 </section>
 
+<!-- 문제 묶음 화면. 단어의 Day 화면과 같은 꼴: 통계 → 풀기 버튼 → 목록(+넘기며 보기). -->
+<section id="viewMidSet" class="view">
+  <div class="day-head">
+    <h1 id="msTitle"></h1>
+    <p class="sub" id="msSub"></p>
+  </div>
+  <div class="stat-grid" id="msStats"></div>
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnMsAll">
+      <span class="bb-title">전체 풀기</span><span class="bb-sub" id="msAllCount"></span>
+    </button>
+    <button class="big-btn" id="btnMsWrong">
+      <span class="bb-title">틀린 것만</span><span class="bb-sub" id="msWrongCount"></span>
+    </button>
+  </div>
+  <div class="section-head">
+    <h2>문제 목록</h2>
+    <div class="head-actions">
+      <button class="mini-btn go" id="btnMsBrowse">넘기며 보기</button>
+    </div>
+  </div>
+  <div id="msList" class="word-list"></div>
+</section>
+
+<!-- 문제 풀기. 단어 시험과 같다: 정답 보기 → O/X, 틀린 것은 이 판에서 다시 나온다. -->
 <section id="viewMidQuiz" class="view">
   <div class="progress-wrap">
-    <div class="progress-bar"><i id="midFill"></i></div>
-    <div class="progress-text"><span id="midCount">0 / 0</span><span id="midLabel"></span><span id="midTimer"></span></div>
+    <div class="progress-bar"><div id="midFill"></div></div>
+    <div class="progress-text"><span id="midCount">0 / 0</span><span id="midLabel"></span><span id="midTimer"></span>
+      <button type="button" class="mini-btn" id="btnMidStop">여기까지</button>
+    </div>
   </div>
+  <!-- 이미 푼 문제를 되돌아보는 자리(←). 읽기만 한다. -->
+  <div id="midPeek" hidden></div>
   <div id="midStage"></div>
+</section>
+
+<section id="viewMidResult" class="view">
+  <div class="hero">
+    <h1 id="mrTitle">풀기 완료</h1>
+    <p class="res-meta" id="mrMeta" hidden></p>
+  </div>
+  <div class="stat-grid" id="mrStats"></div>
+  <div class="mid-kinds" id="mrKinds"></div>
+  <div class="res-tabs" id="mrTabs">
+    <button class="res-tab sel" id="mrTabWrong">틀린 문제</button>
+    <button class="res-tab" id="mrTabAll">전체</button>
+  </div>
+  <div class="section-head">
+    <h2 id="mrListTitle">틀린 문제</h2>
+    <div class="head-actions">
+      <button class="mini-btn go" id="btnMrBrowse">넘기며 보기</button>
+    </div>
+  </div>
+  <p class="empty-note" id="mrEmpty" hidden></p>
+  <div id="mrList" class="word-list"></div>
+  <div class="row-btns">
+    <button class="big-btn primary" id="btnMrRetry"><span class="bb-title">틀린 것 다시</span><span class="bb-sub" id="mrRetryCount"></span></button>
+    <button class="big-btn" id="btnMrBack"><span class="bb-title">시험 대비로</span><span class="bb-sub">&nbsp;</span></button>
+  </div>
+</section>
+
+<!-- 넘기며 보기. 채점 없이 정답·해설을 펼친 채 한 문제씩 넘긴다. -->
+<section id="viewMidBrowse" class="view">
+  <div class="progress-wrap">
+    <div class="progress-bar"><div id="mbFill"></div></div>
+    <div class="progress-text"><span id="mbCount">0 / 0</span><span id="mbLabel"></span></div>
+  </div>
+  <div id="mbStage"></div>
+  <div class="br-nav">
+    <button class="br-btn" id="mbPrev">이전</button>
+    <button class="br-btn primary" id="mbNext">다음</button>
+  </div>
 </section>
 
 <section id="viewKanji" class="view">
@@ -755,6 +822,19 @@
      화면(.view) 안에 두면 안 된다. 화면 전환 애니메이션의 transform 이 조상에 걸리는 순간
      position:fixed 가 그 조상 기준으로 바뀌어 바가 카드 밑으로 따라 내려온다.
      ＋ 는 '확실히 아는 단어'. 판단이 빨리 날 때 정답을 볼 것도 없이 넘긴다. -->
+<!-- 시험 대비 문제 풀기의 아래 바. 단어 시험의 바와 같은 모양이다. -->
+<div id="midBar" class="study-bar" hidden>
+  <button class="reveal-btn" id="btnMidReveal">정답 보기 <kbd>Enter</kbd></button>
+  <button class="next-btn" id="btnMidNext" hidden>다음 <kbd>Enter</kbd></button>
+  <div id="midOX" class="ox" hidden>
+    <button class="ox-btn o wide" id="btnMidO">O<kbd>Enter</kbd></button>
+    <button class="ox-btn x wide" id="btnMidX">X<kbd>0</kbd></button>
+  </div>
+  <!-- 모의고사는 끝에 한꺼번에 채점하므로 앞뒤로 오가며 고친다. -->
+  <button class="known-plus" id="btnMidPrev" hidden>이전</button>
+  <button class="reveal-btn" id="btnMidFwd" hidden>다음 <kbd>→</kbd></button>
+</div>
+
 <div id="studyBar" class="study-bar" hidden>
   <button class="known-plus" id="btnKnown" title="아는 단어 · 장기기억으로 (키보드 +)">아는 단어<kbd>+</kbd></button>
   <button class="reveal-btn" id="btnReveal">정답 보기 <kbd>Enter</kbd></button>

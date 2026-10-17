@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v110';
+  var BUILD = 'v111';
 
   /* ---------------- 화면 ---------------- */
 
@@ -44,7 +44,7 @@
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
     stories: 'home', story: 'stories', kanji: 'pick',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram',
-    mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid'
+    mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid', midSet: 'mid', midResult: 'mid', midBrowse: 'mid'
   };
 
   function handleBack() {
@@ -59,6 +59,11 @@
       else if (view === 'study' && peek !== null) peekClose();
       else if (view === 'gramStudy' && gPeek !== null) gPeekClose();
       else if (view === 'browse') goView(browseFrom);
+      // 시험 대비: 돌아보기 중이면 풀던 문제로, 아니면 들어온 자리로 돌아간다.
+      else if (view === 'midQuiz' && mid && mid.peek != null) midPeekClose();
+      else if (view === 'midQuiz') goView(mid ? mid.from : 'mid');
+      else if (view === 'midResult') goView(midRes ? midRes.from : 'mid');
+      else if (view === 'midBrowse') goView(midBrowse ? midBrowse.from : 'mid');
       // 목록에서 좁혀 들어왔으면 화면을 나가기 전에 한 단계씩 되돌린다.
       else if (view === 'day' && setStack.length) applySet(setStack.pop());
       else if (view === 'day' && setReturn.length) backFromSet();
@@ -89,6 +94,8 @@
     else if (v === 'exams') { renderExams(); show('exams'); }
     else if (v === 'stories') { renderStories(); show('stories'); }
     else if (v === 'mid')  { renderMid(); show('mid'); }
+    else if (v === 'midSet') { renderMidSet(); show('midSet'); }
+    else if (v === 'midResult') { renderMidResList(); show('midResult'); }
     else if (v === 'kanji') { examsOnlyKanji = false; renderKanjiList(); renderKjResume(); show('kanji'); renderKjSelBar(); }
     else show(v);
   }
@@ -181,7 +188,8 @@
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
     gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
     stories: '문단 읽기', story: '문단 읽기', kanji: '한자',
-    mid: '시험 대비', midNote: '시험 대비', midWords: '시험 대비', midQuiz: '시험 대비'
+    mid: '시험 대비', midNote: '시험 대비', midWords: '시험 대비', midQuiz: '시험 대비',
+    midSet: '시험 대비', midResult: '시험 대비', midBrowse: '시험 대비'
   };
 
   function show(name) {
@@ -192,6 +200,7 @@
     $('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
     // 아래 고정 버튼은 학습 화면에서만 나온다. 화면 밖에 있으므로 여기서 같이 여닫는다.
     $('studyBar').hidden = (name !== 'study');
+    $('midBar').hidden = (name !== 'midQuiz');
     $('btnHome').hidden = (name === 'pick');
     $('btnTimeTop').hidden = (name === 'study' || name === 'gramStudy' || name === 'time');
     // 고른 것 바는 Day 를 고르는 홈과 한자를 고르는 한자 화면에서만 보인다.
@@ -3670,7 +3679,12 @@
   // 대학 일본어 수업 중간고사 대비. 자료는 Store.examData() 한 곳에서만 온다
   // (PC 는 data/exam.js 내장본, 폰은 받기로 받은 것). 이 파일에는 책 내용을 두지 않는다.
   // 푼 기록은 단어 진도와 따로 Store.examProg 에 쌓는다.
-  // 과별·유형별 연습은 고르는 즉시 채점하고, 모의고사는 시험처럼 끝에 한꺼번에 채점한다.
+  //
+  // 화면과 흐름은 단어 시험을 그대로 따른다.
+  //   묶음 화면(Day 화면 꼴) → 풀기: 정답 보기 → O/X, 틀린 것은 이 판에서 섞어 다시 → 결과
+  //   넘기며 보기: 정답·해설을 펼친 채 이전/다음.
+  // 객관식이라 보기를 눌러 고를 수도 있다. 고르면 그 자리에서 채점되고 '다음' 만 남는다.
+  // 모의고사만 시험처럼 끝에 한꺼번에 채점한다.
 
   var MID_KIND = {
     content: 'A 독해 · 내용', grammar: 'A 독해 · 문법', reading: 'A 단어 · 읽기',
@@ -3681,14 +3695,18 @@
   // 모의고사 25문제를 이만큼씩 뽑는다. 범위가 네 과 + 2과 추가자료라 고르게 나눴다.
   var MID_QUOTA = { L2: 5, EX: 2, L6: 6, L9: 6, L10: 6 };
 
-  var mid = null;        // 지금 푸는 판 { mode, list, idx, picks, label, start, deadline, done }
+  var mid = null;        // 지금 푸는 판
   var midTick = null;    // 모의고사 시계
+  var midSetCur = null;  // 보고 있는 문제 묶음 { key, title, sub, list }
+  var midBrowse = null;  // 넘기며 보기 { list, index, label, from }
+  var midRes = null;     // 결과 화면 { all, wrong, view, label, from }
 
   function midData() { return Store.examData(); }
   function midQs() { var d = midData(); return (d && d.questions) || []; }
   function midSetOf(q) { return q.set || ('L' + q.lesson); }
   function midSetName(set) { return set === 'EX' ? '2과 추가자료' : String(set).replace('L', '') + '과'; }
   function midIsWord(q) { return /^W:/.test(q.id); }   // 단어 목록으로 그 자리에서 만든 문제(기록 안 함)
+  function midNo(q) { var m = /-(\d+)$/.exec(q.id); return m ? Number(m[1]) + '번' : '단어'; }
 
   function midLesson(set) {
     var d = midData();
@@ -3706,7 +3724,7 @@
     return n > 0 ? 'D-' + n : (n === 0 ? 'D-DAY' : '끝남');
   }
 
-  // 마지막으로 푼 결과 기준. 다시 풀어 맞히면 틀린 문제에서 빠진다.
+  // 마지막으로 푼 결과 기준(한 판에서 처음 낸 답). 다음에 한 번에 맞히면 틀린 문제에서 빠진다.
   function midStat(list) {
     var p = Store.examProg(), s = { n: list.length, done: 0, ok: 0, bad: 0 };
     list.forEach(function (q) {
@@ -3738,6 +3756,14 @@
     });
   }
 
+  // 목록 한 줄에 보일 글. 지시문이 「…選びなさい」 같은 틀이면 지문 쪽이 그 문제를 더 잘 알려 준다.
+  function midOneLine(q) {
+    var s = (q.passage && /選びなさい|どれですか|ものを/.test(q.q)) ? q.passage : q.q;
+    return String(s || '').replace(/\n/g, ' ');
+  }
+
+  /* ----- 시험 대비 첫 화면 ----- */
+
   function renderMid() {
     var d = midData();
     $('btnMidMock').disabled = !d;
@@ -3760,13 +3786,16 @@
         '<div class="mid-h3">풀어 본 문제 ' + s.done + ' / ' + s.n + ' · 맞힘 ' + s.ok + ' · 틀림 ' + s.bad + '</div>' +
       '</div>';
 
-    var live = mid && mid.mode === 'mock' && !mid.done;
+    // 풀다 나온 판이 있으면 이어서 풀 수 있게.
+    var live = mid && !mid.finished;
     $('btnMidResume').hidden = !live;
     if (live) {
-      $('midResumeInfo').textContent =
-        mid.picks.filter(function (x) { return x != null; }).length + ' / ' + mid.list.length + ' 답함';
+      $('midResumeLabel').textContent = mid.mode === 'mock' ? '모의고사 이어서' : '이어서 풀기';
+      $('midResumeInfo').textContent = mid.label + ' · ' + (mid.mode === 'mock'
+        ? mid.picks.filter(function (x) { return x != null; }).length + ' / ' + mid.queue.length + ' 답함'
+        : mid.done + ' / ' + mid.total);
     }
-    $('midMockSub').textContent = (info.count || 25) + '문제 · ' + (info.minutes || 60) + '분 · 과별로 고르게';
+    $('midMockSub').textContent = (info.count || 25) + '문제 · ' + (info.minutes || 60) + '분 · 끝에 채점';
     var wrong = midWrongList();
     $('midWrongSub').textContent = wrong.length ? wrong.length + '문제' : '아직 없음';
     $('btnMidWrong').disabled = !wrong.length;
@@ -3789,7 +3818,7 @@
         '<div class="mid-ls-btns">' +
           '<button class="chip" data-act="note" data-set="' + L.set + '">정리</button>' +
           (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
-          (qs.length ? '<button class="chip" data-act="quiz" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
+          (qs.length ? '<button class="chip" data-act="set" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
         '</div></div>';
     }).join('');
   }
@@ -3836,7 +3865,7 @@
       });
     }
     var n = midQs().filter(function (q) { return midSetOf(q) === set; }).length;
-    if (n) h += '<button class="next-btn mid-go" data-act="quiz" data-set="' + set + '">이 과 문제 ' + n + '개 풀기</button>';
+    if (n) h += '<button class="next-btn mid-go" data-act="set" data-set="' + set + '">이 과 문제 ' + n + '개</button>';
     $('midNote').innerHTML = h;
     show('midNote');
   }
@@ -3848,7 +3877,7 @@
       '<div class="chips">' +
         '<button class="chip" data-hide="r">읽기 가리기</button>' +
         '<button class="chip" data-hide="m">뜻 가리기</button>' +
-        '<button class="chip ta-go" data-act="wquiz" data-set="' + set + '">읽기 퀴즈</button>' +
+        '<button class="chip ta-go" data-act="wquiz" data-set="' + set + '">읽기 시험</button>' +
       '</div>' +
       '<table class="mid-wt" id="midWT"><tbody>' +
       L.vocab.map(function (v) {
@@ -3879,8 +3908,113 @@
         opts: opts, ans: opts.indexOf(v.reading), why: v.word + '（' + v.reading + '）= ' + v.meaning
       };
     });
-    midStart('practice', list, midSetName(set) + ' 단어 읽기');
+    midStart('practice', list, midSetName(set) + ' 단어 읽기', 'midWords');
   }
+
+  /* ----- 문제 묶음 화면 (단어의 Day 화면과 같은 꼴) ----- */
+
+  function openMidSet(key) {
+    var all = midQs(), list, title, sub;
+    if (key === 'wrong') {
+      list = midWrongList(); title = '틀린 문제'; sub = '마지막으로 풀 때 처음에 틀린 문제';
+    } else if (key.indexOf('kind:') === 0) {
+      var k = key.slice(5);
+      list = all.filter(function (q) { return q.kind === k; }); title = MID_KIND[k]; sub = '네 과 + 2과 추가자료';
+    } else {
+      var L = midLesson(key);
+      list = all.filter(function (q) { return midSetOf(q) === key; });
+      title = midSetName(key) + (L && key !== 'EX' ? ' ' + L.jp : '');
+      sub = L ? L.ko : '';
+    }
+    midSetCur = { key: key, title: title, sub: sub, list: list };
+    renderMidSet();
+    show('midSet');
+  }
+
+  function midStatCells(cells) {
+    return cells.map(function (c) {
+      return '<div class="stat ' + c[0] + '"><span class="n">' + c[1] + '</span><span class="l">' + c[2] + '</span></div>';
+    }).join('');
+  }
+
+  function renderMidSet() {
+    var c = midSetCur;
+    if (!c) return;
+    if (c.key === 'wrong') c.list = midWrongList();   // 풀고 오면 줄어든다
+    var p = Store.examProg(), s = midStat(c.list);
+    var wrong = c.list.filter(function (q) { return p[q.id] && !p[q.id].ok; });
+    $('msTitle').textContent = c.title;
+    $('msSub').textContent = c.sub || '';
+    $('msStats').innerHTML = midStatCells([['total', s.n, '전체'], ['', s.n - s.done, '안 푼 문제'],
+                                           ['unknown', s.bad, '틀림'], ['long', s.ok, '맞힘']]);
+    $('msAllCount').textContent = c.list.length + '문제';
+    $('btnMsAll').disabled = !c.list.length;
+    $('msWrongCount').textContent = wrong.length + '문제';
+    $('btnMsWrong').disabled = !wrong.length;
+    $('btnMsBrowse').disabled = !c.list.length;
+    $('msList').innerHTML = c.list.map(function (q) {
+      var r = p[q.id];
+      return midItemHTML(q, r ? (r.ok ? 'ok' : 'bad') : 'new', r ? (r.ok ? '맞힘' : '틀림') : '', null);
+    }).join('') || '<p class="empty-note">문제가 없습니다</p>';
+  }
+
+  // 목록 한 줄. 누르면 정답과 해설이 펼쳐진다(단어 목록과 같다).
+  function midItemHTML(q, state, side, pick) {
+    var dot = state === 'ok' ? 'dot-long' : (state === 'bad' ? 'dot-unknown' : 'dot-new');
+    return '<div class="wl-item has-detail mid-li" role="button" tabindex="0">' +
+      '<div class="wl-head"><span class="wl-dot ' + dot + '"></span>' +
+        '<div class="wl-main"><div class="mid-li-q" lang="ja">' + midText(midOneLine(q)) + '</div>' +
+          '<div class="wl-meaning">' + midSetName(midSetOf(q)) + ' ' + midNo(q) + ' · ' + (MID_KIND[q.kind] || '') + '</div></div>' +
+        (side ? '<span class="wl-side">' + esc(side) + '</span>' : '') +
+        '<span class="wl-caret">▾</span></div>' +
+      '<div class="wl-detail" hidden>' + midBodyHTML(q, { reveal: true, pick: pick }) + '</div>' +
+    '</div>';
+  }
+
+  /* ----- 문제 카드 (풀기·돌아보기·넘기며 보기·목록이 같이 쓴다) ----- */
+
+  // o.tap: 보기를 눌러 고를 수 있다 / o.reveal: 정답·해설을 편다 / o.pick: 고른 보기
+  function midBodyHTML(q, o) {
+    o = o || {};
+    var h = '';
+    if (q.passage) h += '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>';
+    h += '<p class="mid-qt" lang="ja">' + midText(q.q) + '</p>';
+    h += '<div class="gopts mid-opts">';
+    q.opts.forEach(function (op, i) {
+      var cls = '';
+      if (o.reveal) cls = (i === q.ans) ? ' right' : (i === o.pick ? ' wrong' : '');
+      else if (o.pick === i) cls = ' sel';
+      var tag = o.tap ? 'button' : 'div';
+      h += '<' + tag + ' class="gopt mid-opt' + cls + '" data-i="' + i + '">' +
+        '<span class="mid-on">' + MID_NUM[i] + '</span><span class="mid-ot">' + midText(op) + '</span></' + tag + '>';
+    });
+    h += '</div>';
+    if (o.reveal) {
+      h += '<div class="answer-box mid-ans">' +
+        '<div class="ans-row"><span class="ans-label">정답</span>' +
+          '<span class="ans-value" lang="ja">' + MID_NUM[q.ans] + ' ' + midText(q.opts[q.ans]) + '</span></div>' +
+        (o.pick != null && o.pick !== q.ans
+          ? '<div class="ans-row"><span class="ans-label">내 답</span><span class="ans-value bad" lang="ja">' +
+              MID_NUM[o.pick] + ' ' + midText(q.opts[o.pick]) + '</span></div>' : '') +
+        (q.q_ko ? '<div class="ans-row"><span class="ans-label">문제 뜻</span><span class="ans-value ko">' + esc(q.q_ko) + '</span></div>' : '') +
+      '</div>';
+      if (q.why || q.src) {
+        h += '<div class="detail-box mid-detail">' +
+          (q.why ? '<p class="mid-why">' + midText(q.why) + '</p>' : '') +
+          (q.src ? '<p class="card-no">' + esc(q.src) + '</p>' : '') + '</div>';
+      }
+    }
+    return h;
+  }
+
+  function midCardHTML(q, o) {
+    return '<div class="card mid-q">' +
+      '<div class="card-meta"><span class="badge">' + (MID_KIND[q.kind] || '') + '</span>' +
+        '<span class="card-no">' + midSetName(midSetOf(q)) + ' · ' + midNo(q) + '</span></div>' +
+      midBodyHTML(q, o) + '</div>';
+  }
+
+  /* ----- 풀기 ----- */
 
   function midMock() {
     var all = midQs(), p = Store.examProg(), out = [];
@@ -3898,17 +4032,20 @@
       while (pick.length < n && rest.length) pick.push(rest.shift());
       out = out.concat(pick);
     });
-    midStart('mock', out, '모의고사');
+    midStart('mock', out, '모의고사', 'mid');
   }
 
-  function midStart(mode, list, label) {
+  function midStart(mode, list, label, from) {
     if (!list.length) return;
     stopMidTick();
     var d = midData() || {}, mins = (d.info && d.info.minutes) || 60;
     mid = {
-      mode: mode, list: list, idx: 0, label: label, done: false, showKo: false,
-      picks: list.map(function () { return null; }),
-      start: Date.now(), deadline: mode === 'mock' ? Date.now() + mins * 60000 : 0
+      mode: mode, queue: list.slice(), idx: 0, retry: [], lap: 1, total: list.length, done: 0,
+      label: label, from: from || 'mid', finished: false,
+      state: 'ask', pick: null,       // 지금 카드: ask → picked(보기를 고름) / self(정답 보기로 엶)
+      res: {}, order: [],             // 이 판의 결과: 처음 낸 답 기준
+      picks: mode === 'mock' ? list.map(function () { return null; }) : null,
+      start: Date.now(), deadline: mode === 'mock' ? Date.now() + mins * 60000 : 0, peek: null
     };
     $('midTimer').textContent = '';
     show('midQuiz');
@@ -3919,12 +4056,12 @@
   function startMidTick() {
     stopMidTick();
     var tick = function () {
-      if (!mid || mid.mode !== 'mock' || mid.done) { stopMidTick(); return; }
+      if (!mid || mid.mode !== 'mock' || mid.finished) { stopMidTick(); return; }
       var left = mid.deadline - Date.now();
       if (left <= 0) {
         stopMidTick();
         // 다른 화면에 가 있으면 돌아왔을 때 마감한다.
-        if (view === 'midQuiz') { toast('시간이 끝나 제출했습니다'); finishMid(); }
+        if (view === 'midQuiz') { toast('시간이 끝나 제출했습니다'); midFinish(); }
         return;
       }
       var mm = Math.floor(left / 60000), ss = Math.floor(left % 60000 / 1000);
@@ -3938,202 +4075,329 @@
 
   function renderMidQ() {
     var m = mid;
-    if (!m) return;
-    if (m.done) { renderMidResult(); return; }
-    var q = m.list[m.idx], pick = m.picks[m.idx];
-    var graded = m.mode === 'practice' && pick != null;
-    $('midCount').textContent = (m.idx + 1) + ' / ' + m.list.length;
-    $('midFill').style.width = (m.idx / m.list.length * 100) + '%';
-    $('midLabel').textContent = m.label;
-
-    var h = '<div class="card mid-q">' +
-      '<div class="card-meta"><span class="badge">' + (MID_KIND[q.kind] || '') + '</span>' +
-        '<span class="card-no">' + midSetName(midSetOf(q)) + (graded && q.src ? ' · ' + esc(q.src) : '') + '</span></div>';
-    if (q.passage) h += '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>';
-    h += '<p class="mid-qt" lang="ja">' + midText(q.q) + '</p>';
-    if (q.q_ko) {
-      h += (m.showKo || graded) ? '<p class="mid-qko">' + esc(q.q_ko) + '</p>'
-                                : '<button class="mid-kobtn" id="midKo">뜻 보기</button>';
-    }
-    h += '<div class="gopts">';
-    q.opts.forEach(function (o, i) {
-      var cls = '';
-      if (graded) cls = (i === q.ans) ? ' right' : (i === pick ? ' wrong' : '');
-      else if (pick === i) cls = ' sel';
-      h += '<button class="gopt mid-opt' + cls + '" data-i="' + i + '"><span class="mid-on">' + MID_NUM[i] + '</span>' +
-        '<span class="mid-ot">' + midText(o) + '</span></button>';
-    });
-    h += '</div>';
-
-    if (graded) {
-      var ok = pick === q.ans;
-      h += '<div class="gjudge ' + (ok ? 'right' : 'wrong') + '">' + (ok ? '정답' : '틀림 · 정답 ' + MID_NUM[q.ans]) + '</div>';
-      if (q.why) h += '<p class="mid-why">' + midText(q.why) + '</p>';
-      h += '<button class="next-btn" id="midNext">' + (m.idx === m.list.length - 1 ? '결과 보기' : '다음') + ' <kbd>Enter</kbd></button>';
-    }
-    if (m.mode === 'mock') {
-      var answered = m.picks.filter(function (x) { return x != null; }).length;
-      var last = m.idx === m.list.length - 1;
-      h += '<div class="br-nav">' +
-        '<button class="br-btn" id="midPrev"' + (m.idx === 0 ? ' disabled' : '') + '>이전</button>' +
-        (last ? '<button class="br-btn primary" id="midSubmit">제출 · ' + answered + '/' + m.list.length + ' 답함</button>'
-              : '<button class="br-btn primary" id="midNext">다음</button>') +
-        '</div>';
-      if (!last) h += '<button class="known-btn" id="midSubmit">지금 제출하고 채점 · ' + answered + '/' + m.list.length + ' 답함</button>';
-    }
-    h += '</div>';
-    $('midStage').innerHTML = h;
-
-    $$('#midStage .mid-opt').forEach(function (b) {
+    if (!m || m.finished) return;
+    if (m.peek != null) midPeekClose();
+    var mock = m.mode === 'mock';
+    var q = m.queue[m.idx];
+    $('midCount').textContent = mock ? (m.idx + 1) + ' / ' + m.queue.length : m.done + ' / ' + m.total;
+    $('midFill').style.width = ((mock ? m.idx / m.queue.length : m.done / m.total) * 100) + '%';
+    $('midLabel').textContent = m.label + (m.lap > 1 ? ' · ' + m.lap + '바퀴째' : '');
+    $('btnMidStop').hidden = mock;
+    var o = mock ? { tap: true, pick: m.picks[m.idx] }
+                 : { tap: m.state === 'ask', reveal: m.state !== 'ask', pick: m.pick };
+    $('midStage').innerHTML = midCardHTML(q, o);
+    $$('#midStage button.mid-opt').forEach(function (b) {
       b.addEventListener('click', function () { midPick(Number(b.dataset.i)); });
     });
-    if ($('midKo')) $('midKo').addEventListener('click', function () { mid.showKo = true; renderMidQ(); });
-    if ($('midNext')) $('midNext').addEventListener('click', midNext);
-    if ($('midPrev')) $('midPrev').addEventListener('click', function () { midGo(-1); });
-    if ($('midSubmit')) $('midSubmit').addEventListener('click', midSubmit);
+    midBarState();
+    window.scrollTo(0, 0);
+  }
+
+  // 아래 바: 단어 시험과 같다. 정답 보기 → O/X. 보기를 골랐으면 채점이 끝났으니 '다음' 만.
+  function midBarState() {
+    var m = mid, mock = m.mode === 'mock';
+    $('btnMidReveal').hidden = mock || m.state !== 'ask';
+    $('midOX').hidden = mock || m.state !== 'self';
+    $('btnMidNext').hidden = mock || m.state !== 'picked';
+    $('btnMidNext').disabled = false;
+    $('btnMidPrev').hidden = !mock;
+    $('btnMidFwd').hidden = !mock;
+    if (mock) {
+      $('btnMidPrev').disabled = m.idx === 0;
+      var answered = m.picks.filter(function (x) { return x != null; }).length;
+      $('btnMidFwd').innerHTML = (m.idx === m.queue.length - 1)
+        ? '제출 · ' + answered + '/' + m.queue.length : '다음 <kbd>→</kbd>';
+    }
   }
 
   function midPick(i) {
     var m = mid;
-    if (!m || m.done) return;
-    var q = m.list[m.idx];
-    if (m.mode === 'practice') {
-      if (m.picks[m.idx] != null) return;          // 한 번 고르면 채점 끝. 바꿔서 맞힌 척하지 않는다
-      m.picks[m.idx] = i;
+    if (!m || m.finished || m.peek != null) return;
+    if (m.mode === 'mock') { m.picks[m.idx] = i; renderMidQ(); return; }   // 제출 전까지 바꿀 수 있다
+    if (m.state !== 'ask') return;
+    m.pick = i; m.state = 'picked';
+    renderMidQ();
+  }
+
+  function midReveal() {
+    var m = mid;
+    if (!m || m.finished || m.mode === 'mock' || m.state !== 'ask') return;
+    m.state = 'self';
+    renderMidQ();
+  }
+
+  // O/X 를 누르거나(정답 보기로 연 경우), 고른 보기로 채점된 뒤 '다음' 을 누를 때.
+  function midAnswer(ok) {
+    var m = mid;
+    if (!m || m.finished || m.mode === 'mock' || m.state === 'ask') return;
+    var q = m.queue[m.idx];
+    var r = m.res[q.id];
+    if (!r) {
+      // 기록은 이 판에서 처음 낸 답으로만 남긴다. 다시 나와서 맞힌 것은 '틀린 문제' 에서 빼지 않는다.
+      r = m.res[q.id] = { q: q, tries: 0, firstOk: ok, pick: m.pick };
+      m.order.push(q.id);
       if (!midIsWord(q)) {
-        Store.examGrade(q.id, i === q.ans);
+        Store.examGrade(q.id, ok);
         if (global_Sync()) Sync.touch();
       }
-    } else {
-      m.picks[m.idx] = i;                            // 모의고사는 제출 전까지 바꿀 수 있다
     }
+    r.tries++;
+    r.lastOk = ok;
+    if (ok) m.done++; else m.retry.push(q);
+    m.idx++; m.state = 'ask'; m.pick = null;
+    // 틀린 문제는 이 판을 못 떠난다. 한 바퀴를 다 돌면 섞어서 다시 낸다.
+    if (m.idx >= m.queue.length && m.retry.length) {
+      m.queue = shuffle(m.retry); m.retry = []; m.idx = 0; m.lap++;
+      toast('남은 ' + m.queue.length + '문제를 섞어서 다시 냅니다');
+    }
+    if (m.idx >= m.queue.length) { midFinish(); return; }
     renderMidQ();
+  }
+
+  function midNextPicked() {
+    var m = mid;
+    if (!m || m.state !== 'picked') return;
+    midAnswer(m.pick === m.queue[m.idx].ans);
   }
 
   function midGo(d) {
     var m = mid;
-    if (!m || m.done) return;
+    if (!m || m.finished || m.mode !== 'mock') return;
     var n = m.idx + d;
-    if (n < 0 || n >= m.list.length) return;
-    m.idx = n; m.showKo = false;
+    if (n < 0 || n >= m.queue.length) return;
+    m.idx = n;
     renderMidQ();
   }
 
-  function midNext() {
+  function midFwd() {
     var m = mid;
-    if (!m || m.done) return;
-    if (m.mode === 'practice' && m.picks[m.idx] == null) return;
-    if (m.idx < m.list.length - 1) { midGo(1); return; }
-    if (m.mode === 'practice') finishMid();
-  }
-
-  function midSubmit() {
-    var m = mid;
-    if (!m || m.done) return;
+    if (!m || m.mode !== 'mock') return;
+    if (m.idx < m.queue.length - 1) { midGo(1); return; }
     var left = m.picks.filter(function (x) { return x == null; }).length;
     if (left && !confirm(left + '문제를 안 풀었습니다. 그래도 제출할까요?')) return;
-    finishMid();
+    midFinish();
   }
 
-  function finishMid() {
+  // 여기까지: 푼 것만 결과로. 남은 문제는 묶음에 그대로 남는다.
+  function midStop() {
     var m = mid;
-    if (!m || m.done) return;
+    if (!m || m.finished) return;
+    if (!m.order.length) { m.finished = true; stopMidTick(); goView(m.from); return; }
+    midFinish(true);
+  }
+
+  function midFinish(stopped) {
+    var m = mid;
+    if (!m || m.finished) return;
     stopMidTick();
-    m.done = true;
+    m.finished = true;
     m.end = Date.now();
+    var items;
     if (m.mode === 'mock') {
       // 안 푼 문제도 시험에서는 틀린 것이다. 틀린 문제로 모아 다시 풀게 한다.
-      m.list.forEach(function (q, i) { Store.examGrade(q.id, m.picks[i] === q.ans); });
+      items = m.queue.map(function (q, i) {
+        var ok = m.picks[i] === q.ans;
+        Store.examGrade(q.id, ok);
+        return { q: q, tries: 1, firstOk: ok, pick: m.picks[i] };
+      });
       if (global_Sync()) Sync.touch();
+    } else {
+      items = m.order.map(function (id) { return m.res[id]; });
     }
-    renderMidQ();
+    openMidResult(items, m, stopped);
   }
 
-  function renderMidResult() {
-    var m = mid, n = m.list.length, right = 0, byKind = {};
-    m.list.forEach(function (q, i) {
-      var ok = m.picks[i] === q.ans;
-      if (ok) right++;
-      var k = byKind[q.kind] || (byKind[q.kind] = { n: 0, ok: 0 });
-      k.n++; if (ok) k.ok++;
+  /* ----- 돌아보기 (←): 이 판에서 이미 푼 문제를 읽기만 한다 ----- */
+
+  function midPeekOpen(i) {
+    var m = mid;
+    if (!m || m.finished || m.mode === 'mock' || !m.order.length) return;
+    if (i < 0 || i >= m.order.length) return;
+    m.peek = i;
+    var r = m.res[m.order[i]];
+    $('midPeek').innerHTML =
+      '<div class="mid-peek-bar">' +
+        '<button class="mini-btn" id="mpPrev"' + (i === 0 ? ' disabled' : '') + '>←</button>' +
+        '<span>돌아보기 ' + (i + 1) + ' / ' + m.order.length + '</span>' +
+        '<button class="mini-btn" id="mpNext">→</button>' +
+        '<button class="mini-btn go" id="mpClose">풀던 문제로</button>' +
+      '</div>' + midCardHTML(r.q, { reveal: true, pick: r.pick });
+    $('midPeek').hidden = false;
+    $('midStage').hidden = true;
+    $('midBar').hidden = true;
+    $('mpPrev').addEventListener('click', function () { midPeekOpen(m.peek - 1); });
+    $('mpNext').addEventListener('click', function () {
+      if (m.peek >= m.order.length - 1) midPeekClose(); else midPeekOpen(m.peek + 1);
     });
-    $('midCount').textContent = n + ' / ' + n;
-    $('midFill').style.width = '100%';
-    $('midTimer').textContent = '';
+    $('mpClose').addEventListener('click', midPeekClose);
+    window.scrollTo(0, 0);
+  }
+
+  function midPeekClose() {
+    if (!mid) return;
+    mid.peek = null;
+    $('midPeek').hidden = true;
+    $('midStage').hidden = false;
+    $('midBar').hidden = (view !== 'midQuiz');
+  }
+
+  /* ----- 결과 (단어 시험 결과와 같은 꼴) ----- */
+
+  function openMidResult(items, m, stopped) {
+    var n = items.length, first = items.filter(function (x) { return x.firstOk; }).length;
+    var mock = m.mode === 'mock';
     var mins = Math.max(1, Math.round(((m.end || Date.now()) - m.start) / 60000));
-    var h = '<div class="gdone"><div class="gdone-em">' + right + ' / ' + n + '</div>' +
-      '<div class="gdone-t">' + Math.round(right / n * 100) + '점</div>' +
-      '<div class="gdone-s">' + esc(m.label) + ' · ' + mins + '분</div></div>';
-    h += '<div class="mid-kinds">' + MID_KIND_ORDER.filter(function (k) { return byKind[k]; }).map(function (k) {
+    if (mock) {
+      var none = items.filter(function (x) { return x.pick == null; }).length;
+      $('mrTitle').textContent = first + ' / ' + n + ' · ' + Math.round(first / n * 100) + '점';
+      $('mrStats').innerHTML = midStatCells([['total', n, '전체'], ['long', first, '맞힘'],
+                                             ['unknown', n - first - none, '틀림'], ['', none, '안 품']]);
+    } else {
+      var later = items.filter(function (x) { return !x.firstOk && x.lastOk; }).length;
+      $('mrTitle').textContent = n + '문제 중 ' + first + '개를 한 번에';
+      $('mrStats').innerHTML = midStatCells([['total', n, '푼 문제'], ['long', first, '한 번에'],
+                                             ['short', later, '다시 풀어 맞힘'], ['unknown', n - first - later, '못 맞힘']]);
+    }
+    var left = (!mock && stopped) ? (m.queue.length - m.idx) + m.retry.length : 0;
+    $('mrMeta').textContent = m.label + ' · ' + mins + '분' + (left ? ' · 여기까지 하고 멈춤(남은 ' + left + '문제)' : '');
+    $('mrMeta').hidden = false;
+
+    var byKind = {};
+    items.forEach(function (x) {
+      var k = byKind[x.q.kind] || (byKind[x.q.kind] = { n: 0, ok: 0 });
+      k.n++; if (x.firstOk) k.ok++;
+    });
+    $('mrKinds').innerHTML = MID_KIND_ORDER.filter(function (k) { return byKind[k]; }).map(function (k) {
       return '<span class="mid-kd">' + MID_KIND[k] + '<b>' + byKind[k].ok + '/' + byKind[k].n + '</b></span>';
-    }).join('') + '</div>';
-    h += '<div class="mid-rl">';
-    m.list.forEach(function (q, i) {
-      var pick = m.picks[i], ok = pick === q.ans;
-      // 틀린 것은 펼쳐 둔다. 결과 화면에서 바로 확인하는 게 할 일이다.
-      h += '<div class="mid-ri ' + (ok ? 'ok' : 'bad') + '">' +
-        '<div class="mid-ri-h"><span class="mid-ri-m">' + (ok ? 'O' : 'X') + '</span>' +
-          '<span class="mid-ri-n">' + (i + 1) + '</span>' +
-          '<span class="mid-ri-q" lang="ja">' + midText(q.q) + '</span></div>' +
-        '<div class="mid-ri-d"' + (ok ? ' hidden' : '') + '>' +
-          (q.passage ? '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>' : '') +
-          q.opts.map(function (o, j) {
-            return '<div class="mid-ro' + (j === q.ans ? ' right' : (j === pick ? ' wrong' : '')) + '">' +
-              '<span class="mid-on">' + MID_NUM[j] + '</span><span lang="ja">' + midText(o) + '</span></div>';
-          }).join('') +
-          (pick == null ? '<p class="mid-why dim">안 풀고 넘어감</p>' : '') +
-          (q.why ? '<p class="mid-why">' + midText(q.why) + '</p>' : '') +
-          '<p class="card-no">' + midSetName(midSetOf(q)) + (q.src ? ' · ' + esc(q.src) : '') + ' · ' + (MID_KIND[q.kind] || '') + '</p>' +
-        '</div></div>';
-    });
-    h += '</div>';
-    var wrongQs = m.list.filter(function (q, i) { return m.picks[i] !== q.ans; });
-    if (wrongQs.length) h += '<button class="next-btn" id="midRetry">틀린 ' + wrongQs.length + '문제 다시 풀기</button>';
-    h += '<button class="known-btn" id="midBack">시험 대비로</button>';
-    $('midStage').innerHTML = h;
-    $$('#midStage .mid-ri-h').forEach(function (el) {
-      el.addEventListener('click', function () { var dd = el.nextElementSibling; dd.hidden = !dd.hidden; });
-    });
-    if ($('midRetry')) $('midRetry').addEventListener('click', function () {
-      midStart('practice', shuffle(wrongQs.slice()), m.label + ' · 틀린 것');
-    });
-    $('midBack').addEventListener('click', function () { goView('mid'); });
+    }).join('');
+
+    midRes = { all: items, wrong: items.filter(function (x) { return !x.firstOk; }),
+               view: 'wrong', label: m.label, from: m.from, mock: mock };
+    if (!midRes.wrong.length) midRes.view = 'all';
+    renderMidResList();
+    $('mrRetryCount').textContent = midRes.wrong.length + '문제';
+    $('btnMrRetry').disabled = !midRes.wrong.length;
+    show('midResult');
   }
 
-  // 숫자 1~4 로 고르고 Enter 로 넘긴다. 모의고사는 ← → 로 오간다.
+  function midTriesLabel(x, mock) {
+    if (mock) return x.pick == null ? '안 품' : (x.firstOk ? '맞힘' : '틀림');
+    if (x.firstOk) return '한 번에 맞힘';
+    return x.lastOk ? x.tries + '번 만에 맞힘' : '틀림';
+  }
+
+  function renderMidResList() {
+    var r = midRes;
+    if (!r) return;
+    var list = r.view === 'wrong' ? r.wrong : r.all;
+    $('mrTabWrong').classList.toggle('sel', r.view === 'wrong');
+    $('mrTabAll').classList.toggle('sel', r.view === 'all');
+    $('mrListTitle').textContent = r.view === 'wrong' ? '틀린 문제' : '전체';
+    $('mrEmpty').hidden = list.length > 0;
+    $('mrEmpty').textContent = '한 번에 다 맞혔습니다';
+    $('btnMrBrowse').disabled = !list.length;
+    $('mrList').innerHTML = list.map(function (x) {
+      return midItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock), x.pick);
+    }).join('');
+  }
+
+  /* ----- 넘기며 보기 (단어의 넘기며 보기와 같다) ----- */
+
+  // list 는 문제 그대로이거나, 결과 화면에서 온 { q, pick } 묶음이다.
+  function midBrowseStart(list, label) {
+    if (!list.length) return;
+    midBrowse = { list: list.slice(), index: 0, label: label, from: view };
+    show('midBrowse');
+    renderMidBrowse();
+  }
+
+  function renderMidBrowse() {
+    var b = midBrowse, x = b.list[b.index];
+    var q = x.q || x, pick = x.q ? x.pick : null;
+    $('mbStage').innerHTML = midCardHTML(q, { reveal: true, pick: pick });
+    var n = b.list.length;
+    $('mbCount').textContent = (b.index + 1) + ' / ' + n;
+    $('mbLabel').textContent = b.label;
+    $('mbFill').style.width = ((b.index + 1) / n * 100) + '%';
+    $('mbPrev').disabled = b.index === 0;
+    $('mbNext').textContent = (b.index === n - 1) ? '목록으로' : '다음';
+    window.scrollTo(0, 0);
+  }
+
+  function midBrowseGo(step) {
+    var b = midBrowse;
+    if (!b) return;
+    var i = b.index + step;
+    if (i < 0) return;
+    if (i >= b.list.length) { goView(b.from); return; }
+    b.index = i;
+    renderMidBrowse();
+  }
+
+  /* ----- 키보드: 단어 시험과 같다 ----- */
+  // Enter = 정답 보기 → O, 0 = X, 1~4 = 보기 고르기, ← = 돌아보기.
+  // 모의고사는 ← → 로 오가고 Enter 로 다음.
   function midKey(ev) {
     var m = mid;
-    if (!m || m.done) return;
+    if (!m || m.finished) return;
     var k = ev.key;
+    if (m.peek != null) {
+      if (k === 'ArrowLeft') { ev.preventDefault(); midPeekOpen(m.peek - 1); }
+      else if (k === 'ArrowRight') { ev.preventDefault(); if (m.peek >= m.order.length - 1) midPeekClose(); else midPeekOpen(m.peek + 1); }
+      else if (k === 'Escape') { ev.preventDefault(); midPeekClose(); }
+      return;
+    }
     if (k >= '1' && k <= '4') { ev.preventDefault(); midPick(Number(k) - 1); return; }
-    if (k === 'Enter' || k === ' ') { ev.preventDefault(); midNext(); return; }
-    if (m.mode === 'mock' && k === 'ArrowRight') { ev.preventDefault(); midGo(1); return; }
-    if (m.mode === 'mock' && k === 'ArrowLeft')  { ev.preventDefault(); midGo(-1); }
+    if (m.mode === 'mock') {
+      if (k === 'ArrowRight' || k === 'Enter') { ev.preventDefault(); midFwd(); }
+      else if (k === 'ArrowLeft') { ev.preventDefault(); midGo(-1); }
+      return;
+    }
+    if (k === 'ArrowLeft') { ev.preventDefault(); midPeekOpen(m.order.length - 1); return; }
+    if (k === 'Enter' || k === ' ') {
+      ev.preventDefault();
+      if (m.state === 'ask') midReveal();
+      else if (m.state === 'self') midAnswer(true);
+      else midNextPicked();
+      return;
+    }
+    if (k === '0' && m.state === 'self') { ev.preventDefault(); midAnswer(false); }
+  }
+
+  function midBrowseKey(ev) {
+    if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); midBrowseGo(1); }
+    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); midBrowseGo(-1); }
+  }
+
+  // 목록 줄을 누르면 정답·해설이 펼쳐진다.
+  function midListToggle(ev) {
+    var item = ev.target.closest('.wl-item.has-detail');
+    if (!item) return;
+    if (ev.target.closest('.wl-detail')) return;   // 펼친 안쪽을 누르는 것은 접지 않는다
+    var d = item.querySelector('.wl-detail');
+    d.hidden = !d.hidden;
+    item.classList.toggle('open', !d.hidden);
   }
 
   function bindMid() {
     $('pkMid').addEventListener('click', function () { goView('mid'); });
     $('btnMidMock').addEventListener('click', function () {
-      if (mid && mid.mode === 'mock' && !mid.done && !confirm('풀던 모의고사를 버리고 새로 시작할까요?')) return;
+      if (mid && mid.mode === 'mock' && !mid.finished && !confirm('풀던 모의고사를 버리고 새로 시작할까요?')) return;
       midMock();
     });
     $('btnMidResume').addEventListener('click', function () {
-      if (!mid || mid.done) { renderMid(); return; }
+      if (!mid || mid.finished) { renderMid(); return; }
       show('midQuiz');
       if (mid.mode === 'mock') {
-        if (Date.now() >= mid.deadline) { toast('시간이 끝나 제출했습니다'); finishMid(); return; }
+        if (Date.now() >= mid.deadline) { toast('시간이 끝나 제출했습니다'); midFinish(); return; }
         startMidTick();
       }
       renderMidQ();
     });
-    $('btnMidWrong').addEventListener('click', function () {
-      midStart('practice', shuffle(midWrongList().slice()), '틀린 문제');
-    });
+    $('btnMidWrong').addEventListener('click', function () { openMidSet('wrong'); });
     $('midKinds').addEventListener('click', function (ev) {
       var c = ev.target.closest('.chip');
-      if (!c) return;
-      var k = c.dataset.kind;
-      midStart('practice', shuffle(midQs().filter(function (q) { return q.kind === k; })), MID_KIND[k]);
+      if (c) openMidSet('kind:' + c.dataset.kind);
     });
     // 과 카드·정리·단어 화면의 버튼은 data-act 하나로 받는다.
     ['midLessons', 'midNote', 'midWords'].forEach(function (id) {
@@ -4144,9 +4408,7 @@
           if (act === 'note') openMidNote(set);
           else if (act === 'words') openMidWords(set);
           else if (act === 'wquiz') midWordQuiz(set);
-          else if (act === 'quiz') {
-            midStart('practice', midQs().filter(function (q) { return midSetOf(q) === set; }), midSetName(set));
-          }
+          else if (act === 'set') openMidSet(set);
           return;
         }
         var hide = ev.target.closest('[data-hide]');
@@ -4162,6 +4424,49 @@
         if (qa) { var a = qa.querySelector('.mid-qa-a'); a.hidden = !a.hidden; }
       });
     });
+
+    // 묶음 화면
+    $('btnMsAll').addEventListener('click', function () {
+      if (midSetCur) midStart('practice', shuffle(midSetCur.list.slice()), midSetCur.title, 'midSet');
+    });
+    $('btnMsWrong').addEventListener('click', function () {
+      if (!midSetCur) return;
+      var p = Store.examProg();
+      var w = midSetCur.list.filter(function (q) { return p[q.id] && !p[q.id].ok; });
+      midStart('practice', shuffle(w), midSetCur.title + ' · 틀린 것', 'midSet');
+    });
+    $('btnMsBrowse').addEventListener('click', function () {
+      if (midSetCur) midBrowseStart(midSetCur.list, midSetCur.title);
+    });
+    $('msList').addEventListener('click', midListToggle);
+
+    // 풀기
+    $('btnMidReveal').addEventListener('click', midReveal);
+    $('btnMidO').addEventListener('click', function () { midAnswer(true); });
+    $('btnMidX').addEventListener('click', function () { midAnswer(false); });
+    $('btnMidNext').addEventListener('click', midNextPicked);
+    $('btnMidPrev').addEventListener('click', function () { midGo(-1); });
+    $('btnMidFwd').addEventListener('click', midFwd);
+    $('btnMidStop').addEventListener('click', midStop);
+
+    // 결과
+    $('mrTabWrong').addEventListener('click', function () { if (midRes) { midRes.view = 'wrong'; renderMidResList(); } });
+    $('mrTabAll').addEventListener('click', function () { if (midRes) { midRes.view = 'all'; renderMidResList(); } });
+    $('btnMrBrowse').addEventListener('click', function () {
+      if (!midRes) return;
+      midBrowseStart(midRes.view === 'wrong' ? midRes.wrong : midRes.all,
+                     midRes.label + ' · ' + (midRes.view === 'wrong' ? '틀린 문제' : '전체'));
+    });
+    $('btnMrRetry').addEventListener('click', function () {
+      if (!midRes || !midRes.wrong.length) return;
+      midStart('practice', shuffle(midRes.wrong.map(function (x) { return x.q; })), midRes.label + ' · 틀린 것', midRes.from);
+    });
+    $('btnMrBack').addEventListener('click', function () { goView('mid'); });
+    $('mrList').addEventListener('click', midListToggle);
+
+    // 넘기며 보기
+    $('mbPrev').addEventListener('click', function () { midBrowseGo(-1); });
+    $('mbNext').addEventListener('click', function () { midBrowseGo(1); });
   }
 
   /* ---------------- 이벤트 ---------------- */
@@ -4821,6 +5126,7 @@
       var t = ev.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       if (view === 'midQuiz') { midKey(ev); return; }
+      if (view === 'midBrowse') { midBrowseKey(ev); return; }
       if (view === 'gramStudy') {
         // 돌아보는 중에는 좌우로만 움직인다.
         if (gPeek !== null) {

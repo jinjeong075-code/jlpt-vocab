@@ -1402,22 +1402,30 @@ button.kb-char:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .mid-kinds { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 16px; }
 .mid-kd { font-size: 12px; color: var(--dim); background: var(--panel); border: 1px solid var(--hair); border-radius: 6px; padding: 4px 8px; }
 .mid-kd b { color: var(--text); margin-left: 6px; }
-.mid-rl { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
-.mid-ri { background: var(--panel); border: 1px solid var(--hair); border-radius: var(--radius); padding: 10px 12px; }
-.mid-ri.bad { border-color: rgba(224,123,123,.35); }
-.mid-ri-h { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
-.mid-ri-m { flex: 0 0 auto; font-weight: 700; font-size: 13px; }
-.mid-ri.ok .mid-ri-m { color: var(--ok); }
-.mid-ri.bad .mid-ri-m { color: var(--no); }
-.mid-ri-n { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
-.mid-ri-q { flex: 1; min-width: 0; font-family: var(--jp); font-size: 14px; line-height: 1.7; }
-.mid-ri-d { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
-.mid-ri-d .mid-psg { margin-top: 0; margin-bottom: 8px; font-size: 14px; }
-.mid-ro { display: flex; gap: 8px; font-family: var(--jp); font-size: 14px; padding: 3px 0; line-height: 1.6; }
-.mid-ro.right, .mid-ro.right .mid-on { color: var(--ok); }
-.mid-ro.wrong, .mid-ro.wrong .mid-on { color: var(--no); }
 /* 채점 뒤에 붙는 출처가 길어도 유형 배지는 한 줄로 */
 .mid-q .card-meta { align-items: flex-start; gap: 10px; }
 .mid-q .badge { white-space: nowrap; flex: 0 0 auto; }
 .mid-q .card-no { text-align: right; line-height: 1.5; }
 .mid-u.mid-ph { margin: 0 2px; }
+
+/* 시험 대비 — 단어 시험과 같은 틀 */
+#midFill, #mbFill { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .25s; }
+#viewMidQuiz { padding-bottom: 86px; }
+#btnMidStop { margin-left: auto; padding: 3px 9px; font-size: 11px; }
+#midTimer + #btnMidStop { margin-left: 8px; }
+.mid-li-q { font-family: var(--jp); font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mid-li .wl-detail .mid-psg { margin-top: 10px; }
+div.gopt.mid-opt { cursor: default; }
+div.gopt.mid-opt:hover { color: inherit; }
+div.gopt.mid-opt.right, div.gopt.mid-opt.right:hover { color: var(--ok); }
+div.gopt.mid-opt.wrong, div.gopt.mid-opt.wrong:hover { color: var(--no); }
+.answer-box.mid-ans { margin-top: 10px; }
+.mid-ans .ans-value { font-size: 15px; font-family: var(--jp); line-height: 1.6; }
+.mid-ans .ans-value.bad { color: var(--no); }
+.mid-ans .ans-value.ko { font-family: inherit; font-size: 13px; color: var(--dim); }
+.detail-box.mid-detail { padding-top: 8px; margin-bottom: 2px; }
+.mid-detail .card-no { margin: 6px 0 0; }
+.mid-peek-bar { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--dim); }
+.mid-peek-bar span { flex: 1; text-align: center; }
+#mrKinds:empty { display: none; }
+#mrKinds { margin-top: -4px; }
