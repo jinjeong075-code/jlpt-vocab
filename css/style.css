@@ -1429,3 +1429,36 @@ div.gopt.mid-opt.wrong, div.gopt.mid-opt.wrong:hover { color: var(--no); }
 .mid-peek-bar span { flex: 1; text-align: center; }
 #mrKinds:empty { display: none; }
 #mrKinds { margin-top: -4px; }
+/* 시험 대비 — 본문 해설(문단 읽기 해설집 꼴) */
+.mt-link { margin: 4px 0 0; }
+.mt-link h2:empty { display: none; }
+.mt-tabs { margin-top: 10px; }
+.mt-tabs .mt-furi { margin-left: auto; }
+.mt-paras { margin: 0 0 10px; }
+.mt-para { margin-bottom: 14px; }
+.mt-jp ruby rt { font-size: .5em; }
+.mt-s { background: var(--panel); border: 1px solid var(--hair); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+.mt-s-jp { display: flex; gap: 8px; align-items: baseline; font-family: var(--jp); font-size: 16px; line-height: 2.05; }
+.mt-no { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--accent); font-family: inherit; }
+.mt-s-t { flex: 1; min-width: 0; }
+.mt-s-t ruby rt { font-size: .5em; color: var(--rt); }
+.mt-s-ko { font-size: 13px; color: var(--dim); margin: 2px 0 8px 20px; line-height: 1.6; }
+.mt-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.75; margin-top: 4px; }
+.mt-tag { flex: 0 0 auto; font-size: 10px; font-weight: 600; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.mt-st { flex: 1; min-width: 0; font-family: var(--jp); font-size: 13.5px; }
+.mt-its { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.75; }
+.mt-its li { margin: 2px 0; }
+.mt-q { font-family: var(--jp); color: var(--text); font-weight: 600; }
+.mt-pat { color: var(--warn); font-family: var(--jp); }
+.mt-voc { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.mt-v b { font-family: var(--jp); font-weight: 600; margin-right: 4px; }
+.mt-v i { font-style: normal; font-family: var(--jp); color: var(--rt); margin-right: 5px; font-size: 12px; }
+.mid-wtag { display: block; font-size: 10px; color: var(--accent); margin-top: 2px; }
+/* 문단 읽기 카드는 접혀 있을 때 후리가나를 숨긴다. 해설에서는 켠 대로 보인다. */
+.st-para.mt-para .st-jp.mt-jp rt { display: ruby-text; font-size: .5em; color: var(--rt); }
+.st-para.mt-para .st-jp.mt-jp { line-height: 2.5; }
+.st-jp.mt-jp mark { color: var(--accent); font-weight: 600; }
+/* 시험 대비 — 단어 카드 */
+.mid-wc .jp-word { padding: 22px 0 18px; }
+.mid-wsrc { margin: 8px 0 0; }
+.mid-li .wl-detail .ex { padding-top: 8px; }

@@ -385,8 +385,9 @@
   <div id="midNote"></div>
 </section>
 
-<section id="viewMidWords" class="view">
-  <div id="midWords"></div>
+<!-- 본문 해설: 문단 하나씩 넘기며 읽는다(문단 읽기 해설집과 같은 꼴). -->
+<section id="viewMidText" class="view">
+  <div id="midText"></div>
 </section>
 
 <!-- 문제 묶음 화면. 단어의 Day 화면과 같은 꼴: 통계 → 풀기 버튼 → 목록(+넘기며 보기). -->
@@ -398,15 +399,16 @@
   <div class="stat-grid" id="msStats"></div>
   <div class="row-btns">
     <button class="big-btn primary" id="btnMsAll">
-      <span class="bb-title">전체 풀기</span><span class="bb-sub" id="msAllCount"></span>
+      <span class="bb-title" id="msAllTitle">전체 풀기</span><span class="bb-sub" id="msAllCount"></span>
     </button>
     <button class="big-btn" id="btnMsWrong">
       <span class="bb-title">틀린 것만</span><span class="bb-sub" id="msWrongCount"></span>
     </button>
   </div>
   <div class="section-head">
-    <h2>문제 목록</h2>
+    <h2 id="msListTitle">문제 목록</h2>
     <div class="head-actions">
+      <button class="mini-btn go" id="btnMsWQuiz" hidden>읽기 4지선다</button>
       <button class="mini-btn go" id="btnMsBrowse">넘기며 보기</button>
     </div>
   </div>

@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v111';
+  var BUILD = 'v112';
 
   /* ---------------- 화면 ---------------- */
 
@@ -44,7 +44,7 @@
     day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
     stories: 'home', story: 'stories', kanji: 'pick',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram',
-    mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid', midSet: 'mid', midResult: 'mid', midBrowse: 'mid'
+    mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid', midSet: 'mid', midResult: 'mid', midBrowse: 'mid', midText: 'mid'
   };
 
   function handleBack() {
@@ -189,7 +189,7 @@
     gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
     stories: '문단 읽기', story: '문단 읽기', kanji: '한자',
     mid: '시험 대비', midNote: '시험 대비', midWords: '시험 대비', midQuiz: '시험 대비',
-    midSet: '시험 대비', midResult: '시험 대비', midBrowse: '시험 대비'
+    midSet: '시험 대비', midResult: '시험 대비', midBrowse: '시험 대비', midText: '본문 해설'
   };
 
   function show(name) {
@@ -3688,7 +3688,7 @@
 
   var MID_KIND = {
     content: 'A 독해 · 내용', grammar: 'A 독해 · 문법', reading: 'A 단어 · 읽기',
-    word: 'A 단어 · 뜻', blank: 'B 문법 · 빈칸', usage: 'B 문법 · 문장 찾기'
+    word: 'A 단어 · 뜻', blank: 'B 문법 · 빈칸', usage: 'B 문법 · 문장 찾기', vocab: '단어'
   };
   var MID_KIND_ORDER = ['content', 'grammar', 'reading', 'word', 'blank', 'usage'];
   var MID_NUM = ['①', '②', '③', '④'];
@@ -3805,10 +3805,11 @@
       return n ? '<button class="chip" data-kind="' + k + '">' + MID_KIND[k] + ' <i>' + n + '</i></button>' : '';
     }).join('');
 
+    midVocabMap = null;   // 받기로 단어장이 바뀌었을 수 있다
     $('midLessons').innerHTML = (d.lessons || []).map(function (L) {
       var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
       var st = midStat(qs);
-      var words = (L.vocab || []).length;
+      var words = (L.vocab || []).length + midExtraWords(L).length;
       return '<div class="mid-ls">' +
         '<div class="mid-ls-h">' +
           '<span class="mid-ls-no">' + esc(L.no) + '</span>' +
@@ -3817,6 +3818,7 @@
         '</div>' + (qs.length ? midBar(st) : '') +
         '<div class="mid-ls-btns">' +
           '<button class="chip" data-act="note" data-set="' + L.set + '">정리</button>' +
+          ((L.text || []).length ? '<button class="chip" data-act="text" data-set="' + L.set + '">본문 해설</button>' : '') +
           (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
           (qs.length ? '<button class="chip" data-act="set" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
         '</div></div>';
@@ -3832,6 +3834,10 @@
     var L = midLesson(set);
     if (!L) return;
     var h = midHeadHTML(L);
+    if ((L.text || []).length) {
+      h += '<div class="section-head mt-link"><h2></h2><div class="head-actions">' +
+        '<button class="mini-btn go" data-act="text" data-set="' + set + '">본문 해설 · 문단별</button></div></div>';
+    }
     if ((L.facts || []).length) {
       h += '<div class="secto">본문 핵심</div><ul class="mid-facts">' +
         L.facts.map(function (f) { return '<li>' + midText(f) + '</li>'; }).join('') + '</ul>';
@@ -3870,30 +3876,193 @@
     show('midNote');
   }
 
-  function openMidWords(set) {
+  /* ----- 본문에서 더 뽑은 단어 ----- */
+  // 해설의 【어휘】 가운데 교재 단어 목록에 없는 것(빌드에서 모음). 화면에 낼 때 JLPT 단어장에서
+  // 이미 장기기억으로 외운 것은 뺀다. 외워 갈수록 줄어든다.
+  var midVocabMap = null;
+  function midNorm(w) { return String(w || '').replace(/[（(][^)）]*[)）]/g, '').replace(/(する|だ|な)$/, '').trim(); }
+  function midVocabIndex() {
+    if (midVocabMap) return midVocabMap;
+    midVocabMap = {};
+    Store.allWords().forEach(function (e) {
+      String(e.w.word).split(/[\/／]/).forEach(function (f) {
+        var k = midNorm(f);
+        if (k && !midVocabMap[k]) midVocabMap[k] = e;
+      });
+    });
+    return midVocabMap;
+  }
+  function midExtraWords(L) {
+    var map = midVocabIndex();
+    return (L.extraWords || []).map(function (v) {
+      var e = map[midNorm(v.word)];
+      return { v: v, e: e, st: e ? Store.stageFor(e.day, e.w) : null };
+    }).filter(function (x) { return x.st !== 'long'; });
+  }
+
+  /* ----- 단어 카드 (단어 모드의 학습 카드와 같다) ----- */
+  // 교재 단어 + 본문에서 더 뽑은 단어. 단어 → 정답 보기 → 읽는 법·뜻 → O/X 로 넘기며 외운다.
+  // 예문은 본문(회화)에서 그 단어가 나온 문장이다. 푸는 동안에는 후리가나 없이 보여 준다.
+
+  // 본문 해설에서 그 단어가 들어간 첫 문장. 활용형으로 나올 수 있어 끝 가나를 하나 떼고도 찾는다.
+  function midFindSentence(L, word) {
+    var base = midNorm(word);
+    if (!base) return null;
+    var keys = [base];
+    if (/[ぁ-ん]$/.test(base) && base.length > 1) keys.push(base.slice(0, -1));
+    var hit = null;
+    (L.text || []).some(function (sec) {
+      return sec.paras.some(function (p) {
+        return p.sents.some(function (z) {
+          var plain = String(z.jp).replace(/\[[^\]]*\]/g, '').replace(/\{\{|\}\}/g, '');
+          for (var i = 0; i < keys.length; i++) {
+            if (plain.indexOf(keys[i]) > -1) { hit = { jp: z.jp, ko: z.ko, key: keys[i] }; return true; }
+          }
+          return false;
+        });
+      });
+    });
+    return hit;
+  }
+
+  function midWordItems(set) {
     var L = midLesson(set);
-    if (!L || !(L.vocab || []).length) return;
-    var h = midHeadHTML(L) +
-      '<div class="chips">' +
-        '<button class="chip" data-hide="r">읽기 가리기</button>' +
-        '<button class="chip" data-hide="m">뜻 가리기</button>' +
-        '<button class="chip ta-go" data-act="wquiz" data-set="' + set + '">읽기 시험</button>' +
-      '</div>' +
-      '<table class="mid-wt" id="midWT"><tbody>' +
-      L.vocab.map(function (v) {
-        var r = (v.reading && v.reading !== v.word) ? v.reading : '';
-        return '<tr><td class="w" lang="ja">' + esc(v.word) + '</td><td class="r" lang="ja">' + esc(r) +
-          '</td><td class="m">' + esc(v.meaning) + '</td></tr>';
-      }).join('') + '</tbody></table>';
-    $('midWords').innerHTML = h;
-    show('midWords');
+    if (!L) return [];
+    var mk = function (v, extra, x) {
+      return {
+        id: 'V:' + set + ':' + v.word, type: 'word', set: set, kind: 'vocab',
+        word: v.word, reading: v.reading, meaning: v.meaning, extra: extra,
+        tag: extra ? (x.e ? '단어장 ' + dayOf(x.e.day, x.e.w) + ' · ' + (Store.STAGE_LABEL[x.st] || '') : '본문 · 새 단어') : '',
+        ex: midFindSentence(L, v.word)
+      };
+    };
+    return (L.vocab || []).map(function (v) { return mk(v, false); })
+      .concat(midExtraWords(L).map(function (x) { return mk(x.v, true, x); }));
+  }
+
+  // 예문의 그 단어 자리를 표시한다(단어 카드의 예문처럼).
+  function midExHTML(q, withRuby) {
+    if (!q.ex) return '';
+    var html = gJP(q.ex.jp, { ruby: withRuby });
+    var key = esc(q.ex.key);
+    if (key) html = html.split(key).join('<mark>' + key + '</mark>');
+    return '<div class="ex' + (withRuby ? ' ruby' : '') + '"><p class="ex-jp" lang="ja">' + html + '</p>' +
+      (withRuby && q.ex.ko ? '<p class="ex-ko">' + esc(q.ex.ko) + '</p>' : '') + '</div>';
+  }
+
+  function midWordBodyHTML(q, o) {
+    var r = (q.reading && q.reading !== q.word) ? q.reading : q.word;
+    var h = '<div class="jp-word" lang="ja">' + esc(q.word) + '</div>';
+    if (o.reveal) {
+      h += '<div class="answer-box">' +
+        '<div class="ans-row"><span class="ans-label">읽는 법</span><span class="ans-value reading" lang="ja">' + esc(r) + '</span></div>' +
+        '<div class="ans-row"><span class="ans-label">뜻</span><span class="ans-value">' + esc(q.meaning) + '</span></div>' +
+      '</div>';
+    }
+    var ex = midExHTML(q, !!o.reveal);
+    if (ex || (o.reveal && q.tag)) {
+      h += '<div class="detail-box' + (o.reveal ? '' : ' quiz') + '">' + ex +
+        (o.reveal && q.tag ? '<p class="card-no mid-wsrc">' + esc(q.tag) + '</p>' : '') + '</div>';
+    }
+    return h;
+  }
+
+  function midWordItemHTML(q, state, side) {
+    var dot = state === 'ok' ? 'dot-long' : (state === 'bad' ? 'dot-unknown' : 'dot-new');
+    var r = (q.reading && q.reading !== q.word) ? q.reading : '';
+    return '<div class="wl-item' + (q.ex ? ' has-detail' : '') + ' mid-li" role="button" tabindex="0">' +
+      '<div class="wl-head"><span class="wl-dot ' + dot + '"></span>' +
+        '<div class="wl-main"><div><span class="wl-word" lang="ja">' + esc(q.word) + '</span>' +
+          (r ? '<span class="wl-reading" lang="ja">' + esc(r) + '</span>' : '') + '</div>' +
+          '<div class="wl-meaning">' + esc(q.meaning) + '</div></div>' +
+        '<span class="wl-side">' + (q.extra ? '<span class="wl-day">본문</span>' : '') + esc(side || '') + '</span>' +
+        (q.ex ? '<span class="wl-caret">▾</span>' : '') + '</div>' +
+      (q.ex ? '<div class="wl-detail" hidden>' + midExHTML(q, true) +
+        (q.tag ? '<p class="card-no mid-wsrc">' + esc(q.tag) + '</p>' : '') + '</div>' : '') +
+    '</div>';
+  }
+
+  /* ----- 본문 해설 (문단 읽기 해설집과 같은 꼴) ----- */
+  // 문단 하나씩 넘기며 읽는다. 문단 글(후리가나) → 문단 번역 → 문장마다 번역·【구조】·문형·【어휘】.
+  var midTextCur = null;   // { set, sec, para, furi }
+
+  function openMidText(set, sec, para) {
+    var L = midLesson(set);
+    if (!L || !(L.text || []).length) return;
+    midTextCur = { set: set, sec: sec || 0, para: para || 0, furi: midTextCur ? midTextCur.furi : true };
+    renderMidText();
+    show('midText');
+  }
+
+  // 「인용」은 일본어 글꼴로, 《문형》은 눈에 띄게.
+  function midItemFmt(s) {
+    return esc(String(s || ''))
+      .replace(/「([^」]*)」/g, '<span class="mt-q" lang="ja">「$1」</span>')
+      .replace(/《([^》]*)》/g, '<span class="mt-pat">《$1》</span>');
+  }
+
+  function midTextStep(d) {
+    var c = midTextCur, secs = midLesson(c.set).text;
+    var s = c.sec, p = c.para + d;
+    if (p < 0) { s--; if (s < 0) return null; p = secs[s].paras.length - 1; }
+    else if (p >= secs[s].paras.length) { s++; if (s >= secs.length) return null; p = 0; }
+    return { sec: s, para: p, label: secs[s].title + ' P' + (p + 1) };
+  }
+
+  function midTextGo(d) {
+    var t = midTextStep(d);
+    if (!t) return;
+    midTextCur.sec = t.sec; midTextCur.para = t.para;
+    renderMidText();
+  }
+
+  function renderMidText() {
+    var c = midTextCur, L = midLesson(c.set);
+    var secs = L.text, S = secs[c.sec], P = S.paras[c.para];
+    var opt = { ruby: c.furi };
+    var talk = /회화/.test(S.title);
+    var h = midHeadHTML(L);
+    h += '<div class="res-tabs mt-tabs">' + secs.map(function (s, i) {
+      return '<button class="res-tab' + (i === c.sec ? ' sel' : '') + '" data-sec="' + i + '">' + esc(s.title) + '</button>';
+    }).join('') + '<button class="res-tab mt-furi' + (c.furi ? ' sel' : '') + '" data-furi="1">후리가나</button></div>';
+    h += '<div class="chips mt-paras">' + S.paras.map(function (p, i) {
+      return '<button class="chip' + (i === c.para ? ' sel' : '') + '" data-para="' + i + '">P' + (i + 1) + '</button>';
+    }).join('') + '</div>';
+
+    h += '<div class="st-para mt-para">' +
+      '<div class="st-head"><span class="st-lv">' + esc(S.title) + ' P' + (c.para + 1) + '</span></div>' +
+      '<p class="st-jp mt-jp" lang="ja">' + P.sents.map(function (s) { return gJP(s.jp, opt); }).join(talk ? '<br>' : '') + '</p>' +
+      (P.ko ? '<p class="st-ko">' + esc(P.ko) + '</p>' : '') +
+    '</div>';
+
+    P.sents.forEach(function (s, i) {
+      h += '<div class="mt-s">' +
+        '<div class="mt-s-jp" lang="ja"><span class="mt-no">' + (i + 1) + '</span><span class="mt-s-t">' + gJP(s.jp, opt) + '</span></div>' +
+        (s.ko ? '<div class="mt-s-ko">' + esc(s.ko) + '</div>' : '') +
+        (s.st ? '<div class="mt-row"><span class="mt-tag">구조</span><span class="mt-st">' + midItemFmt(s.st) + '</span></div>' : '') +
+        ((s.items || []).length ? '<ul class="mt-its">' + s.items.map(function (it) { return '<li>' + midItemFmt(it) + '</li>'; }).join('') + '</ul>' : '') +
+        ((s.voc || []).length ? '<div class="mt-row"><span class="mt-tag">어휘</span><span class="mt-voc">' + s.voc.map(function (v) {
+            return '<span class="mt-v"><b lang="ja">' + esc(v.w) + '</b><i lang="ja">' + esc(v.r) + '</i>' + esc(v.m) + '</span>';
+          }).join('') + '</span></div>' : '') +
+      '</div>';
+    });
+
+    var prev = midTextStep(-1), next = midTextStep(1);
+    h += '<div class="st-nav">' +
+      '<button class="mini-btn" data-step="-1"' + (prev ? '' : ' hidden') + '>‹ ' + (prev ? esc(prev.label) : '') + '</button>' +
+      '<button class="mini-btn go" data-step="1"' + (next ? '' : ' hidden') + '>' + (next ? esc(next.label) : '') + ' ›</button>' +
+    '</div>';
+    $('midText').innerHTML = h;
+    window.scrollTo(0, 0);
   }
 
   // 단어 목록에서 읽기 문제를 그 자리에서 만든다. 오답은 같은 과 단어의 읽기.
+  // 본문에서 더 뽑은 단어(아직 못 외운 것)도 같이 낸다.
   function midWordQuiz(set) {
     var L = midLesson(set);
     if (!L) return;
-    var pool = (L.vocab || []).filter(function (v) {
+    var all = (L.vocab || []).concat(midExtraWords(L).map(function (x) { return x.v; }));
+    var pool = all.filter(function (v) {
       return /[一-龯々]/.test(v.word) && v.reading && v.reading !== v.word;
     });
     var readings = [];
@@ -3908,7 +4077,7 @@
         opts: opts, ans: opts.indexOf(v.reading), why: v.word + '（' + v.reading + '）= ' + v.meaning
       };
     });
-    midStart('practice', list, midSetName(set) + ' 단어 읽기', 'midWords');
+    midStart('practice', list, midSetName(set) + ' 읽기 4지선다', 'midSet');
   }
 
   /* ----- 문제 묶음 화면 (단어의 Day 화면과 같은 꼴) ----- */
@@ -3917,6 +4086,12 @@
     var all = midQs(), list, title, sub;
     if (key === 'wrong') {
       list = midWrongList(); title = '틀린 문제'; sub = '마지막으로 풀 때 처음에 틀린 문제';
+    } else if (key.indexOf('words:') === 0) {
+      var ws = key.slice(6), WL = midLesson(ws);
+      list = midWordItems(ws);
+      var nx = list.filter(function (q) { return q.extra; }).length;
+      title = midSetName(ws) + ' 단어';
+      sub = '교재 ' + (list.length - nx) + (nx ? ' · 본문에서 더 뽑은 것 ' + nx : '') + (WL ? ' · ' + WL.jp : '');
     } else if (key.indexOf('kind:') === 0) {
       var k = key.slice(5);
       list = all.filter(function (q) { return q.kind === k; }); title = MID_KIND[k]; sub = '네 과 + 2과 추가자료';
@@ -3941,21 +4116,26 @@
     var c = midSetCur;
     if (!c) return;
     if (c.key === 'wrong') c.list = midWrongList();   // 풀고 오면 줄어든다
+    var words = c.key.indexOf('words:') === 0;
+    var unit = words ? '단어' : '문제';
     var p = Store.examProg(), s = midStat(c.list);
     var wrong = c.list.filter(function (q) { return p[q.id] && !p[q.id].ok; });
     $('msTitle').textContent = c.title;
     $('msSub').textContent = c.sub || '';
-    $('msStats').innerHTML = midStatCells([['total', s.n, '전체'], ['', s.n - s.done, '안 푼 문제'],
+    $('msStats').innerHTML = midStatCells([['total', s.n, '전체'], ['', s.n - s.done, words ? '안 본 단어' : '안 푼 문제'],
                                            ['unknown', s.bad, '틀림'], ['long', s.ok, '맞힘']]);
-    $('msAllCount').textContent = c.list.length + '문제';
+    $('msAllTitle').textContent = words ? '전체 학습' : '전체 풀기';
+    $('msAllCount').textContent = c.list.length + unit;
     $('btnMsAll').disabled = !c.list.length;
-    $('msWrongCount').textContent = wrong.length + '문제';
+    $('msWrongCount').textContent = wrong.length + unit;
     $('btnMsWrong').disabled = !wrong.length;
+    $('msListTitle').textContent = words ? '단어 목록' : '문제 목록';
     $('btnMsBrowse').disabled = !c.list.length;
+    $('btnMsWQuiz').hidden = !words;
     $('msList').innerHTML = c.list.map(function (q) {
-      var r = p[q.id];
-      return midItemHTML(q, r ? (r.ok ? 'ok' : 'bad') : 'new', r ? (r.ok ? '맞힘' : '틀림') : '', null);
-    }).join('') || '<p class="empty-note">문제가 없습니다</p>';
+      var r = p[q.id], st = r ? (r.ok ? 'ok' : 'bad') : 'new', side = r ? (r.ok ? '맞힘' : '틀림') : '';
+      return q.type === 'word' ? midWordItemHTML(q, st, side) : midItemHTML(q, st, side, null);
+    }).join('') || '<p class="empty-note">' + unit + '가 없습니다</p>';
   }
 
   // 목록 한 줄. 누르면 정답과 해설이 펼쳐진다(단어 목록과 같다).
@@ -3976,6 +4156,7 @@
   // o.tap: 보기를 눌러 고를 수 있다 / o.reveal: 정답·해설을 편다 / o.pick: 고른 보기
   function midBodyHTML(q, o) {
     o = o || {};
+    if (q.type === 'word') return midWordBodyHTML(q, o);
     var h = '';
     if (q.passage) h += '<div class="mid-psg" lang="ja">' + midText(q.passage) + '</div>';
     h += '<p class="mid-qt" lang="ja">' + midText(q.q) + '</p>';
@@ -4008,6 +4189,15 @@
   }
 
   function midCardHTML(q, o) {
+    if (q.type === 'word') {
+      // 단어 카드: 배지는 이 단어를 지난번에 맞혔는지(단어 모드의 단계 배지 자리).
+      var r = Store.examProg()[q.id];
+      var st = !r ? ['new', '미학습'] : (r.ok ? ['long', '맞힘'] : ['unknown', '틀림']);
+      return '<div class="card mid-q mid-wc">' +
+        '<div class="card-meta"><span class="badge ' + st[0] + '">' + st[1] + '</span>' +
+          '<span class="card-no">' + midSetName(q.set) + ' · ' + (q.extra ? '본문 단어' : '교재 단어') + '</span></div>' +
+        midBodyHTML(q, o) + '</div>';
+    }
     return '<div class="card mid-q">' +
       '<div class="card-meta"><span class="badge">' + (MID_KIND[q.kind] || '') + '</span>' +
         '<span class="card-no">' + midSetName(midSetOf(q)) + ' · ' + midNo(q) + '</span></div>' +
@@ -4114,7 +4304,7 @@
     var m = mid;
     if (!m || m.finished || m.peek != null) return;
     if (m.mode === 'mock') { m.picks[m.idx] = i; renderMidQ(); return; }   // 제출 전까지 바꿀 수 있다
-    if (m.state !== 'ask') return;
+    if (m.state !== 'ask' || m.queue[m.idx].type === 'word') return;       // 단어 카드는 보기가 없다
     m.pick = i; m.state = 'picked';
     renderMidQ();
   }
@@ -4254,8 +4444,9 @@
                                              ['unknown', n - first - none, '틀림'], ['', none, '안 품']]);
     } else {
       var later = items.filter(function (x) { return !x.firstOk && x.lastOk; }).length;
-      $('mrTitle').textContent = n + '문제 중 ' + first + '개를 한 번에';
-      $('mrStats').innerHTML = midStatCells([['total', n, '푼 문제'], ['long', first, '한 번에'],
+      var isWord = items.length && items[0].q.type === 'word';
+      $('mrTitle').textContent = n + (isWord ? '단어' : '문제') + ' 중 ' + first + '개를 한 번에';
+      $('mrStats').innerHTML = midStatCells([['total', n, isWord ? '본 단어' : '푼 문제'], ['long', first, '한 번에'],
                                              ['short', later, '다시 풀어 맞힘'], ['unknown', n - first - later, '못 맞힘']]);
     }
     var left = (!mock && stopped) ? (m.queue.length - m.idx) + m.retry.length : 0;
@@ -4292,12 +4483,16 @@
     var list = r.view === 'wrong' ? r.wrong : r.all;
     $('mrTabWrong').classList.toggle('sel', r.view === 'wrong');
     $('mrTabAll').classList.toggle('sel', r.view === 'all');
-    $('mrListTitle').textContent = r.view === 'wrong' ? '틀린 문제' : '전체';
+    var unit = (r.all.length && r.all[0].q.type === 'word') ? '단어' : '문제';
+    $('mrTabWrong').textContent = '틀린 ' + unit;
+    $('mrListTitle').textContent = r.view === 'wrong' ? '틀린 ' + unit : '전체';
     $('mrEmpty').hidden = list.length > 0;
     $('mrEmpty').textContent = '한 번에 다 맞혔습니다';
     $('btnMrBrowse').disabled = !list.length;
     $('mrList').innerHTML = list.map(function (x) {
-      return midItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock), x.pick);
+      return x.q.type === 'word'
+        ? midWordItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock))
+        : midItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock), x.pick);
     }).join('');
   }
 
@@ -4400,25 +4595,28 @@
       if (c) openMidSet('kind:' + c.dataset.kind);
     });
     // 과 카드·정리·단어 화면의 버튼은 data-act 하나로 받는다.
-    ['midLessons', 'midNote', 'midWords'].forEach(function (id) {
+    ['midLessons', 'midNote'].forEach(function (id) {
       $(id).addEventListener('click', function (ev) {
         var b = ev.target.closest('[data-act]');
         if (b) {
           var set = b.dataset.set, act = b.dataset.act;
           if (act === 'note') openMidNote(set);
-          else if (act === 'words') openMidWords(set);
+          else if (act === 'words') openMidSet('words:' + set);
           else if (act === 'wquiz') midWordQuiz(set);
           else if (act === 'set') openMidSet(set);
+          else if (act === 'text') openMidText(set);
           return;
         }
         var hide = ev.target.closest('[data-hide]');
         if (hide) {
           hide.classList.toggle('sel');
-          $('midWT').classList.toggle('hide-' + hide.dataset.hide, hide.classList.contains('sel'));
-          $$('#midWT td.peek').forEach(function (td) { td.classList.remove('peek'); });
+          $$('#midWords .mid-wt').forEach(function (t) {
+            t.classList.toggle('hide-' + hide.dataset.hide, hide.classList.contains('sel'));
+          });
+          $$('#midWords .mid-wt td.peek').forEach(function (td) { td.classList.remove('peek'); });
           return;
         }
-        var td = ev.target.closest('#midWT td');
+        var td = ev.target.closest('#midWords .mid-wt td');
         if (td) { td.classList.toggle('peek'); return; }
         var qa = ev.target.closest('.mid-qa');
         if (qa) { var a = qa.querySelector('.mid-qa-a'); a.hidden = !a.hidden; }
@@ -4437,6 +4635,9 @@
     });
     $('btnMsBrowse').addEventListener('click', function () {
       if (midSetCur) midBrowseStart(midSetCur.list, midSetCur.title);
+    });
+    $('btnMsWQuiz').addEventListener('click', function () {
+      if (midSetCur && midSetCur.key.indexOf('words:') === 0) midWordQuiz(midSetCur.key.slice(6));
     });
     $('msList').addEventListener('click', midListToggle);
 
@@ -4467,6 +4668,16 @@
     // 넘기며 보기
     $('mbPrev').addEventListener('click', function () { midBrowseGo(-1); });
     $('mbNext').addEventListener('click', function () { midBrowseGo(1); });
+
+    // 본문 해설: 본문/회화 탭, 후리가나, 문단 번호, 앞뒤 문단
+    $('midText').addEventListener('click', function (ev) {
+      var c = midTextCur, b;
+      if (!c) return;
+      if ((b = ev.target.closest('[data-sec]'))) { c.sec = Number(b.dataset.sec); c.para = 0; renderMidText(); return; }
+      if ((b = ev.target.closest('[data-furi]'))) { c.furi = !c.furi; renderMidText(); return; }
+      if ((b = ev.target.closest('[data-para]'))) { c.para = Number(b.dataset.para); renderMidText(); return; }
+      if ((b = ev.target.closest('[data-step]'))) { midTextGo(Number(b.dataset.step)); }
+    });
   }
 
   /* ---------------- 이벤트 ---------------- */
@@ -5127,6 +5338,11 @@
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       if (view === 'midQuiz') { midKey(ev); return; }
       if (view === 'midBrowse') { midBrowseKey(ev); return; }
+      if (view === 'midText') {
+        if (ev.key === 'ArrowRight') { ev.preventDefault(); midTextGo(1); }
+        else if (ev.key === 'ArrowLeft') { ev.preventDefault(); midTextGo(-1); }
+        return;
+      }
       if (view === 'gramStudy') {
         // 돌아보는 중에는 좌우로만 움직인다.
         if (gPeek !== null) {
