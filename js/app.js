@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v113';
+  var BUILD = 'v114';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3707,6 +3707,11 @@
   function midSetName(set) { return set === 'EX' ? '2과 추가자료' : String(set).replace('L', '') + '과'; }
   function midIsWord(q) { return /^W:/.test(q.id); }   // 단어 목록으로 그 자리에서 만든 문제(기록 안 함)
   function midUnit(q) { return !q ? '문제' : (q.type === 'word' ? '단어' : (q.type === 'sent' ? '문장' : '문제')); }
+  // 낼 차례. 본문 쓰기는 글 흐름대로 교재 순서, 나머지는 섞는다.
+  function midOrder(list) {
+    var sent = list.length && list.every(function (q) { return q.type === 'sent'; });
+    return sent ? list.slice().sort(function (a, b) { return a.no - b.no; }) : shuffle(list.slice());
+  }
   function midNo(q) { var m = /-(\d+)$/.exec(q.id); return m ? Number(m[1]) + '번' : '단어'; }
 
   function midLesson(set) {
@@ -4356,7 +4361,7 @@
           var J = midSplitJ(midSentSrc(z.jp)), K = midSplitK(ko);
           if (J.length < 2 || J.length !== K.length) {
             if (blank.test(z.jp) || midSentNorm(J.join('').replace(/\[[^\]]*\]/g, '')).length < 5) return;
-            out.push({ id: id, type: 'sent', set: set, kind: 'sent', jp: z.jp, ko: ko, sp: sp,
+            out.push({ id: id, no: out.length, type: 'sent', set: set, kind: 'sent', jp: z.jp, ko: ko, sp: sp,
                        items: z.items || [], where: where });
             return;
           }
@@ -4364,7 +4369,7 @@
             if (blank.test(j)) return;
             var plain = midSentNorm(j.replace(/\[[^\]]*\]/g, ''));
             if (plain.length < 5) return;
-            out.push({ id: id + '-' + k, type: 'sent', set: set, kind: 'sent', jp: j, ko: K[k], sp: sp,
+            out.push({ id: id + '-' + k, no: out.length, type: 'sent', set: set, kind: 'sent', jp: j, ko: K[k], sp: sp,
                        items: (z.items || []).filter(function (it) { return midItemFor(it, plain); }),
                        where: where + ' (' + (k + 1) + '/' + J.length + ')' });
           });
@@ -4579,8 +4584,8 @@
     m.idx++; m.state = 'ask'; m.pick = null;
     // 틀린 문제는 이 판을 못 떠난다. 한 바퀴를 다 돌면 섞어서 다시 낸다.
     if (m.idx >= m.queue.length && m.retry.length) {
-      m.queue = shuffle(m.retry); m.retry = []; m.idx = 0; m.lap++;
-      toast('남은 ' + m.queue.length + '문제를 섞어서 다시 냅니다');
+      m.queue = midOrder(m.retry); m.retry = []; m.idx = 0; m.lap++;
+      toast('남은 ' + m.queue.length + midUnit(m.queue[0]) + (m.queue[0].type === 'sent' ? '을 다시 냅니다' : '를 섞어서 다시 냅니다'));
     }
     if (m.idx >= m.queue.length) { midFinish(); return; }
     renderMidQ();
@@ -4875,13 +4880,13 @@
 
     // 묶음 화면
     $('btnMsAll').addEventListener('click', function () {
-      if (midSetCur) midStart('practice', shuffle(midSetCur.list.slice()), midSetCur.title, 'midSet');
+      if (midSetCur) midStart('practice', midOrder(midSetCur.list), midSetCur.title, 'midSet');
     });
     $('btnMsWrong').addEventListener('click', function () {
       if (!midSetCur) return;
       var p = Store.examProg();
       var w = midSetCur.list.filter(function (q) { return p[q.id] && !p[q.id].ok; });
-      midStart('practice', shuffle(w), midSetCur.title + ' · 틀린 것', 'midSet');
+      midStart('practice', midOrder(w), midSetCur.title + ' · 틀린 것', 'midSet');
     });
     $('btnMsBrowse').addEventListener('click', function () {
       if (midSetCur) midBrowseStart(midSetCur.list, midSetCur.title);
@@ -4910,7 +4915,7 @@
     });
     $('btnMrRetry').addEventListener('click', function () {
       if (!midRes || !midRes.wrong.length) return;
-      midStart('practice', shuffle(midRes.wrong.map(function (x) { return x.q; })), midRes.label + ' · 틀린 것', midRes.from);
+      midStart('practice', midOrder(midRes.wrong.map(function (x) { return x.q; })), midRes.label + ' · 틀린 것', midRes.from);
     });
     $('btnMrBack').addEventListener('click', function () { goView('mid'); });
     $('mrList').addEventListener('click', midListToggle);
