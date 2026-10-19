@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v112';
+  var BUILD = 'v113';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3706,6 +3706,7 @@
   function midSetOf(q) { return q.set || ('L' + q.lesson); }
   function midSetName(set) { return set === 'EX' ? '2과 추가자료' : String(set).replace('L', '') + '과'; }
   function midIsWord(q) { return /^W:/.test(q.id); }   // 단어 목록으로 그 자리에서 만든 문제(기록 안 함)
+  function midUnit(q) { return !q ? '문제' : (q.type === 'word' ? '단어' : (q.type === 'sent' ? '문장' : '문제')); }
   function midNo(q) { var m = /-(\d+)$/.exec(q.id); return m ? Number(m[1]) + '번' : '단어'; }
 
   function midLesson(set) {
@@ -3810,6 +3811,7 @@
       var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
       var st = midStat(qs);
       var words = (L.vocab || []).length + midExtraWords(L).length;
+      var sents = midSentItems(L.set).length;
       return '<div class="mid-ls">' +
         '<div class="mid-ls-h">' +
           '<span class="mid-ls-no">' + esc(L.no) + '</span>' +
@@ -3819,6 +3821,7 @@
         '<div class="mid-ls-btns">' +
           '<button class="chip" data-act="note" data-set="' + L.set + '">정리</button>' +
           ((L.text || []).length ? '<button class="chip" data-act="text" data-set="' + L.set + '">본문 해설</button>' : '') +
+          (sents ? '<button class="chip" data-act="sents" data-set="' + L.set + '">본문 쓰기 ' + sents + '</button>' : '') +
           (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
           (qs.length ? '<button class="chip" data-act="set" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
         '</div></div>';
@@ -3836,6 +3839,7 @@
     var h = midHeadHTML(L);
     if ((L.text || []).length) {
       h += '<div class="section-head mt-link"><h2></h2><div class="head-actions">' +
+        '<button class="mini-btn" data-act="sents" data-set="' + set + '">본문 쓰기</button>' +
         '<button class="mini-btn go" data-act="text" data-set="' + set + '">본문 해설 · 문단별</button></div></div>';
     }
     if ((L.facts || []).length) {
@@ -4086,6 +4090,11 @@
     var all = midQs(), list, title, sub;
     if (key === 'wrong') {
       list = midWrongList(); title = '틀린 문제'; sub = '마지막으로 풀 때 처음에 틀린 문제';
+    } else if (key.indexOf('sents:') === 0) {
+      var ss = key.slice(6), SL = midLesson(ss);
+      list = midSentItems(ss);
+      title = midSetName(ss) + ' 본문 쓰기';
+      sub = '해석을 보고 일본어 문장으로 · ' + list.length + '문장' + (SL ? ' · ' + SL.jp : '');
     } else if (key.indexOf('words:') === 0) {
       var ws = key.slice(6), WL = midLesson(ws);
       list = midWordItems(ws);
@@ -4116,26 +4125,28 @@
     var c = midSetCur;
     if (!c) return;
     if (c.key === 'wrong') c.list = midWrongList();   // 풀고 오면 줄어든다
-    var words = c.key.indexOf('words:') === 0;
-    var unit = words ? '단어' : '문제';
+    var words = c.key.indexOf('words:') === 0, sents = c.key.indexOf('sents:') === 0;
+    var unit = words ? '단어' : (sents ? '문장' : '문제');
     var p = Store.examProg(), s = midStat(c.list);
     var wrong = c.list.filter(function (q) { return p[q.id] && !p[q.id].ok; });
     $('msTitle').textContent = c.title;
     $('msSub').textContent = c.sub || '';
-    $('msStats').innerHTML = midStatCells([['total', s.n, '전체'], ['', s.n - s.done, words ? '안 본 단어' : '안 푼 문제'],
+    $('msStats').innerHTML = midStatCells([['total', s.n, '전체'], ['', s.n - s.done, '안 해 본 ' + unit],
                                            ['unknown', s.bad, '틀림'], ['long', s.ok, '맞힘']]);
     $('msAllTitle').textContent = words ? '전체 학습' : '전체 풀기';
     $('msAllCount').textContent = c.list.length + unit;
     $('btnMsAll').disabled = !c.list.length;
     $('msWrongCount').textContent = wrong.length + unit;
     $('btnMsWrong').disabled = !wrong.length;
-    $('msListTitle').textContent = words ? '단어 목록' : '문제 목록';
+    $('msListTitle').textContent = unit + ' 목록';
     $('btnMsBrowse').disabled = !c.list.length;
     $('btnMsWQuiz').hidden = !words;
     $('msList').innerHTML = c.list.map(function (q) {
       var r = p[q.id], st = r ? (r.ok ? 'ok' : 'bad') : 'new', side = r ? (r.ok ? '맞힘' : '틀림') : '';
-      return q.type === 'word' ? midWordItemHTML(q, st, side) : midItemHTML(q, st, side, null);
-    }).join('') || '<p class="empty-note">' + unit + '가 없습니다</p>';
+      if (q.type === 'word') return midWordItemHTML(q, st, side);
+      if (q.type === 'sent') return midSentItemHTML(q, st, side);
+      return midItemHTML(q, st, side, null);
+    }).join('') || '<p class="empty-note">' + unit + '이 없습니다</p>';
   }
 
   // 목록 한 줄. 누르면 정답과 해설이 펼쳐진다(단어 목록과 같다).
@@ -4189,6 +4200,7 @@
   }
 
   function midCardHTML(q, o) {
+    if (q.type === 'sent') return midSentCardHTML(q);
     if (q.type === 'word') {
       // 단어 카드: 배지는 이 단어를 지난번에 맞혔는지(단어 모드의 단계 배지 자리).
       var r = Store.examProg()[q.id];
@@ -4273,6 +4285,7 @@
     $('midFill').style.width = ((mock ? m.idx / m.queue.length : m.done / m.total) * 100) + '%';
     $('midLabel').textContent = m.label + (m.lap > 1 ? ' · ' + m.lap + '바퀴째' : '');
     $('btnMidStop').hidden = mock;
+    if (q.type === 'sent') { renderMidSentQ(q); return; }   // 뜻 보고 본문 쓰기는 입력 카드
     var o = mock ? { tap: true, pick: m.picks[m.idx] }
                  : { tap: m.state === 'ask', reveal: m.state !== 'ask', pick: m.pick };
     $('midStage').innerHTML = midCardHTML(q, o);
@@ -4281,6 +4294,234 @@
     });
     midBarState();
     window.scrollTo(0, 0);
+  }
+
+  /* ----- 뜻 보고 본문 쓰기 (단어 모드의 '뜻 → 일본어 · 입력' 과 같은 꼴) ----- */
+  // 본문·회화 문장의 해석을 보여 주고 일본어 문장을 쳐서 맞힌다. 채점은 교재 문장 기준이다.
+  // 문장부호·띄어쓰기는 보지 않고, 후리가나가 달린 낱말은 한자로 쓰든 읽기로 쓰든 정답이다.
+
+  // 회화는 한 사람이 말한 몇 문장이 한 칸이다. 한 문장씩 채점하도록 일본어·해석을 문장 끝에서 나눈다.
+  // 「」 '' 안의 문장부호에서는 나누지 않는다. 두 쪽 문장 수가 다르면 나누지 않는다.
+  function midSplitJ(s) {
+    var out = [], cur = '', depth = 0;
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      cur += c;
+      if (c === '「' || c === '『') depth++;
+      else if (c === '」' || c === '』') depth--;
+      else if (depth <= 0 && /[。？！?!]/.test(c)) {
+        while (i + 1 < s.length && /[。？！?!…）)]/.test(s[i + 1])) cur += s[++i];
+        out.push(cur.trim()); cur = '';
+      }
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  function midSplitK(s) {
+    var out = [], cur = '', q = 0;
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      cur += c;
+      if (c === '“' || c === '‘' || c === '「') q++;
+      else if (c === '”' || c === '’' || c === '」') q--;
+      else if (q <= 0 && /[.?!]/.test(c)) {
+        while (i + 1 < s.length && /[.?!…)]/.test(s[i + 1])) cur += s[++i];
+        if (i + 1 >= s.length || s[i + 1] === ' ') { out.push(cur.trim()); cur = ''; }
+      }
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  // 해설 줄은 앞머리 「…」 로 어느 문장 이야기인지 안다. ～ … 로 끊긴 조각이 모두 들어 있는 문장에 붙인다.
+  function midItemFor(it, plain) {
+    var keys = String(it).match(/^(?:「[^」]*」)+/);
+    if (!keys) return false;
+    return keys[0].slice(1, -1).split('」「').some(function (k) {
+      var bits = k.replace(/（[^）]*）/g, '').split(/[～…]/).filter(function (b) { return b; });
+      return bits.length && bits.every(function (b) { b = midSentNorm(b); return !b || plain.indexOf(b) >= 0; });
+    });
+  }
+
+  function midSentItems(set) {
+    var L = midLesson(set), out = [];
+    if (!L) return out;
+    var blank = /[①②③④⑤⑥⑦⑧⑨⑩]/;   // 정답 대본이 없는 듣기 빈칸이 든 문장은 뺀다
+    // うん。 ね。 そうそう。 같은 맞장구(다섯 글자 미만)도 쓸 거리가 없어 뺀다.
+    (L.text || []).forEach(function (sec, si) {
+      sec.paras.forEach(function (p, pi) {
+        p.sents.forEach(function (z, zi) {
+          var sp = midSpeaker(z.jp), id = 'S:' + set + ':' + si + '-' + pi + '-' + zi;
+          var where = sec.title + ' P' + (pi + 1) + '-' + (zi + 1);
+          var ko = String(z.ko || '').replace(/^[AB][：:]\s*/, '');
+          var J = midSplitJ(midSentSrc(z.jp)), K = midSplitK(ko);
+          if (J.length < 2 || J.length !== K.length) {
+            if (blank.test(z.jp) || midSentNorm(J.join('').replace(/\[[^\]]*\]/g, '')).length < 5) return;
+            out.push({ id: id, type: 'sent', set: set, kind: 'sent', jp: z.jp, ko: ko, sp: sp,
+                       items: z.items || [], where: where });
+            return;
+          }
+          J.forEach(function (j, k) {
+            if (blank.test(j)) return;
+            var plain = midSentNorm(j.replace(/\[[^\]]*\]/g, ''));
+            if (plain.length < 5) return;
+            out.push({ id: id + '-' + k, type: 'sent', set: set, kind: 'sent', jp: j, ko: K[k], sp: sp,
+                       items: (z.items || []).filter(function (it) { return midItemFor(it, plain); }),
+                       where: where + ' (' + (k + 1) + '/' + J.length + ')' });
+          });
+        });
+      });
+    });
+    return out;
+  }
+
+  function midSentSrc(jp) { return String(jp || '').replace(/\{\{|\}\}/g, '').replace(/^[AB][：:]\s*/, ''); }
+  function midSpeaker(jp) { var m = /^([AB])[：:]/.exec(String(jp || '')); return m ? m[1] : ''; }
+
+  // 비교용: 전각·반각을 맞추고 문장부호와 띄어쓰기를 지운다.
+  function midSentNorm(s) {
+    s = String(s || '');
+    try { s = s.normalize('NFKC'); } catch (e) {}
+    return s.replace(/[\s、。，．,.!?！？「」『』（）()・…―—"'“”‘’]/g, '');
+  }
+
+  // 낱말마다 '한자 그대로' 또는 '후리가나 읽기' 를 받는 정규식. 섞어 써도 맞는다.
+  function midSentRe(jp) {
+    var src = midSentSrc(jp), re = rubyRe(), last = 0, x, parts = [];
+    var lit = function (t) { return midSentNorm(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+    while ((x = re.exec(src)) !== null) {
+      parts.push(lit(src.slice(last, x.index)));
+      var base = lit(x[1]), rd = lit(x[2] || '');
+      parts.push(rd ? '(?:' + base + '|' + rd + ')' : base);
+      last = x.index + x[0].length;
+    }
+    parts.push(lit(src.slice(last)));
+    return new RegExp('^' + parts.join('') + '$');
+  }
+
+  function midSentForms(jp) {
+    var src = midSentSrc(jp);
+    return [midSentNorm(src.replace(/\[[^\]]*\]/g, '')),
+            midSentNorm(src.replace(new RegExp('(' + RUBY_BASE + ')\\[([^\\]]*)\\]', 'g'), '$2'))];
+  }
+
+  // 얼마나 가까운지(%). 틀렸어도 거의 맞았는지 알 수 있게. 한자 쪽·읽기 쪽 중 가까운 것.
+  function midSim(a, b) {
+    if (!a && !b) return 100;
+    var m = a.length, n = b.length, prev = [], cur, i, j;
+    for (j = 0; j <= n; j++) prev[j] = j;
+    for (i = 1; i <= m; i++) {
+      cur = [i];
+      for (j = 1; j <= n; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return Math.max(0, Math.round((1 - prev[n] / Math.max(m, n)) * 100));
+  }
+
+  function midSentCheck(typed, q) {
+    var t = midSentNorm(typed);
+    if (!t) return { ok: false, sim: 0 };
+    var ok = midSentRe(q.jp).test(t);
+    var f = midSentForms(q.jp);
+    return { ok: ok, sim: ok ? 100 : Math.max(midSim(t, f[0]), midSim(t, f[1])) };
+  }
+
+  function midSentBadge(q) {
+    var r = Store.examProg()[q.id];
+    return !r ? ['new', '미학습'] : (r.ok ? ['long', '맞힘'] : ['unknown', '틀림']);
+  }
+
+  // 정답(후리가나) · 해석 · 이 문장의 문형 해설. 넘기며 보기·돌아보기·목록이 같이 쓴다.
+  function midSentAnswerHTML(q) {
+    var sp = q.sp || midSpeaker(q.jp);
+    return '<div class="answer-box mid-sans">' +
+        '<p class="mid-sjp" lang="ja">' + (sp ? '<span class="mid-sp">' + sp + '</span>' : '') + gJP(midSentSrc(q.jp), { ruby: true }) + '</p>' +
+      '</div>' +
+      ((q.items || []).length ? '<div class="detail-box mid-detail"><ul class="mt-its">' +
+        q.items.map(function (it) { return '<li>' + midItemFmt(it) + '</li>'; }).join('') + '</ul></div>' : '');
+  }
+
+  function midSentPromptHTML(q) {
+    var sp = q.sp || midSpeaker(q.jp);
+    return '<div class="rev-ko mid-sko">' + (sp ? '<span class="mid-sp">' + sp + '</span>' : '') + esc(q.ko) + '</div>';
+  }
+
+  function midSentCardHTML(q) {
+    var b = midSentBadge(q);
+    return '<div class="card mid-q">' +
+      '<div class="card-meta"><span class="badge ' + b[0] + '">' + b[1] + '</span>' +
+        '<span class="card-no">' + midSetName(q.set) + ' · ' + esc(q.where) + '</span></div>' +
+      midSentPromptHTML(q) + midSentAnswerHTML(q) + '</div>';
+  }
+
+  function renderMidSentQ(q) {
+    var m = mid, b = midSentBadge(q);
+    var h = '<div class="card mid-q">' +
+      '<div class="card-meta"><span class="badge ' + b[0] + '">' + b[1] + '</span>' +
+        '<span class="card-no">' + midSetName(q.set) + ' · ' + esc(q.where) + '</span></div>' +
+      midSentPromptHTML(q);
+    if (m.state === 'ask') {
+      h += '<input class="ginp mid-sinp" id="midSentAns" lang="ja" placeholder="일본어로 쓰기" ' +
+           'autocomplete="off" autocapitalize="off" spellcheck="false">' +
+           '<button class="next-btn" id="midSentSubmit">확인</button>' +
+           '<button class="known-btn" id="midSentSkip">모르겠어요 · 정답 보기</button>';
+    } else {
+      var ok = m.graded === 'right';
+      h += '<div class="gjudge ' + (m.graded === 'skip' ? 'skip' : (ok ? 'right' : 'wrong')) + '">' +
+           (m.graded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다 · 일치 ' + m.sim + '%')) + '</div>';
+      if (m.typed && !ok)
+        h += '<div class="gcmp"><span class="cl">내 답</span><span class="cv bad mid-styped" lang="ja">' + esc(m.typed) + '</span></div>';
+      h += midSentAnswerHTML(q);
+      h += '<button class="next-btn" id="midSentNext">다음 <kbd>Enter</kbd></button>';
+      if (!ok) h += '<button class="known-btn" id="midSentOk">이것도 맞아요 · 정답 처리</button>';
+    }
+    h += '</div>';
+    $('midStage').innerHTML = h;
+    $('midBar').hidden = true;      // 단어 모드의 입력 카드처럼 아래 바 없이 카드 안 버튼으로 간다
+    if ($('midSentAns')) {
+      $('midSentAns').focus();
+      $('midSentAns').addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); ev.stopPropagation(); midSentSubmit(false); }
+      });
+    }
+    if ($('midSentSubmit')) $('midSentSubmit').addEventListener('click', function () { midSentSubmit(false); });
+    if ($('midSentSkip')) $('midSentSkip').addEventListener('click', function () { midSentSubmit(true); });
+    if ($('midSentNext')) $('midSentNext').addEventListener('click', midSentNext);
+    if ($('midSentOk')) $('midSentOk').addEventListener('click', function () { mid.graded = 'right'; renderMidQ(); });
+    window.scrollTo(0, 0);
+  }
+
+  function midSentSubmit(skip) {
+    var m = mid;
+    if (!m || m.state !== 'ask') return;
+    var q = m.queue[m.idx], el = $('midSentAns');
+    m.typed = el ? el.value.trim() : '';
+    if (skip) { m.graded = 'skip'; m.sim = 0; }
+    else if (!m.typed) { if (el) el.focus(); return; }
+    else { var r = midSentCheck(m.typed, q); m.graded = r.ok ? 'right' : 'wrong'; m.sim = r.sim; }
+    m.state = 'typed';
+    renderMidQ();
+  }
+
+  function midSentNext() {
+    var m = mid;
+    if (!m || m.state !== 'typed') return;
+    var ok = m.graded === 'right';
+    m.typed = ''; m.graded = null; m.sim = 0;
+    midAnswer(ok);
+  }
+
+  function midSentItemHTML(q, state, side) {
+    var dot = state === 'ok' ? 'dot-long' : (state === 'bad' ? 'dot-unknown' : 'dot-new');
+    return '<div class="wl-item has-detail mid-li" role="button" tabindex="0">' +
+      '<div class="wl-head"><span class="wl-dot ' + dot + '"></span>' +
+        '<div class="wl-main"><div class="mid-li-ko">' + esc(q.ko) + '</div>' +
+          '<div class="wl-meaning">' + esc(q.where) + '</div></div>' +
+        (side ? '<span class="wl-side">' + esc(side) + '</span>' : '') +
+        '<span class="wl-caret">▾</span></div>' +
+      '<div class="wl-detail" hidden>' + midSentAnswerHTML(q) + '</div>' +
+    '</div>';
   }
 
   // 아래 바: 단어 시험과 같다. 정답 보기 → O/X. 보기를 골랐으면 채점이 끝났으니 '다음' 만.
@@ -4304,7 +4545,8 @@
     var m = mid;
     if (!m || m.finished || m.peek != null) return;
     if (m.mode === 'mock') { m.picks[m.idx] = i; renderMidQ(); return; }   // 제출 전까지 바꿀 수 있다
-    if (m.state !== 'ask' || m.queue[m.idx].type === 'word') return;       // 단어 카드는 보기가 없다
+    var ty = m.queue[m.idx].type;
+    if (m.state !== 'ask' || ty === 'word' || ty === 'sent') return;       // 단어·문장 카드는 보기가 없다
     m.pick = i; m.state = 'picked';
     renderMidQ();
   }
@@ -4428,7 +4670,8 @@
     mid.peek = null;
     $('midPeek').hidden = true;
     $('midStage').hidden = false;
-    $('midBar').hidden = (view !== 'midQuiz');
+    var cq = mid.queue[mid.idx];
+    $('midBar').hidden = (view !== 'midQuiz') || !!(cq && cq.type === 'sent');
   }
 
   /* ----- 결과 (단어 시험 결과와 같은 꼴) ----- */
@@ -4444,13 +4687,13 @@
                                              ['unknown', n - first - none, '틀림'], ['', none, '안 품']]);
     } else {
       var later = items.filter(function (x) { return !x.firstOk && x.lastOk; }).length;
-      var isWord = items.length && items[0].q.type === 'word';
-      $('mrTitle').textContent = n + (isWord ? '단어' : '문제') + ' 중 ' + first + '개를 한 번에';
-      $('mrStats').innerHTML = midStatCells([['total', n, isWord ? '본 단어' : '푼 문제'], ['long', first, '한 번에'],
+      var unit = midUnit(items[0] && items[0].q);
+      $('mrTitle').textContent = n + unit + ' 중 ' + first + '개를 한 번에';
+      $('mrStats').innerHTML = midStatCells([['total', n, unit === '단어' ? '본 단어' : '푼 ' + unit], ['long', first, '한 번에'],
                                              ['short', later, '다시 풀어 맞힘'], ['unknown', n - first - later, '못 맞힘']]);
     }
     var left = (!mock && stopped) ? (m.queue.length - m.idx) + m.retry.length : 0;
-    $('mrMeta').textContent = m.label + ' · ' + mins + '분' + (left ? ' · 여기까지 하고 멈춤(남은 ' + left + '문제)' : '');
+    $('mrMeta').textContent = m.label + ' · ' + mins + '분' + (left ? ' · 여기까지 하고 멈춤(남은 ' + left + midUnit(items[0] && items[0].q) + ')' : '');
     $('mrMeta').hidden = false;
 
     var byKind = {};
@@ -4466,7 +4709,7 @@
                view: 'wrong', label: m.label, from: m.from, mock: mock };
     if (!midRes.wrong.length) midRes.view = 'all';
     renderMidResList();
-    $('mrRetryCount').textContent = midRes.wrong.length + '문제';
+    $('mrRetryCount').textContent = midRes.wrong.length + midUnit(items[0] && items[0].q);
     $('btnMrRetry').disabled = !midRes.wrong.length;
     show('midResult');
   }
@@ -4483,16 +4726,17 @@
     var list = r.view === 'wrong' ? r.wrong : r.all;
     $('mrTabWrong').classList.toggle('sel', r.view === 'wrong');
     $('mrTabAll').classList.toggle('sel', r.view === 'all');
-    var unit = (r.all.length && r.all[0].q.type === 'word') ? '단어' : '문제';
+    var unit = midUnit(r.all[0] && r.all[0].q);
     $('mrTabWrong').textContent = '틀린 ' + unit;
     $('mrListTitle').textContent = r.view === 'wrong' ? '틀린 ' + unit : '전체';
     $('mrEmpty').hidden = list.length > 0;
     $('mrEmpty').textContent = '한 번에 다 맞혔습니다';
     $('btnMrBrowse').disabled = !list.length;
     $('mrList').innerHTML = list.map(function (x) {
-      return x.q.type === 'word'
-        ? midWordItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock))
-        : midItemHTML(x.q, x.firstOk ? 'ok' : 'bad', midTriesLabel(x, r.mock), x.pick);
+      var st = x.firstOk ? 'ok' : 'bad', side = midTriesLabel(x, r.mock);
+      if (x.q.type === 'word') return midWordItemHTML(x.q, st, side);
+      if (x.q.type === 'sent') return midSentItemHTML(x.q, st, side);
+      return midItemHTML(x.q, st, side, x.pick);
     }).join('');
   }
 
@@ -4549,6 +4793,11 @@
       return;
     }
     if (k === 'ArrowLeft') { ev.preventDefault(); midPeekOpen(m.order.length - 1); return; }
+    // 본문 쓰기: 입력칸의 Enter 는 입력칸이 받는다. 채점 뒤 Enter 는 다음.
+    if (m.queue[m.idx].type === 'sent') {
+      if ((k === 'Enter' || k === ' ') && m.state === 'typed') { ev.preventDefault(); midSentNext(); }
+      return;
+    }
     if (k === 'Enter' || k === ' ') {
       ev.preventDefault();
       if (m.state === 'ask') midReveal();
@@ -4602,6 +4851,7 @@
           var set = b.dataset.set, act = b.dataset.act;
           if (act === 'note') openMidNote(set);
           else if (act === 'words') openMidSet('words:' + set);
+          else if (act === 'sents') openMidSet('sents:' + set);
           else if (act === 'wquiz') midWordQuiz(set);
           else if (act === 'set') openMidSet(set);
           else if (act === 'text') openMidText(set);
