@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v114';
+  var BUILD = 'v115';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3811,7 +3811,7 @@
       return n ? '<button class="chip" data-kind="' + k + '">' + MID_KIND[k] + ' <i>' + n + '</i></button>' : '';
     }).join('');
 
-    midVocabMap = null;   // 받기로 단어장이 바뀌었을 수 있다
+    midVocabMap = null; midReadMap = null;   // 받기로 단어장이 바뀌었을 수 있다
     $('midLessons').innerHTML = (d.lessons || []).map(function (L) {
       var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
       var st = midStat(qs);
@@ -4149,7 +4149,7 @@
     $('msList').innerHTML = c.list.map(function (q) {
       var r = p[q.id], st = r ? (r.ok ? 'ok' : 'bad') : 'new', side = r ? (r.ok ? '맞힘' : '틀림') : '';
       if (q.type === 'word') return midWordItemHTML(q, st, side);
-      if (q.type === 'sent') return midSentItemHTML(q, st, side);
+      if (q.type === 'sent') return midSentItemHTML(q, st, side, true);
       return midItemHTML(q, st, side, null);
     }).join('') || '<p class="empty-note">' + unit + '이 없습니다</p>';
   }
@@ -4389,47 +4389,230 @@
     return s.replace(/[\s、。，．,.!?！？「」『』（）()・…―—"'“”‘’]/g, '');
   }
 
-  // 낱말마다 '한자 그대로' 또는 '후리가나 읽기' 를 받는 정규식. 섞어 써도 맞는다.
-  function midSentRe(jp) {
-    var src = midSentSrc(jp), re = rubyRe(), last = 0, x, parts = [];
-    var lit = function (t) { return midSentNorm(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  // 정답과 글자 단위로 맞춰 보기. 채점도 이것으로 한다(고칠 곳이 0 이면 정답).
+  // 정답은 낱말마다 '한자 그대로' 와 '후리가나 읽기' 두 갈래가 끝에서 다시 만나는 격자다.
+  // 섞어 써도 되지만 한 낱말 안에서 한자와 읽기를 반씩 쓴 것은 틀린다.
+  // 입력 글자 하나를 넣거나·바꾸거나, 정답 글자 하나를 빠뜨리면 1 씩 센다.
+  function midSentSegs(jp) {
+    var src = midSentSrc(jp), re = rubyRe(), last = 0, x, segs = [];
+    var plain = function (t) {
+      for (var i = 0; i < t.length; i++) { var a = midSentNorm(t[i]); segs.push({ t: t[i], alts: a ? [a] : [] }); }
+    };
     while ((x = re.exec(src)) !== null) {
-      parts.push(lit(src.slice(last, x.index)));
-      var base = lit(x[1]), rd = lit(x[2] || '');
-      parts.push(rd ? '(?:' + base + '|' + rd + ')' : base);
+      plain(src.slice(last, x.index));
+      // 1965年[ねん] 처럼 앞에 붙은 숫자는 후리가나가 덮지 않으니 따로 뗀다(1965ねん 도 맞게).
+      var base = x[1], lead = /^[0-9０-９A-Za-zＡ-Ｚａ-ｚ]+(?=[^0-9０-９A-Za-zＡ-Ｚａ-ｚ])/.exec(base);
+      if (lead && x[2]) { plain(lead[0]); base = base.slice(lead[0].length); }
+      midSplitRuby(base, x[2] || '').forEach(function (pr) {
+        var b = midSentNorm(pr[0]), r = midSentNorm(pr[1]);
+        segs.push({ base: pr[0], rt: pr[1], alts: (r && r !== b) ? [b, r] : [b] });
+      });
       last = x.index + x[0].length;
     }
-    parts.push(lit(src.slice(last)));
-    return new RegExp('^' + parts.join('') + '$');
+    plain(src.slice(last));
+    return segs;
   }
 
-  function midSentForms(jp) {
-    var src = midSentSrc(jp);
-    return [midSentNorm(src.replace(/\[[^\]]*\]/g, '')),
-            midSentNorm(src.replace(new RegExp('(' + RUBY_BASE + ')\\[([^\\]]*)\\]', 'g'), '$2'))];
+  // 후리가나가 여러 낱말에 한 덩어리로 달린 곳(鎌倉時代[かまくらじだい])을 낱말로 가르기 위한 사전.
+  // read: 두 글자 이상 한자어 → 읽기들. JLPT 단어장·시험 단어의 표제어와, 예문·본문 후리가나 가운데
+  //       두 글자 이상인 것에서 모은다(気[き] 같은 한 글자 조각까지 넣으면 人気 를 人|気 로 가른다).
+  // head: JLPT 단어장 표제어. 표제어인 덩어리(人間関係 …)는 한 낱말이니 가르지 않는다.
+  var midReadMap = null;
+  function midReadIndex() {
+    if (midReadMap) return midReadMap;
+    var read = {}, head = {}, KJ = /^[一-龯々〆ヶ]+$/, KN = /^[ぁ-ゖー]+$/;
+    var strip = function (w, r) {
+      w = String(w || '').replace(/[（(][^)）]*[)）]/g, '').trim();
+      r = String(r || '').replace(/[（(][^)）]*[)）]/g, '').trim();
+      // 注意する/ちゅういする 처럼 낱말 쪽이 する·だ·な 로 끝날 때만 읽기에서도 뗀다(はな 의 な 는 그대로)
+      var m = /(する|だ|な)$/.exec(w);
+      if (m && r.slice(-m[1].length) === m[1]) { w = w.slice(0, -m[1].length); r = r.slice(0, -m[1].length); }
+      // 앞뒤로 같은 가나(送り仮名, お盆 의 お)는 떼고 한자 부분만 남긴다
+      while (w && r && w.slice(-1) === r.slice(-1) && !KJ.test(w.slice(-1))) { w = w.slice(0, -1); r = r.slice(0, -1); }
+      while (w && r && w[0] === r[0] && !KJ.test(w[0])) { w = w.slice(1); r = r.slice(1); }
+      return KJ.test(w) && KN.test(r) ? [w, r] : null;
+    };
+    var add = function (p) {
+      if (!p || p[0].length < 2) return;
+      var a = read[p[0]] || (read[p[0]] = []);
+      if (a.indexOf(p[1]) < 0) a.push(p[1]);
+    };
+    // 시험 단어 목록에는 鎌倉時代·花火大会 같은 구도 들어 있어, 표제어(가르지 않음)는 JLPT 단어장 것만 친다.
+    var word = function (w, r, isHead) { var p = strip(w, r); if (p) { if (isHead) head[p[0]] = 1; add(p); } };
+    var scan = function (jp) {
+      var re = rubyRe(), x, s = String(jp || '');
+      while ((x = re.exec(s)) !== null) if (x[2] && KJ.test(x[1])) add([x[1], x[2]]);
+    };
+    Store.allWords().forEach(function (e) {
+      var ws = String(e.w.word || '').split(/[\/／]/), rs = String(e.w.reading || '').split(/[\/／]/);
+      ws.forEach(function (w, k) { word(w, rs[k] || rs[0], true); });
+      (e.w.examples || []).forEach(function (ex) { scan(ex.jp); });
+    });
+    var d = midData();
+    ((d && d.lessons) || []).forEach(function (L) {
+      (L.vocab || []).concat(L.extraWords || []).forEach(function (v) { word(v.word, v.reading); });
+      (L.text || []).forEach(function (sec) {
+        sec.paras.forEach(function (p) { p.sents.forEach(function (z) { scan(z.jp); }); });
+      });
+      (L.grammar || []).forEach(function (g) { (g.examples || []).forEach(function (ex) { scan(ex.jp); }); });
+    });
+    return (midReadMap = { read: read, head: head });
   }
 
-  // 얼마나 가까운지(%). 틀렸어도 거의 맞았는지 알 수 있게. 한자 쪽·읽기 쪽 중 가까운 것.
-  function midSim(a, b) {
-    if (!a && !b) return 100;
-    var m = a.length, n = b.length, prev = [], cur, i, j;
-    for (j = 0; j <= n; j++) prev[j] = j;
-    for (i = 1; i <= m; i++) {
-      cur = [i];
-      for (j = 1; j <= n; j++) {
-        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  // 한 덩어리를 사전의 한자어(읽기가 그 자리에 꼭 맞는 것)와, 그 사이에 낀 두 글자 이상의 모르는 말로
+  // 가른다. 모르는 말끼리 붙거나 한 글자짜리 조각은 두지 않는다(一人[ひとり] 같은 숙자훈을 지킨다).
+  // 사전 말이 가장 많이 덮는 쪽, 같으면 덜 잘게(긴 낱말) 가른 쪽. 못 가르면 통째로 둔다.
+  function midSplitRuby(b, r) {
+    if (b.length < 4 || !r || !/^[一-龯々〆ヶ]+$/.test(b)) return [[b, r]];
+    var ix = midReadIndex(), dict = ix.read, memo = {};
+    if (ix.head[b]) return [[b, r]];
+    var go = function (i, j, prevUnk) {
+      if (i === b.length) return j === r.length ? { cov: 0, n: 0, parts: [] } : null;
+      var key = i + ',' + j + ',' + (prevUnk ? 1 : 0);
+      if (key in memo) return memo[key];
+      var best = null;
+      var take = function (sub, w, rd, known) {
+        if (!sub) return;
+        var c = { cov: sub.cov + (known ? w.length : 0), n: sub.n + 1, parts: [[w, rd]].concat(sub.parts) };
+        if (!best || c.cov > best.cov || (c.cov === best.cov && c.n < best.n)) best = c;
+      };
+      for (var i2 = i + 2; i2 <= b.length; i2++) {
+        if (i === 0 && i2 === b.length) break;          // 덩어리 통째는 후보가 아니다
+        var w = b.slice(i, i2), rds = dict[w] || [];
+        for (var k = 0; k < rds.length; k++) {
+          if (r.substr(j, rds[k].length) === rds[k]) take(go(i2, j + rds[k].length, false), w, rds[k], true);
+        }
+        if (!prevUnk) {
+          for (var j2 = j + 1; j2 <= r.length; j2++) take(go(i2, j2, true), w, r.slice(j, j2), false);
+        }
       }
-      prev = cur;
-    }
-    return Math.max(0, Math.round((1 - prev[n] / Math.max(m, n)) * 100));
+      return (memo[key] = best);
+    };
+    var res = go(0, 0, false);
+    return (res && res.n > 1 && res.cov > 0) ? res.parts : [[b, r]];
   }
 
-  function midSentCheck(typed, q) {
-    var t = midSentNorm(typed);
-    if (!t) return { ok: false, sim: 0 };
-    var ok = midSentRe(q.jp).test(t);
-    var f = midSentForms(q.jp);
-    return { ok: ok, sim: ok ? 100 : Math.max(midSim(t, f[0]), midSim(t, f[1])) };
+  // 입력을 글자로 가른다. 반각 탁점처럼 앞 글자에 붙는 것은 한 글자로 본다.
+  function midTypedUnits(typed) {
+    var s = String(typed || ''), out = [];
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      if (/[\uD800-\uDBFF]/.test(c) && i + 1 < s.length) c += s[++i];
+      while (i + 1 < s.length && /[\u3099\u309A\uFF9E\uFF9F]/.test(s[i + 1])) c += s[++i];
+      out.push({ raw: c, n: midSentNorm(c) });
+    }
+    return out;
+  }
+
+  // 같은 표시가 이어지는 글자들을 한 덩어리로 감싼다.
+  function midRuns(parts) {
+    var h = '', cls = null;
+    parts.forEach(function (p) {
+      if (p.cls !== cls) { if (cls) h += '</span>'; if (p.cls) h += '<span class="' + p.cls + '">'; cls = p.cls; }
+      h += p.html;
+    });
+    return cls ? h + '</span>' : h;
+  }
+
+  // 가나를 '비슷한 글자' 끼리 같게: 가타카나→히라가나, 탁점·반탁점 떼기, 작은 글자→큰 글자.
+  function midKanaKey(c) {
+    var x = c.charCodeAt(0);
+    if (x >= 0x30A1 && x <= 0x30F6) c = String.fromCharCode(x - 0x60);
+    try { c = c.normalize('NFD').replace(/[\u3099\u309A]/g, ''); } catch (e) {}
+    var small = 'ぁぃぅぇぉっゃゅょゎ', big = 'あいうえおつやゆよわ', k = small.indexOf(c);
+    return k >= 0 ? big[k] : c;
+  }
+
+  function midSentDiff(typed, q) {
+    var units = midTypedUnits(typed), T = [];
+    units.forEach(function (u, ui) { for (var k = 0; k < u.n.length; k++) T.push({ c: u.n[k], u: ui }); });
+    var segs = midSentSegs(q.jp);
+
+    // 격자: inc[v] = v 로 들어오는 글자 길. 마디 번호는 길 방향으로만 커진다.
+    var inc = [[]], cur = 0;
+    segs.forEach(function (s, si) {
+      if (!s.alts.length) return;               // 문장부호는 보지 않는다
+      var tails = [];
+      s.alts.forEach(function (a, ai) {
+        var u = cur;
+        for (var k = 0; k < a.length; k++) {
+          var e = { from: u, c: a[k], seg: si, alt: ai };
+          if (k === a.length - 1) { tails.push(e); break; }
+          inc.push([e]); u = inc.length - 1;
+        }
+      });
+      inc.push(tails); cur = inc.length - 1;
+    });
+
+    // 어디가 틀렸는지 사람이 보기 좋게 맞추려고 비용을 이렇게 준다(채점은 고칠 곳 수로만 한다):
+    // 바꾸기 100(か↔が 처럼 비슷한 가나는 50), 빠뜨리기·더 쓰기는 한 덩어리를 여는 데 100 + 글자마다 50,
+    // 맞은 글자는 −1(같은 비용이면 맞은 글자가 많은 쪽).
+    var SUB = 100, NEAR = 50, OPEN = 100, EXT = 50, INF = 1e12;
+    var N = inc.length, n = T.length, M = [], X = [], Y = [], BM = [], BX = [], BY = [];
+    var min3 = function (a, b, c) { return a <= b && a <= c ? [a, 'M'] : (b <= c ? [b, 'X'] : [c, 'Y']); };
+    for (var v = 0; v < N; v++) {
+      M[v] = []; X[v] = []; Y[v] = []; BM[v] = []; BX[v] = []; BY[v] = [];
+      for (var i = 0; i <= n; i++) {
+        var m = (v === 0 && i === 0) ? 0 : INF, bm = null, x = INF, bx = null;
+        for (var j = 0; j < inc[v].length; j++) {
+          var e = inc[v][j], u = e.from;
+          if (i > 0) {   // 맞음·바꿈: 입력 글자 하나와 정답 글자 하나
+            var t = T[i - 1].c, cost = t === e.c ? -1 : (midKanaKey(t) === midKanaKey(e.c) ? NEAR : SUB);
+            var p = min3(M[u][i - 1], X[u][i - 1], Y[u][i - 1]);
+            if (p[0] + cost < m) { m = p[0] + cost; bm = { e: e, s: p[1], k: t === e.c ? 'ok' : 'sub' }; }
+          }
+          // 빠뜨림: 정답 글자만 지나간다
+          var xo = Math.min(M[u][i], Y[u][i]) + OPEN + EXT, xe = X[u][i] + EXT;
+          if (xe <= xo) { if (xe < x) { x = xe; bx = { e: e, s: 'X' }; } }
+          else if (xo < x) { x = xo; bx = { e: e, s: M[u][i] <= Y[u][i] ? 'M' : 'Y' }; }
+        }
+        var y = INF, by = null;
+        if (i > 0) {   // 더 씀: 입력 글자만 지나간다
+          var yo = Math.min(M[v][i - 1], X[v][i - 1]) + OPEN + EXT, ye = Y[v][i - 1] + EXT;
+          if (ye <= yo) { y = ye; by = 'Y'; } else { y = yo; by = M[v][i - 1] <= X[v][i - 1] ? 'M' : 'X'; }
+        }
+        M[v][i] = m; BM[v][i] = bm; X[v][i] = x; BX[v][i] = bx; Y[v][i] = y; BY[v][i] = by;
+      }
+    }
+
+    // 되짚기: 입력의 어느 글자가 틀렸고, 정답의 어느 낱말을 놓쳤고, 어디서 빠뜨렸는지.
+    var tBad = [], gap = {}, segBad = {}, steps = 0, dist = 0;
+    v = N - 1; i = n;
+    var st = min3(M[v][i], X[v][i], Y[v][i])[1], guard = 0;
+    while ((v > 0 || i > 0) && guard++ < 100000) {
+      if (st === 'Y') { tBad[i - 1] = true; dist++; st = BY[v][i]; i--; continue; }
+      var h = st === 'M' ? BM[v][i] : BX[v][i];
+      if (!h) break;
+      steps++;
+      if (st === 'M') {
+        if (h.k === 'sub') { tBad[i - 1] = true; segBad[h.e.seg] = true; dist++; }
+        i--;
+      } else { segBad[h.e.seg] = true; gap[i] = true; dist++; }
+      st = h.s; v = h.e.from;
+    }
+    var ok = n > 0 && dist === 0;
+    var sim = n ? Math.max(0, Math.round((1 - dist / Math.max(n, steps)) * 100)) : 0;
+
+    // 내 답: 맞은 글자 · 틀린 글자 · 빠뜨린 자리(▏).
+    var uBad = [], uGap = [];
+    T.forEach(function (t, k) { if (tBad[k]) uBad[t.u] = true; });
+    Object.keys(gap).forEach(function (k) { k = Number(k); uGap[k < n ? T[k].u : units.length] = true; });
+    var mine = [];
+    units.forEach(function (u, k) {
+      if (uGap[k]) mine.push({ cls: null, html: '<i class="d-gap"></i>' });
+      mine.push({ cls: !u.n ? null : (uBad[k] ? 'd-bad' : 'd-ok'), html: esc(u.raw) });
+    });
+    if (uGap[units.length]) mine.push({ cls: null, html: '<i class="d-gap"></i>' });
+
+    // 정답: 틀렸거나 빠뜨린 낱말을 칠한다.
+    var ans = segs.map(function (s, si) {
+      var body = s.base != null
+        ? (s.rt ? '<ruby>' + esc(s.base) + '<rt>' + esc(s.rt) + '</rt></ruby>' : esc(s.base))
+        : esc(s.t);
+      return { cls: segBad[si] ? 'd-miss' : null, html: body };
+    });
+
+    return { ok: ok, sim: ok ? 100 : sim, mine: midRuns(mine), ans: midRuns(ans) };
   }
 
   function midSentBadge(q) {
@@ -4438,10 +4621,11 @@
   }
 
   // 정답(후리가나) · 해석 · 이 문장의 문형 해설. 넘기며 보기·돌아보기·목록이 같이 쓴다.
-  function midSentAnswerHTML(q) {
+  // jpHTML 은 채점 뒤 틀린 낱말을 칠한 정답(midSentDiff 의 ans).
+  function midSentAnswerHTML(q, jpHTML) {
     var sp = q.sp || midSpeaker(q.jp);
     return '<div class="answer-box mid-sans">' +
-        '<p class="mid-sjp" lang="ja">' + (sp ? '<span class="mid-sp">' + sp + '</span>' : '') + gJP(midSentSrc(q.jp), { ruby: true }) + '</p>' +
+        '<p class="mid-sjp" lang="ja">' + (sp ? '<span class="mid-sp">' + sp + '</span>' : '') + (jpHTML || gJP(midSentSrc(q.jp), { ruby: true })) + '</p>' +
       '</div>' +
       ((q.items || []).length ? '<div class="detail-box mid-detail"><ul class="mt-its">' +
         q.items.map(function (it) { return '<li>' + midItemFmt(it) + '</li>'; }).join('') + '</ul></div>' : '');
@@ -4472,12 +4656,15 @@
            '<button class="next-btn" id="midSentSubmit">확인</button>' +
            '<button class="known-btn" id="midSentSkip">모르겠어요 · 정답 보기</button>';
     } else {
-      var ok = m.graded === 'right';
+      var ok = m.graded === 'right', d = m.diff, marks = d && !d.ok;
       h += '<div class="gjudge ' + (m.graded === 'skip' ? 'skip' : (ok ? 'right' : 'wrong')) + '">' +
-           (m.graded === 'skip' ? '정답을 확인하세요' : (ok ? '정답입니다' : '틀렸습니다 · 일치 ' + m.sim + '%')) + '</div>';
-      if (m.typed && !ok)
-        h += '<div class="gcmp"><span class="cl">내 답</span><span class="cv bad mid-styped" lang="ja">' + esc(m.typed) + '</span></div>';
-      h += midSentAnswerHTML(q);
+           (m.graded === 'skip' ? '정답을 확인하세요'
+             : ok ? (marks ? '정답으로 처리 · 일치 ' + m.sim + '%' : '정답입니다')
+             : '틀렸습니다 · 일치 ' + m.sim + '%') + '</div>';
+      // 내 답은 맞은 글자 · 틀린 글자 · 빠뜨린 자리로, 정답은 놓친 낱말을 칠해 보여 준다.
+      if (marks)
+        h += '<div class="gcmp"><span class="cl">내 답</span><span class="cv mid-styped" lang="ja">' + d.mine + '</span></div>';
+      h += midSentAnswerHTML(q, marks ? d.ans : '');
       h += '<button class="next-btn" id="midSentNext">다음 <kbd>Enter</kbd></button>';
       if (!ok) h += '<button class="known-btn" id="midSentOk">이것도 맞아요 · 정답 처리</button>';
     }
@@ -4502,9 +4689,10 @@
     if (!m || m.state !== 'ask') return;
     var q = m.queue[m.idx], el = $('midSentAns');
     m.typed = el ? el.value.trim() : '';
+    m.diff = null;
     if (skip) { m.graded = 'skip'; m.sim = 0; }
     else if (!m.typed) { if (el) el.focus(); return; }
-    else { var r = midSentCheck(m.typed, q); m.graded = r.ok ? 'right' : 'wrong'; m.sim = r.sim; }
+    else { var r = midSentDiff(m.typed, q); m.graded = r.ok ? 'right' : 'wrong'; m.sim = r.sim; m.diff = r; }
     m.state = 'typed';
     renderMidQ();
   }
@@ -4513,11 +4701,12 @@
     var m = mid;
     if (!m || m.state !== 'typed') return;
     var ok = m.graded === 'right';
-    m.typed = ''; m.graded = null; m.sim = 0;
+    m.typed = ''; m.graded = null; m.sim = 0; m.diff = null;
     midAnswer(ok);
   }
 
-  function midSentItemHTML(q, state, side) {
+  // from: 묶음 화면의 목록이면 펼친 안에 '여기서부터 시험 보기' 를 둔다.
+  function midSentItemHTML(q, state, side, from) {
     var dot = state === 'ok' ? 'dot-long' : (state === 'bad' ? 'dot-unknown' : 'dot-new');
     return '<div class="wl-item has-detail mid-li" role="button" tabindex="0">' +
       '<div class="wl-head"><span class="wl-dot ' + dot + '"></span>' +
@@ -4525,8 +4714,18 @@
           '<div class="wl-meaning">' + esc(q.where) + '</div></div>' +
         (side ? '<span class="wl-side">' + esc(side) + '</span>' : '') +
         '<span class="wl-caret">▾</span></div>' +
-      '<div class="wl-detail" hidden>' + midSentAnswerHTML(q) + '</div>' +
+      '<div class="wl-detail" hidden>' +
+        (from ? '<button class="mini-btn go mid-from" data-from="' + q.no + '">여기서부터 시험 보기</button>' : '') +
+        midSentAnswerHTML(q) + '</div>' +
     '</div>';
+  }
+
+  // 고른 문장부터 끝까지 교재 순서대로.
+  function midSentFrom(no) {
+    var c = midSetCur;
+    if (!c || c.key.indexOf('sents:') !== 0) return;
+    var list = c.list.filter(function (q) { return q.no >= no; }), first = list[0];
+    if (first) midStart('practice', midOrder(list), c.title + ' · ' + first.where + '부터', 'midSet');
   }
 
   // 아래 바: 단어 시험과 같다. 정답 보기 → O/X. 보기를 골랐으면 채점이 끝났으니 '다음' 만.
@@ -4757,7 +4956,9 @@
 
   function renderMidBrowse() {
     var b = midBrowse, x = b.list[b.index];
-    var q = x.q || x, pick = x.q ? x.pick : null;
+    // 결과 화면에서 온 { q, pick } 묶음인지는 q 가 객체인지로 가린다(문제 자체에도 글자 q 가 있다).
+    var wrap = !!x.q && typeof x.q === 'object';
+    var q = wrap ? x.q : x, pick = wrap ? x.pick : null;
     $('mbStage').innerHTML = midCardHTML(q, { reveal: true, pick: pick });
     var n = b.list.length;
     $('mbCount').textContent = (b.index + 1) + ' / ' + n;
@@ -4800,6 +5001,8 @@
     if (k === 'ArrowLeft') { ev.preventDefault(); midPeekOpen(m.order.length - 1); return; }
     // 본문 쓰기: 입력칸의 Enter 는 입력칸이 받는다. 채점 뒤 Enter 는 다음.
     if (m.queue[m.idx].type === 'sent') {
+      // 버튼('이것도 맞아요' 등)에 포커스가 있으면 Enter 는 그 버튼이 받는다
+      if (ev.target && ev.target.closest && ev.target.closest('button, a')) return;
       if ((k === 'Enter' || k === ' ') && m.state === 'typed') { ev.preventDefault(); midSentNext(); }
       return;
     }
@@ -4894,7 +5097,11 @@
     $('btnMsWQuiz').addEventListener('click', function () {
       if (midSetCur && midSetCur.key.indexOf('words:') === 0) midWordQuiz(midSetCur.key.slice(6));
     });
-    $('msList').addEventListener('click', midListToggle);
+    $('msList').addEventListener('click', function (ev) {
+      var f = ev.target.closest('[data-from]');
+      if (f) { midSentFrom(Number(f.dataset.from)); return; }
+      midListToggle(ev);
+    });
 
     // 풀기
     $('btnMidReveal').addEventListener('click', midReveal);

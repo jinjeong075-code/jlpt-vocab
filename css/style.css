@@ -1472,3 +1472,11 @@ div.gopt.mid-opt.wrong, div.gopt.mid-opt.wrong:hover { color: var(--no); }
 .mid-sjp rt { display: ruby-text; font-size: .5em; color: var(--rt); }
 .gcmp .cv.mid-styped { font-size: 15px; line-height: 1.6; word-break: break-all; }
 .mid-li-ko { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 본문 쓰기 채점 표시: 내 답의 틀린 글자 · 빠뜨린 자리, 정답에서 놓친 낱말 */
+.mid-styped .d-ok { color: var(--text); }
+.mid-styped .d-bad { color: var(--no); background: rgba(224,123,123,.16); border-radius: 3px; }
+.mid-styped .d-gap { display: inline-block; width: 2px; height: 1.1em; margin: 0 2px; vertical-align: -.2em;
+  background: var(--no); border-radius: 1px; }
+.mid-sjp .d-miss { color: var(--warn); background: rgba(217,164,65,.16); border-radius: 3px; }
+.mid-sjp .d-miss rt { color: var(--warn); }
+.mini-btn.mid-from { display: block; margin: 10px 0 0; }
