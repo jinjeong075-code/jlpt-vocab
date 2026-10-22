@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v118';
+  var BUILD = 'v119';
 
   /* ---------------- 화면 ---------------- */
 
@@ -157,31 +157,10 @@
     $('pkKanjiSub').textContent = ks.length + '자';
     $('pkKanjiPct').textContent = (ks.length ? Math.round(kDone / ks.length * 100) : 0) + '%';
 
-    // 시험 대비: 자료가 있을 때만. 숫자는 맞힌 문제 비율(마지막 시도 기준).
-    var ed = Store.examData();
-    $('pkMid').hidden = !ed;
-    if (ed) {
-      var es = midStat(midQs());
-      $('pkMidSub').textContent = ((ed.info && ed.info.short) || '시험') + ' · ' + midDday();
-      $('pkMidPct').textContent = (es.n ? Math.round(es.ok / es.n * 100) : 0) + '%';
-    }
-
-    // 풀다 만 것이 있으면 여기서도 보여 준다. 단어·한자는 한 자리를 같이 쓰고,
-    // 문법은 따로 저장되므로 둘 다 있으면 나중에 저장된 쪽을 낸다.
-    var w = restoreSession();
-    var raw = Store.loadSession();
-    var gs = Store.loadGSession();
-    var gOk = !!(gs && gs.queue && gs.index < gs.queue.length);
-    pkResume = (gOk && (!w || (gs.savedAt || 0) > ((raw && raw.savedAt) || 0))) ? 'gram' : 'word';
-    if (pkResume === 'gram') {
-      $('btnPkResume').hidden = false;
-      $('btnPkResume').querySelector('.rs-label').textContent = '이어서 학습';
-      $('pkResumeInfo').textContent =
-        (G_NAME[gs.mode] || '문법') + ' · ' + gs.label + ' · ' + (gs.index + 1) + ' / ' + gs.queue.length;
-    } else {
-      // 단어·한자는 한 자리를 같이 쓴다. 풀다 만 것이 없으면 마지막으로 하던 묶음을 낸다.
-      if (!fillResume('btnPkResume', 'pkResumeInfo', false)) pkResume = '';
-    }
+    // 첫 화면에는 시험 대비 칸과 이어서 학습 버튼을 두지 않는다(사용자 요청). 이어서 학습은 각 모드 안에 있다.
+    $('pkMid').hidden = true;
+    $('btnPkResume').hidden = true;
+    pkResume = '';
   }
 
   var VIEW_TITLE = {
