@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v117';
+  var BUILD = 'v118';
 
   /* ---------------- 화면 ---------------- */
 
@@ -294,6 +294,7 @@
     if (stN) $('storyCount').textContent = stN + ' Day';
     renderDaily();
     renderPosChips();
+    renderLcChips();
     renderRateChips();
     renderKanjiChips();
     $$('#dirChips .chip').forEach(function (c) {
@@ -323,7 +324,7 @@
     $('btnRandStudy').textContent =
       randCount && randCount < s.total ? randCount + '개 랜덤 학습' : '전체 랜덤 학습';
 
-    var days = Store.allDays();
+    var days = gridDays();
     $('emptyNote').hidden = days.length > 0;
     $('dayGrid').innerHTML = days.map(function (d) {
       var ds = Store.summarize(d.words, d.day);
@@ -341,6 +342,47 @@
 
     $('btnSelAll').textContent = (selected.length === days.length && days.length) ? '선택 해제' : '전체 선택';
     renderSelBar();
+  }
+
+  /* ---------------- 듣기 수업 단어 ---------------- */
+  // 대학 듣기 수업(일본어LCⅡ) 과별 단어. 과 목록은 시험 대비 자료(exam.js 의 lc 과)에 있고,
+  // 단어장에 이미 있는 단어는 그 단어를, 없던 단어는 숨은 DAY 202~208 의 단어를 가리킨다.
+  // 숨은 DAY 는 Day 격자에 내지 않는다(과별로만 본다).
+  var LC_DAY_BASE = 200;
+  function gridDays() { return Store.allDays().filter(function (d) { return d.day < LC_DAY_BASE; }); }
+
+  function lcLessons() {
+    var d = Store.examData();
+    return ((d && d.lessons) || []).filter(function (L) { return L.lc; });
+  }
+
+  function lcWords(L) {
+    var byWR = {}, byW = {};
+    Store.allWords().forEach(function (e) {
+      var r = e.w.reading === '-' ? '' : e.w.reading;
+      var k = e.w.word + '|' + r;
+      // 같은 단어가 숨은 DAY 와 책에 둘 다 있으면 책 쪽(기록이 쌓인 쪽)을 쓴다
+      if (!byWR[k] || byWR[k].day >= LC_DAY_BASE) byWR[k] = e;
+      if (!byW[e.w.word] || byW[e.w.word].day >= LC_DAY_BASE) byW[e.w.word] = e;
+    });
+    var out = [], seen = {};
+    (L.vocab || []).forEach(function (v) {
+      var e = byWR[v.word + '|' + (v.reading || '')] || byW[v.word];
+      if (!e) return;
+      var key = e.day + '-' + (e.w.no || e.w.word);
+      if (seen[key]) return;
+      seen[key] = 1;
+      out.push(e);
+    });
+    return out;
+  }
+
+  function renderLcChips() {
+    var ls = lcLessons();
+    $('lcHead').hidden = $('lcChips').hidden = !ls.length;
+    $('lcChips').innerHTML = ls.map(function (L) {
+      return '<button class="chip" data-lc="' + esc(L.set) + '">' + esc(L.no) + ' <i>' + lcWords(L).length + '</i></button>';
+    }).join('');
   }
 
   /* ---------------- Day 다중 선택 ---------------- */
@@ -383,6 +425,7 @@
   // 'DAY 30→81' 처럼 원래 외우던 Day 도 같이 적는다. 펼친 적 없는 Day 의 단어가
   // 복습에 떠도 어디서 온 것인지 바로 보이게 하려는 것이다.
   function dayOf(day, w) {
+    if (day >= 200 && day < 300) return '듣기 ' + (day - 200) + '과';   // 숨은 DAY 202~208
     var from = w ? Store.fromDay(day, w) : 0;
     return 'DAY ' + (from ? from + '→' + day : day);
   }
@@ -3817,21 +3860,7 @@
 
     midVocabMap = null; midReadMap = null;   // 받기로 단어장이 바뀌었을 수 있다
     var lessons = d.lessons || [];
-    var lcs = lessons.filter(function (L) { return L.lc; });
-    // 듣기 수업은 단어장만 있다. 독해 과들 아래에 따로 모은다.
-    var lcHTML = lcs.length ? '<div class="secto">듣기 수업 단어</div>' + lcs.map(function (L) {
-      var ws = midWordItems(L.set), st = midStat(ws);
-      return '<div class="mid-ls">' +
-        '<div class="mid-ls-h">' +
-          '<span class="mid-ls-no">' + esc(L.no) + '</span>' +
-          '<span class="mid-ls-t"><span lang="ja">' + esc(L.jp || '') + '</span></span>' +
-          '<span class="mid-ls-st">' + st.ok + ' / ' + st.n + '</span>' +
-        '</div>' + midBar(st) +
-        '<div class="mid-ls-btns">' +
-          '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + ws.length + '</button>' +
-          '<button class="chip" data-act="wquiz" data-set="' + L.set + '">읽기 4지선다</button>' +
-        '</div></div>';
-    }).join('') : '';
+    // 듣기 수업(lc) 과는 단어 모드에서 본다.
     $('midLessons').innerHTML = lessons.filter(function (L) { return !L.lc; }).map(function (L) {
       var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
       var st = midStat(qs);
@@ -3850,7 +3879,7 @@
           (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
           (qs.length ? '<button class="chip" data-act="set" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
         '</div></div>';
-    }).join('') + lcHTML;
+    }).join('');
   }
 
   function midHeadHTML(L) {
@@ -5219,7 +5248,7 @@
         cell.classList.toggle('sel', isSel(n));
       }
       $('btnSelAll').textContent =
-        (selected.length === Store.allDays().length && selected.length) ? '선택 해제' : '전체 선택';
+        (selected.length === gridDays().length && selected.length) ? '선택 해제' : '전체 선택';
       renderSelBar();
     });
 
@@ -5332,6 +5361,16 @@
       renderSet(list, '오답률 ' + m + '% 이상', list.length + '단어 · 2번 이상 학습', true);
     });
 
+    $('lcChips').addEventListener('click', function (ev) {
+      var c = ev.target.closest('[data-lc]');
+      if (!c) return;
+      var L = lcLessons().filter(function (x) { return x.set === c.dataset.lc; })[0];
+      if (!L) return;
+      var list = lcWords(L);
+      if (!list.length) return;
+      currentDays = [];
+      renderSet(list, '듣기 ' + L.no + ' · ' + L.jp, list.length + '단어', true);
+    });
     $('posChips').addEventListener('click', function (ev) {
       // 반복어(ぶかぶか 꼴)는 품사가 아니라 낱말 모양으로 모은다.
       if (ev.target.closest('.rep-chip')) {
@@ -5351,7 +5390,7 @@
     });
 
     $('btnSelAll').addEventListener('click', function () {
-      var all = Store.allDays().map(function (d) { return d.day; });
+      var all = gridDays().map(function (d) { return d.day; });
       selected = (selected.length === all.length) ? [] : all;
       renderHome();
     });
