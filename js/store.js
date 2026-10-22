@@ -485,8 +485,14 @@
     }).filter(Boolean);
   }
 
+  // v116 에 잠깐 DAY 100~107 로 넣었던 듣기 수업 단어. 동기화로 다시 들어오지 않게 걸러 낸다.
+  function isLcDay(obj) {
+    return !!obj && Number(obj.day) >= 100 && Number(obj.day) <= 107 && /^듣기 \d과/.test(String(obj.title || ''));
+  }
+
   function normalizeDay(obj) {
     if (!obj || obj.day == null || !Array.isArray(obj.words)) return null;
+    if (isLcDay(obj)) return null;
     var words = [];
     obj.words.forEach(function (w) {
       if (!w || !w.word) return;
@@ -1596,6 +1602,10 @@
     // 쓰지 않게 된 옛 백업은 켤 때 비운다. 자리를 많이 먹는다(28만 자).
     DEAD_KEYS.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
     days = read(VOCAB_KEY, {});
+    // v116 에 DAY 100~107 로 잠깐 넣었던 듣기 수업 단어는 시험 대비의 과별 단어장으로 옮겼다.
+    var droppedLc = false;
+    Object.keys(days).forEach(function (k) { if (isLcDay(days[k])) { delete days[k]; droppedLc = true; } });
+    if (droppedLc) write(VOCAB_KEY, days);
     moved = read(MOVED_KEY, {});
     movedBack = null;
     marks = read(MARK_KEY, {});

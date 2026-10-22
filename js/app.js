@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v116';
+  var BUILD = 'v117';
 
   /* ---------------- 화면 ---------------- */
 
@@ -3704,7 +3704,11 @@
   function midData() { return Store.examData(); }
   function midQs() { var d = midData(); return (d && d.questions) || []; }
   function midSetOf(q) { return q.set || ('L' + q.lesson); }
-  function midSetName(set) { return set === 'EX' ? '2과 추가자료' : String(set).replace('L', '') + '과'; }
+  function midSetName(set) {
+    if (set === 'EX') return '2과 추가자료';
+    if (/^LC/.test(set)) return '듣기 ' + String(set).slice(2) + '과';   // 듣기 수업 과별 단어장
+    return String(set).replace('L', '') + '과';
+  }
   function midIsWord(q) { return /^W:/.test(q.id); }   // 단어 목록으로 그 자리에서 만든 문제(기록 안 함)
   function midUnit(q) { return !q ? '문제' : (q.type === 'word' ? '단어' : (q.type === 'sent' ? '문장' : '문제')); }
   // 낼 차례. 본문 쓰기는 글 흐름대로 교재 순서, 나머지는 섞는다.
@@ -3812,7 +3816,23 @@
     }).join('');
 
     midVocabMap = null; midReadMap = null;   // 받기로 단어장이 바뀌었을 수 있다
-    $('midLessons').innerHTML = (d.lessons || []).map(function (L) {
+    var lessons = d.lessons || [];
+    var lcs = lessons.filter(function (L) { return L.lc; });
+    // 듣기 수업은 단어장만 있다. 독해 과들 아래에 따로 모은다.
+    var lcHTML = lcs.length ? '<div class="secto">듣기 수업 단어</div>' + lcs.map(function (L) {
+      var ws = midWordItems(L.set), st = midStat(ws);
+      return '<div class="mid-ls">' +
+        '<div class="mid-ls-h">' +
+          '<span class="mid-ls-no">' + esc(L.no) + '</span>' +
+          '<span class="mid-ls-t"><span lang="ja">' + esc(L.jp || '') + '</span></span>' +
+          '<span class="mid-ls-st">' + st.ok + ' / ' + st.n + '</span>' +
+        '</div>' + midBar(st) +
+        '<div class="mid-ls-btns">' +
+          '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + ws.length + '</button>' +
+          '<button class="chip" data-act="wquiz" data-set="' + L.set + '">읽기 4지선다</button>' +
+        '</div></div>';
+    }).join('') : '';
+    $('midLessons').innerHTML = lessons.filter(function (L) { return !L.lc; }).map(function (L) {
       var qs = all.filter(function (q) { return midSetOf(q) === L.set; });
       var st = midStat(qs);
       var words = (L.vocab || []).length + midExtraWords(L).length;
@@ -3830,7 +3850,7 @@
           (words ? '<button class="chip" data-act="words" data-set="' + L.set + '">단어 ' + words + '</button>' : '') +
           (qs.length ? '<button class="chip" data-act="set" data-set="' + L.set + '">문제 ' + qs.length + '</button>' : '') +
         '</div></div>';
-    }).join('');
+    }).join('') + lcHTML;
   }
 
   function midHeadHTML(L) {
@@ -3937,11 +3957,17 @@
   function midWordItems(set) {
     var L = midLesson(set);
     if (!L) return [];
+    // 듣기 수업 단어: 소단원 이름과, 단어장에 있으면 그 DAY·단계를 붙인다.
+    var lcTag = function (v) {
+      var e = midVocabIndex()[midNorm(v.word)];
+      return (v.sec || '') + (e ? ' · 단어장 ' + dayOf(e.day, e.w) + ' · ' + (Store.STAGE_LABEL[Store.stageFor(e.day, e.w)] || '') : '');
+    };
     var mk = function (v, extra, x) {
       return {
-        id: 'V:' + set + ':' + v.word, type: 'word', set: set, kind: 'vocab',
+        id: 'V:' + set + ':' + v.word, type: 'word', set: set, kind: 'vocab', lc: !!L.lc,
         word: v.word, reading: v.reading, meaning: v.meaning, extra: extra,
-        tag: extra ? (x.e ? '단어장 ' + dayOf(x.e.day, x.e.w) + ' · ' + (Store.STAGE_LABEL[x.st] || '') : '본문 · 새 단어') : '',
+        tag: L.lc ? lcTag(v) :
+          extra ? (x.e ? '단어장 ' + dayOf(x.e.day, x.e.w) + ' · ' + (Store.STAGE_LABEL[x.st] || '') : '본문 · 새 단어') : '',
         ex: midFindSentence(L, v.word)
       };
     };
@@ -4105,7 +4131,8 @@
       list = midWordItems(ws);
       var nx = list.filter(function (q) { return q.extra; }).length;
       title = midSetName(ws) + ' 단어';
-      sub = '교재 ' + (list.length - nx) + (nx ? ' · 본문에서 더 뽑은 것 ' + nx : '') + (WL ? ' · ' + WL.jp : '');
+      sub = (WL && WL.lc) ? list.length + '단어 · ' + WL.jp
+        : '교재 ' + (list.length - nx) + (nx ? ' · 본문에서 더 뽑은 것 ' + nx : '') + (WL ? ' · ' + WL.jp : '');
     } else if (key.indexOf('kind:') === 0) {
       var k = key.slice(5);
       list = all.filter(function (q) { return q.kind === k; }); title = MID_KIND[k]; sub = '네 과 + 2과 추가자료';
@@ -4212,7 +4239,7 @@
       var st = !r ? ['new', '미학습'] : (r.ok ? ['long', '맞힘'] : ['unknown', '틀림']);
       return '<div class="card mid-q mid-wc">' +
         '<div class="card-meta"><span class="badge ' + st[0] + '">' + st[1] + '</span>' +
-          '<span class="card-no">' + midSetName(q.set) + ' · ' + (q.extra ? '본문 단어' : '교재 단어') + '</span></div>' +
+          '<span class="card-no">' + midSetName(q.set) + ' · ' + (q.lc ? esc(q.tag.split(' · ')[0]) : (q.extra ? '본문 단어' : '교재 단어')) + '</span></div>' +
         midBodyHTML(q, o) + '</div>';
     }
     return '<div class="card mid-q">' +
