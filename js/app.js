@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v119';
+  var BUILD = 'v120';
 
   /* ---------------- 화면 ---------------- */
 
@@ -761,6 +761,16 @@
     return s;
   }
 
+  // 칸 순서는 학습할수록 바뀌면 안 된다. 한 칸을 눌러 이어서 묶을 때 이미 한 한자가 다시 끼어든다.
+  // 단어 수가 같으면 '한자 모드로 단어를 다 본 한자'를 앞에(한 번 다 보면 그대로다), 그다음은 사용 빈도순.
+  function kjDone(c) {
+    return (kanjiIndex()[c] || []).every(function (e) { return Store.isKanjiSeen(e.day, e.w); }) ? 1 : 0;
+  }
+  function kjFq(c) {
+    var k = window.KANJI_DICT && window.KANJI_DICT.kanji && window.KANJI_DICT.kanji[c];
+    return (k && k.fq) || 9999;
+  }
+
   function renderKanjiList() {
     var map = kanjiIndex();
     var covered = coveredKanji();
@@ -780,8 +790,8 @@
 
     // 많이 나오는 한자가 앞에. 같은 수면 이미 외운 것이 뒤로 가게 둔다.
     var list = all.filter(function (c) { return inStep(c, kanjiStep); })   // 지금 구간의 한자만
-      .map(function (c) { return { k: c, s: kanjiStat(c) }; })
-      .sort(function (a, b) { return (b.s.n - a.s.n) || (a.s.long - b.s.long) || a.k.localeCompare(b.k, 'ja'); });
+      .map(function (c) { return { k: c, s: kanjiStat(c), d: kjDone(c), f: kjFq(c) }; })
+      .sort(function (a, b) { return (b.s.n - a.s.n) || (b.d - a.d) || (a.f - b.f) || a.k.localeCompare(b.k, 'ja'); });
 
     var done = list.filter(function (x) { return x.s.long === x.s.n; }).length;
     var due = list.reduce(function (n, x) { return n + (x.s.due ? 1 : 0); }, 0);
