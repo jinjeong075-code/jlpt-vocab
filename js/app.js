@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v121';
+  var BUILD = 'v122';
 
   /* ---------------- 화면 ---------------- */
 
@@ -859,14 +859,16 @@
     $('btnKjExams').disabled = !exams.length;
 
     var hidden = Object.keys(covered).length;
-    $('kanjiSub').textContent = list.length + '자 · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
+    var todo = list.filter(function (x) { return !x.d; }).length;
+    $('kanjiSub').textContent = list.length + '자 · 학습 안 한 한자 ' + todo + ' · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
       (KANJI_STEPS[kanjiStep].lo === 1 && hidden ? ' · 앞 구간 단어에 다 들어 있는 ' + hidden + '자는 뺌' : '');
 
     $('kanjiGrid').innerHTML = list.map(function (x) {
       var full = x.s.long === x.s.n;
       var t = x.s.n || 1;
       var pct = function (n) { return (n / t * 100).toFixed(2) + '%'; };
-      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + (kjIsSel(x.k) ? ' sel' : '') +
+      // 한자 모드로 아직 학습하지 않은 한자(정렬과 같은 기준: 단어의 90% 미만을 봄)는 표시한다.
+      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + (x.d ? '' : ' todo') + (kjIsSel(x.k) ? ' sel' : '') +
         '" data-k="' + esc(x.k) + '">' +
         '<span class="kj-char" lang="ja">' + esc(x.k) + '</span>' +
         // 장기기억 · 단기기억 · 모름(미학습 포함). 색은 Day 칸·홈 통계와 같다.

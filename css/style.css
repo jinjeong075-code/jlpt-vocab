@@ -421,6 +421,12 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 }
 .kj-cell:hover { border-color: var(--accent); }
 .kj-cell.done { opacity: .45; }
+/* 한자 모드로 아직 학습하지 않은 한자: 점선 테두리 + 왼쪽 위 노란 점 */
+.kj-cell.todo { border-style: dashed; border-color: #3a3f4d; }
+.kj-cell.todo::before {
+  content: ""; position: absolute; top: 6px; left: 6px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+}
 /* 고른 한자. Day 칸과 같은 표시(파란 테두리 + 체크)로 둔다. */
 .kj-cell.sel { border-color: var(--accent); background: #1b2740; opacity: 1; }
 .kj-cell.sel::after {
