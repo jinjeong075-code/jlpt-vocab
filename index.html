@@ -145,6 +145,10 @@
       <span class="bb-title">접두어·접미어</span>
       <span class="bb-sub" id="affixCount"></span>
     </button>
+    <button class="big-btn" id="btnN1Chk" hidden>
+      <span class="bb-title">N1 분류 확인</span>
+      <span class="bb-sub" id="n1ChkCount"></span>
+    </button>
     <button class="big-btn" id="btnStory" hidden>
       <span class="bb-title">문단 읽기</span>
       <span class="bb-sub" id="storyCount"></span>
@@ -537,6 +541,16 @@
     <button class="res-tab" id="tabSuf">접미어</button>
   </div>
   <div id="affixList" class="word-list"></div>
+</section>
+
+<!-- N1급으로 뒤로 뺀 단어를 네이버 사전과 하나씩 대조한다. -->
+<section id="viewN1chk" class="view">
+  <div class="hero">
+    <h1>N1 분류 확인</h1>
+    <p class="res-meta" id="n1ChkSub"></p>
+  </div>
+  <div class="res-tabs" id="n1ChkTabs"></div>
+  <div id="n1ChkList" class="word-list"></div>
 </section>
 
 <!-- ============ 문단 읽기 ============ -->

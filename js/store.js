@@ -19,6 +19,8 @@
   // 한자별 학습으로 공부한 단어. 한자 모드의 복습은 이 단어들만 다시 낸다.
   // 진도(레벨·복습일)는 단어 진도 하나로 쓰고, 여기엔 '한자 모드로 본 적이 있다'만 적는다.
   var KSEEN_KEY = 'jvocab.kanjiSeen.v1';      // 키 -> 마지막으로 한자 모드에서 본 시각
+  // N1급으로 뒤로 뺀 단어를 사용자가 네이버 사전과 대조한 결과. 키 -> { v: 'n1'|'n2'|'', at }
+  var N1CHK_KEY = 'jvocab.n1check.v1';
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -88,7 +90,7 @@
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
   SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
-  SYNCED_KEYS[KSEEN_KEY] = 1;
+  SYNCED_KEYS[KSEEN_KEY] = 1; SYNCED_KEYS[N1CHK_KEY] = 1;
 
   // 저장 공간이 꽉 차면 setItem 이 예외를 던진다. 예전에는 그것을 조용히 삼켰는데,
   // 그 바람에 이어하기가 저장되지 않는데도 아무 말이 없었다(실제로 그렇게 됐다).
@@ -729,6 +731,32 @@
       n++;
     });
     if (n) write(MARK_KEY, marks);
+    return n;
+  }
+
+  /* ---------- N1급 분류 확인 ---------- */
+  // 폰에서 하다가 PC 에서 이어 할 수 있게 올리기·받기에 실어 보낸다. 합칠 때는 나중에 누른 쪽.
+  var n1chk = {};
+
+  function getN1Check(k) { return (n1chk[k] && n1chk[k].v) || ''; }
+
+  function setN1Check(k, v) {
+    n1chk[k] = { v: v || '', at: Date.now() };
+    write(N1CHK_KEY, n1chk);
+  }
+
+  function mergeN1Check(inc) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (k) {
+      var r = inc[k];
+      if (!r || typeof r !== 'object') return;
+      var cur = n1chk[k];
+      if (cur && (cur.at || 0) >= (r.at || 0)) return;
+      n1chk[k] = { v: r.v || '', at: r.at || 0 };
+      n++;
+    });
+    if (n) write(N1CHK_KEY, n1chk);
     return n;
   }
 
@@ -1376,6 +1404,7 @@
       marks: marks,
       stories: stories,
       kanjiSeen: kseen,
+      n1check: n1chk,
       // 수업 시험 대비 자료와 푼 기록. 폰은 이것으로만 자료를 받는다.
       examData: examData,
       examProg: examProg
@@ -1485,6 +1514,7 @@
     // 옛 기기가 보낸 N3 쪽 기록이 섞여 들어왔으면 N2 쪽으로 옮긴다.
     stat.moved = moveProgress();
     stat.marks = mergeMarks(obj.marks);
+    mergeN1Check(obj.n1check);
     moveMarks();
     stat.time = timeTotal();
 
@@ -1610,6 +1640,7 @@
     movedBack = null;
     marks = read(MARK_KEY, {});
     kseen = read(KSEEN_KEY, {});
+    n1chk = read(N1CHK_KEY, {});
     if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
     if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
@@ -1828,6 +1859,8 @@
     isMarkedKey: isMarkedKey,
     toggleMarkKey: toggleMarkKey,
     markedList: markedList,
+    getN1Check: getN1Check,
+    setN1Check: setN1Check,
     deviceId: function () { return deviceId; },
     markKanjiSeen: markKanjiSeen,
     isKanjiSeen: isKanjiSeen,
