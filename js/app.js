@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v122';
+  var BUILD = 'v123';
 
   /* ---------------- 화면 ---------------- */
 
@@ -643,24 +643,36 @@
     return Store.allWords().filter(function (e) { return e.day <= KANJI_LAST_DAY; });
   }
 
-  function kanjiIndex() {
-    if (kanjiMap) return kanjiMap;
-    kanjiMap = {};
-    kanjiModeWords().forEach(function (e) {
+  var kanjiMapAll = null;   // 단어에서 한자를 눌러 볼 때 쓰는 것. N1급 등 DAY 91~ 도 넣는다.
+
+  function buildKanjiMap(words) {
+    var map = {};
+    words.forEach(function (e) {
       var seen = {};
       (String(e.w.word).match(/[一-龯々]/g) || []).forEach(function (c) {
         if (seen[c]) return;          // 한 단어에 같은 한자가 두 번 나와도 한 번만
         seen[c] = 1;
-        (kanjiMap[c] = kanjiMap[c] || []).push(e);
+        (map[c] = map[c] || []).push(e);
       });
     });
+    return map;
+  }
+
+  function kanjiIndex() {
+    if (!kanjiMap) kanjiMap = buildKanjiMap(kanjiModeWords());
     return kanjiMap;
+  }
+
+  function kanjiIndexAll() {
+    if (!kanjiMapAll) kanjiMapAll = buildKanjiMap(Store.allWords());
+    return kanjiMapAll;
   }
 
   // Day 가 낮은 것부터 늘어놓는다. 먼저 배운 단어가 위에 와야 새 단어를 아는 단어에 이어 붙이기 쉽다.
   // 같은 Day 안에서는 책에 실린 순서(번호)대로.
-  function wordsOfKanji(c) {
-    var list = (kanjiIndex()[c] || []).slice();
+  // all: 단어에서 한자를 눌러 볼 때. 한자 모드 범위(DAY 1~90) 밖 단어도 보여 준다.
+  function wordsOfKanji(c, all) {
+    var list = ((all ? kanjiIndexAll() : kanjiIndex())[c] || []).slice();
     list.sort(function (a, b) {
       return (a.day - b.day) || ((a.w.no || 0) - (b.w.no || 0)) ||
         (readingOf(a.w) || a.w.word).localeCompare(readingOf(b.w) || b.w.word, 'ja');
@@ -900,8 +912,8 @@
     }).join('');
   }
 
-  function openKanji(c) {
-    var list = wordsOfKanji(c);
+  function openKanji(c, all) {
+    var list = wordsOfKanji(c, all);
     if (!list.length) return;
     currentDays = [];
     renderSet(list, '한자 ' + c, list.length + '단어 · Day 순', true, kanjiInfoHTML(c), 'kanji');
@@ -1256,7 +1268,7 @@
         '</div>' +
         '<div class="detail-box">' + detailHTML(s.w, true) + '</div>';
     } else {
-      dsWords = wordsOfKanji(s.k);
+      dsWords = wordsOfKanji(s.k, true);
       $('dsTitle').textContent = '한자 ' + s.k;
       $('dsBody').innerHTML =
         kanjiInfoHTML(s.k) +
@@ -5313,7 +5325,7 @@
         if (b.closest('#detailSheet')) dsPush({ t: 'kanji', k: b.dataset.k });
         // 학습 중에는 화면을 옮기지 않는다. 풀던 카드 위에 창을 덮어 보여준다.
         else if (view === 'study') dsShow({ t: 'kanji', k: b.dataset.k });
-        else openKanji(b.dataset.k);
+        else openKanji(b.dataset.k, true);
         return;
       }
       var it = ev.target.closest('#detailSheet .ds-item[data-i]');
