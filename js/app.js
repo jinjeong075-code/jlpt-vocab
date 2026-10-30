@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v124';
+  var BUILD = 'v125';
 
   /* ---------------- 화면 ---------------- */
 
@@ -41,7 +41,7 @@
   // 뒤로가기가 돌아갈 화면. 문법 안에서는 문법 홈으로, 그다음이 첫 화면이다.
   var BACK_TO = {
     home: 'pick', gram: 'pick',
-    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home', n1chk: 'home',
+    day: 'home', study: 'home', result: 'home', time: 'home', browse: 'day', exams: 'home', affix: 'home',
     stories: 'home', story: 'stories', kanji: 'pick',
     gramCh: 'gram', gramStudy: 'gramCh', gramList: 'gram',
     mid: 'pick', midNote: 'mid', midWords: 'mid', midQuiz: 'mid', midSet: 'mid', midResult: 'mid', midBrowse: 'mid', midText: 'mid'
@@ -165,7 +165,7 @@
 
   var VIEW_TITLE = {
     pick: '일본어', home: '단어', gram: '문법', day: '단어', study: '단어', browse: '단어', time: '공부 시간',
-    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어', n1chk: '단어',
+    gramCh: '문법', gramStudy: '문법', gramList: '문법', exams: '시험 기록', affix: '단어',
     stories: '문단 읽기', story: '문단 읽기', kanji: '한자',
     mid: '시험 대비', midNote: '시험 대비', midWords: '시험 대비', midQuiz: '시험 대비',
     midSet: '시험 대비', midResult: '시험 대비', midBrowse: '시험 대비', midText: '본문 해설'
@@ -270,12 +270,6 @@
     var stDays = {}, stN = 0;
     Store.storyList().forEach(function (s) { if (!stDays[s.day]) { stDays[s.day] = 1; stN++; } });
     $('btnStory').hidden = !stN;
-    var n1 = n1ChkWords();
-    $('btnN1Chk').hidden = !n1.length;
-    if (n1.length) {
-      var n1done = n1.filter(function (x) { return x.v; }).length;
-      $('n1ChkCount').textContent = n1done + ' / ' + n1.length;
-    }
     if (stN) $('storyCount').textContent = stN + ' Day';
     renderDaily();
     renderPosChips();
@@ -783,8 +777,13 @@
   // '한자 모드로 단어를 다 본 한자'를 맨 앞에(한 번 다 보면 그대로다). 나머지는 단어 수, 그다음 사용 빈도순.
   // 단어장에서 단어가 빠져 단어 수가 바뀌어도 이미 한 한자가 뒤로 섞여 들지 않는다.
   // 거의 다 본 한자(90% 이상)도 한 것으로 친다. 나중에 단어 한두 개가 더해져도 뒤로 섞이지 않게.
+  // N1급으로 뺐다가 되돌린 단어(v125) 가운데 한자 모드로 안 본 것은 세지 않는다.
+  // 빠져 있는 동안 다 본 한자가 되돌아온 단어 때문에 뒤로 밀리지 않게.
   function kjDone(c) {
-    var ws = kanjiIndex()[c] || [];
+    var un = window.VOCAB_UNMOVED || {};
+    var ws = (kanjiIndex()[c] || []).filter(function (e) {
+      return !un[Store.keyOf(e.day, e.w)] || Store.isKanjiSeen(e.day, e.w);
+    });
     var seen = ws.filter(function (e) { return Store.isKanjiSeen(e.day, e.w); }).length;
     return ws.length && seen >= ws.length * 0.9 ? 1 : 0;
   }
@@ -2064,53 +2063,6 @@
               '</span>';
             }).join('') + '</div>'
           : '') +
-      '</div>';
-    }).join('');
-  }
-
-  /* ---------------- N1 분류 확인 ---------------- */
-  // N1급으로 뒤로 뺀 단어(공개 JLPT 목록 기준)를 네이버 사전 급수와 대조한다.
-  // N2 로 누른 단어는 나중에 원래 DAY 로 되돌린다.
-  var n1Tab = 'todo';
-
-  function n1ChkWords() {
-    var back = {};   // 옮긴 뒤 키 -> 원래 DAY
-    var mv = window.VOCAB_MOVED || {};
-    Object.keys(mv).forEach(function (k) { back[mv[k]] = Number(k.split('-')[0]); });
-    return Store.allWords().filter(function (e) {
-      var d = Store.getDay(e.day);
-      return d && /^N1급/.test(d.title || '');
-    }).map(function (e) {
-      var k = Store.keyOf(e.day, e.w);
-      return { e: e, k: k, from: back[k] || 0, v: Store.getN1Check(k) };
-    });
-  }
-
-  function renderN1Chk() {
-    var all = n1ChkWords();
-    var cnt = { todo: 0, n2: 0, n1: 0 };
-    all.forEach(function (x) { cnt[x.v || 'todo']++; });
-    $('n1ChkSub').textContent = '확인 ' + (cnt.n1 + cnt.n2) + ' / ' + all.length;
-    var tabs = [['todo', '남음'], ['n2', 'N2'], ['n1', 'N1']];
-    $('n1ChkTabs').innerHTML = tabs.map(function (t) {
-      return '<button class="res-tab' + (n1Tab === t[0] ? ' sel' : '') + '" data-t="' + t[0] + '">' +
-        t[1] + ' ' + cnt[t[0]] + '</button>';
-    }).join('');
-    var list = all.filter(function (x) { return (x.v || 'todo') === n1Tab; });
-    $('n1ChkList').innerHTML = list.map(function (x) {
-      var w = x.e.w;
-      return '<div class="wl-item n1c-item">' +
-        '<span class="wl-main">' +
-          '<span class="wl-word" lang="ja">' + dictHTML(w.word) +
-            (readingOf(w) ? '<span class="wl-reading">' + esc(readingOf(w)) + '</span>' : '') +
-            (x.from ? '<span class="n1c-day">DAY ' + x.from + '</span>' : '') +
-          '</span>' +
-          '<div class="wl-meaning">' + esc(w.meaning) + '</div>' +
-        '</span>' +
-        '<span class="n1c-btns">' +
-          '<button type="button" class="mini-btn' + (x.v === 'n1' ? ' on' : '') + '" data-k="' + esc(x.k) + '" data-v="n1">N1</button>' +
-          '<button type="button" class="mini-btn n2' + (x.v === 'n2' ? ' on' : '') + '" data-k="' + esc(x.k) + '" data-v="n2">N2</button>' +
-        '</span>' +
       '</div>';
     }).join('');
   }
@@ -5701,21 +5653,6 @@
     $('tabSuf').addEventListener('click', function () { affixTab = 'suf'; renderAffix(); });
     // 문단 읽기. 홈에서는 Day 목록으로, Day 화면에서는 그 Day 의 글로 바로 간다.
     $('btnStory').addEventListener('click', function () { renderStories(); show('stories'); });
-    $('btnN1Chk').addEventListener('click', function () { n1Tab = 'todo'; renderN1Chk(); show('n1chk'); });
-    $('n1ChkTabs').addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-t]');
-      if (!t) return;
-      n1Tab = t.dataset.t;
-      renderN1Chk();
-    });
-    // 같은 버튼을 다시 누르면 확인 전으로 돌린다.
-    $('n1ChkList').addEventListener('click', function (ev) {
-      var b = ev.target.closest('button[data-k]');
-      if (!b) return;
-      var cur = Store.getN1Check(b.dataset.k);
-      Store.setN1Check(b.dataset.k, cur === b.dataset.v ? '' : b.dataset.v);
-      renderN1Chk();
-    });
     $('storyGrid').addEventListener('click', function (ev) {
       var c = ev.target.closest('.day-cell');
       if (c) openStory(Number(c.dataset.day), 'stories', 1);

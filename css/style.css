@@ -395,13 +395,6 @@ main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
 /* 그 줄에서 실제로 누르라고 있는 버튼. 나머지 보조 버튼과 구분한다. */
 .mini-btn.go { color: var(--accent); border-color: var(--line); }
 .mini-btn.go:hover { border-color: var(--accent); }
-.n1c-item { display: flex; align-items: center; gap: 10px; }
-.n1c-item .wl-main { flex: 1 1 auto; min-width: 0; }
-.n1c-day { font-size: 11px; color: var(--dim); margin-left: 6px; }
-.n1c-btns { display: flex; gap: 6px; flex: 0 0 auto; }
-.n1c-btns .mini-btn { min-width: 44px; padding: 9px 10px; font-size: 13px; }
-.n1c-btns .mini-btn.on { color: #fff; background: var(--accent); border-color: var(--accent); }
-.n1c-btns .mini-btn.on.n2 { background: var(--ok); border-color: var(--ok); }
 
 /* ---------- day grid ---------- */
 .day-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }

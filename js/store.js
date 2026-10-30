@@ -19,8 +19,6 @@
   // 한자별 학습으로 공부한 단어. 한자 모드의 복습은 이 단어들만 다시 낸다.
   // 진도(레벨·복습일)는 단어 진도 하나로 쓰고, 여기엔 '한자 모드로 본 적이 있다'만 적는다.
   var KSEEN_KEY = 'jvocab.kanjiSeen.v1';      // 키 -> 마지막으로 한자 모드에서 본 시각
-  // N1급으로 뒤로 뺀 단어를 사용자가 네이버 사전과 대조한 결과. 키 -> { v: 'n1'|'n2'|'', at }
-  var N1CHK_KEY = 'jvocab.n1check.v1';
 
   var DAY_MS = 86400000;
   var HOUR_MS = 3600000;
@@ -90,7 +88,7 @@
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
   SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
-  SYNCED_KEYS[KSEEN_KEY] = 1; SYNCED_KEYS[N1CHK_KEY] = 1;
+  SYNCED_KEYS[KSEEN_KEY] = 1;
 
   // 저장 공간이 꽉 차면 setItem 이 예외를 던진다. 예전에는 그것을 조용히 삼켰는데,
   // 그 바람에 이어하기가 저장되지 않는데도 아무 말이 없었다(실제로 그렇게 됐다).
@@ -527,6 +525,7 @@
     var n = 0;
     Object.keys(inc).forEach(function (k) {
       if (typeof inc[k] !== 'string' || moved[k] === inc[k]) return;
+      if (unmoved[k] === inc[k]) return;   // 되돌린 옮김. 옛 기기가 보내와도 다시 넣지 않는다
       moved[k] = inc[k];
       movedBack = null;   // 표가 바뀌면 되짚기 표도 다시 만든다
       n++;
@@ -576,6 +575,81 @@
     return n;
   }
 
+  /* ---------- 옮겼다가 되돌린 단어 ---------- */
+  // v121 에 N1급으로 보고 DAY 110~120 으로 뺐던 단어를 v125 에서 모두 원래 DAY 로 되돌렸다.
+  // 옮김 표는 기기마다 저장돼 있고 받기로도 다시 들어오므로, 표(VOCAB_UNMOVED)로 켤 때와 받을 때마다 푼다.
+  //  - 옮김 표에서 그 줄을 지운다
+  //  - 옮겼던 자리의 단어를 빼고, 원래 DAY 에 빠져 있는 단어는 내장 단어장에서 되살린다
+  //  - 학습 기록·별·한자 모드 기록을 원래 키로 돌린다(양쪽에 있으면 나중 것)
+  var unmoved = {};     // 원래 키 -> 옮겼던 키
+  var unmovedTo = {};   // 옮겼던 키 -> 원래 키
+
+  function loadUnmoved() {
+    var u = global.VOCAB_UNMOVED || {};
+    unmoved = {}; unmovedTo = {};
+    Object.keys(u).forEach(function (k) { unmoved[k] = u[k]; unmovedTo[u[k]] = k; });
+  }
+
+  function applyUnmoved() {
+    var n = 0;
+    Object.keys(unmoved).forEach(function (k) {
+      if (moved[k] === unmoved[k]) { delete moved[k]; n++; }
+    });
+    if (n) { movedBack = null; write(MOVED_KEY, moved); }
+
+    var vch = false;
+    Object.keys(days).forEach(function (dk) {
+      var d = days[dk], before = d.words.length;
+      d.words = d.words.filter(function (w) { return !unmovedTo[keyOf(d.day, w)]; });
+      if (d.words.length === before) return;
+      vch = true;
+      if (!d.words.length) delete days[dk];
+    });
+    var need = {};   // 원래 DAY -> 되살릴 키들
+    Object.keys(unmoved).forEach(function (k) {
+      var day = Number(k.slice(0, k.indexOf('-')));
+      var d = days[day];
+      if (d && d.words.some(function (w) { return keyOf(day, w) === k; })) return;
+      (need[day] = need[day] || {})[k] = 1;
+    });
+    (global.DEFAULT_VOCAB || []).forEach(function (raw) {
+      var want = need[raw.day];
+      if (!want) return;
+      var nd = normalizeDay(raw);
+      if (!nd) return;
+      var cur = days[nd.day];
+      if (!cur) { cur = days[nd.day] = { day: nd.day, title: nd.title, v: nd.v, words: [] }; }
+      nd.words.forEach(function (w) { if (want[keyOf(nd.day, w)]) cur.words.push(w); });
+      cur.words.sort(function (a, b) { return (a.no || 0) - (b.no || 0); });
+      vch = true;
+    });
+    if (vch) write(VOCAB_KEY, days);
+
+    var pn = 0, mn = 0, kn = 0;
+    Object.keys(unmovedTo).forEach(function (toK) {
+      var k = unmovedTo[toK];
+      var r = progress[toK];
+      if (r) {
+        if (!progress[k] || (r.last || 0) > (progress[k].last || 0)) progress[k] = r;
+        delete progress[toK]; pn++;
+      }
+      var m = marks[toK];
+      if (m) {
+        if (!marks[k] || (m.at || 0) > (marks[k].at || 0)) marks[k] = m;
+        delete marks[toK]; mn++;
+      }
+      var t = kseen[toK];
+      if (t) {
+        if (!kseen[k] || kseen[k] < t) kseen[k] = t;
+        delete kseen[toK]; kn++;
+      }
+    });
+    if (pn) write(PROG_KEY, progress);
+    if (mn) write(MARK_KEY, marks);
+    if (kn) write(KSEEN_KEY, kseen);
+    return n + pn;
+  }
+
   // 옮겨진 단어가 원래 N3 몇 일에 있었는지. 없으면 0.
   // 목록과 문제 화면에 'DAY 30→81' 처럼 두 Day 를 같이 적어,
   // 펼친 적 없는 Day 의 단어가 복습에 떠서 헷갈리는 일을 없앤다.
@@ -595,7 +669,8 @@
   function locate(dayNo, no, wordText) {
     var w = findWord(dayNo, no, wordText);
     if (w) return { day: dayNo, w: w };
-    var to = moved[dayNo + '-' + (no != null ? no : wordText)];
+    var key = dayNo + '-' + (no != null ? no : wordText);
+    var to = moved[key] || unmovedTo[key];
     if (!to) return null;
     var i = to.indexOf('-');
     var nd = Number(to.slice(0, i)), rest = to.slice(i + 1);
@@ -731,32 +806,6 @@
       n++;
     });
     if (n) write(MARK_KEY, marks);
-    return n;
-  }
-
-  /* ---------- N1급 분류 확인 ---------- */
-  // 폰에서 하다가 PC 에서 이어 할 수 있게 올리기·받기에 실어 보낸다. 합칠 때는 나중에 누른 쪽.
-  var n1chk = {};
-
-  function getN1Check(k) { return (n1chk[k] && n1chk[k].v) || ''; }
-
-  function setN1Check(k, v) {
-    n1chk[k] = { v: v || '', at: Date.now() };
-    write(N1CHK_KEY, n1chk);
-  }
-
-  function mergeN1Check(inc) {
-    if (!inc || typeof inc !== 'object') return 0;
-    var n = 0;
-    Object.keys(inc).forEach(function (k) {
-      var r = inc[k];
-      if (!r || typeof r !== 'object') return;
-      var cur = n1chk[k];
-      if (cur && (cur.at || 0) >= (r.at || 0)) return;
-      n1chk[k] = { v: r.v || '', at: r.at || 0 };
-      n++;
-    });
-    if (n) write(N1CHK_KEY, n1chk);
     return n;
   }
 
@@ -1404,7 +1453,6 @@
       marks: marks,
       stories: stories,
       kanjiSeen: kseen,
-      n1check: n1chk,
       // 수업 시험 대비 자료와 푼 기록. 폰은 이것으로만 자료를 받는다.
       examData: examData,
       examProg: examProg
@@ -1514,8 +1562,8 @@
     // 옛 기기가 보낸 N3 쪽 기록이 섞여 들어왔으면 N2 쪽으로 옮긴다.
     stat.moved = moveProgress();
     stat.marks = mergeMarks(obj.marks);
-    mergeN1Check(obj.n1check);
     moveMarks();
+    applyUnmoved();
     stat.time = timeTotal();
 
     // 풀다 만 학습은 합칠 수가 없다. 둘 중 나중에 저장된 쪽을 쓴다.
@@ -1638,9 +1686,9 @@
     if (droppedLc) write(VOCAB_KEY, days);
     moved = read(MOVED_KEY, {});
     movedBack = null;
+    loadUnmoved();
     marks = read(MARK_KEY, {});
     kseen = read(KSEEN_KEY, {});
-    n1chk = read(N1CHK_KEY, {});
     if (global.VOCAB_MOVED) mergeMoved(global.VOCAB_MOVED);
     gram = read(GRAM_KEY, {});
     if (window.DEFAULT_GRAMMAR) mergeDefaultGram(window.DEFAULT_GRAMMAR);
@@ -1775,6 +1823,7 @@
     if (vocabChanged) write(VOCAB_KEY, days);
     moveProgress();
     moveMarks();
+    applyUnmoved();
 
     affixes = normalizeAffixes(read(AFFIX_KEY, null));
     if (affixCount(global.DEFAULT_AFFIXES) > affixCount(affixes)) {
@@ -1859,8 +1908,7 @@
     isMarkedKey: isMarkedKey,
     toggleMarkKey: toggleMarkKey,
     markedList: markedList,
-    getN1Check: getN1Check,
-    setN1Check: setN1Check,
+
     deviceId: function () { return deviceId; },
     markKanjiSeen: markKanjiSeen,
     isKanjiSeen: isKanjiSeen,
