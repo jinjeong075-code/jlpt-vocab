@@ -18,7 +18,7 @@
 
   // 기기가 실제로 어느 버전을 돌고 있는지 확인하려고 남긴다.
   // 앱이 옛 캐시를 쓰고 있으면 이 숫자가 안 올라간다.
-  var BUILD = 'v126';
+  var BUILD = 'v127';
 
   /* ---------------- 화면 ---------------- */
 
@@ -787,6 +787,13 @@
     var seen = ws.filter(function (e) { return Store.isKanjiSeen(e.day, e.w); }).length;
     return ws.length && seen >= ws.length * 0.9 ? 1 : 0;
   }
+  // 되돌린 단어 가운데 한자 모드로 아직 안 본 것이 있는가. 있으면 자리는 그대로 두되 '학습 안 함' 표시를 붙인다.
+  function kjBackLeft(c) {
+    var un = window.VOCAB_UNMOVED || {};
+    return (kanjiIndex()[c] || []).some(function (e) {
+      return un[Store.keyOf(e.day, e.w)] && !Store.isKanjiSeen(e.day, e.w);
+    }) ? 1 : 0;
+  }
   function kjFq(c) {
     var k = window.KANJI_DICT && window.KANJI_DICT.kanji && window.KANJI_DICT.kanji[c];
     return (k && k.fq) || 9999;
@@ -811,7 +818,7 @@
 
     // 많이 나오는 한자가 앞에. 같은 수면 이미 외운 것이 뒤로 가게 둔다.
     var list = all.filter(function (c) { return inStep(c, kanjiStep); })   // 지금 구간의 한자만
-      .map(function (c) { return { k: c, s: kanjiStat(c), d: kjDone(c), f: kjFq(c) }; })
+      .map(function (c) { var d = kjDone(c); return { k: c, s: kanjiStat(c), d: d, t: !d || kjBackLeft(c), f: kjFq(c) }; })
       .sort(function (a, b) { return (b.d - a.d) || (b.s.n - a.s.n) || (a.f - b.f) || a.k.localeCompare(b.k, 'ja'); });
 
     var done = list.filter(function (x) { return x.s.long === x.s.n; }).length;
@@ -876,7 +883,7 @@
     $('btnKjExams').disabled = !exams.length;
 
     var hidden = Object.keys(covered).length;
-    var todo = list.filter(function (x) { return !x.d; }).length;
+    var todo = list.filter(function (x) { return x.t; }).length;
     $('kanjiSub').textContent = list.length + '자 · 학습 안 한 한자 ' + todo + ' · 다 외운 한자 ' + done + ' · 복습할 것이 있는 한자 ' + due +
       (KANJI_STEPS[kanjiStep].lo === 1 && hidden ? ' · 앞 구간 단어에 다 들어 있는 ' + hidden + '자는 뺌' : '');
 
@@ -885,7 +892,7 @@
       var t = x.s.n || 1;
       var pct = function (n) { return (n / t * 100).toFixed(2) + '%'; };
       // 한자 모드로 아직 학습하지 않은 한자(정렬과 같은 기준: 단어의 90% 미만을 봄)는 표시한다.
-      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + (x.d ? '' : ' todo') + (kjIsSel(x.k) ? ' sel' : '') +
+      return '<button type="button" class="kj-cell' + (full ? ' done' : '') + (x.t ? ' todo' : '') + (kjIsSel(x.k) ? ' sel' : '') +
         '" data-k="' + esc(x.k) + '">' +
         '<span class="kj-char" lang="ja">' + esc(x.k) + '</span>' +
         // 장기기억 · 단기기억 · 모름(미학습 포함). 색은 Day 칸·홈 통계와 같다.
