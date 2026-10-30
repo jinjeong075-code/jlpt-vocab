@@ -13,6 +13,7 @@
   var EXAM_KEY  = 'jvocab.exams.v1';
   var MOVED_KEY = 'jvocab.moved.v1';          // 두 책에 같이 실린 단어: N3 쪽 키 -> N2 쪽 키
   var MOVED_BK_KEY = 'jvocab.movedBackup.v1'; // 옮기기 전 N3 쪽 학습 기록. 이 기기에만 남긴다
+  var UNMOVED_KEY = 'jvocab.unmoved.v1';      // 옮겼다가 되돌린 단어: 원래 키 -> 옮겼던 키
   var AFFIX_KEY = 'jvocab.affixes.v1';
   var MARK_KEY  = 'jvocab.marks.v1';          // 주의할 단어: 키 -> { on, at }
   var STORY_KEY = 'jvocab.stories.v1';        // 문단 읽기: Day -> 글
@@ -88,7 +89,7 @@
   SYNCED_KEYS[EXAM_KEY] = 1;
   SYNCED_KEYS[MOVED_KEY] = 1; SYNCED_KEYS[AFFIX_KEY] = 1;
   SYNCED_KEYS[MARK_KEY] = 1; SYNCED_KEYS[STORY_KEY] = 1;
-  SYNCED_KEYS[KSEEN_KEY] = 1;
+  SYNCED_KEYS[KSEEN_KEY] = 1; SYNCED_KEYS[UNMOVED_KEY] = 1;
 
   // 저장 공간이 꽉 차면 setItem 이 예외를 던진다. 예전에는 그것을 조용히 삼켰는데,
   // 그 바람에 이어하기가 저장되지 않는데도 아무 말이 없었다(실제로 그렇게 됐다).
@@ -578,6 +579,7 @@
   /* ---------- 옮겼다가 되돌린 단어 ---------- */
   // v121 에 N1급으로 보고 DAY 110~120 으로 뺐던 단어를 v125 에서 모두 원래 DAY 로 되돌렸다.
   // 옮김 표는 기기마다 저장돼 있고 받기로도 다시 들어오므로, 표(VOCAB_UNMOVED)로 켤 때와 받을 때마다 푼다.
+  // 폰 배포본에는 단어장 파일이 비어 있어 이 표가 없다. 그래서 표도 저장해 두고 올리기·받기로 실어 보낸다.
   //  - 옮김 표에서 그 줄을 지운다
   //  - 옮겼던 자리의 단어를 빼고, 원래 DAY 에 빠져 있는 단어는 내장 단어장에서 되살린다
   //  - 학습 기록·별·한자 모드 기록을 원래 키로 돌린다(양쪽에 있으면 나중 것)
@@ -585,9 +587,21 @@
   var unmovedTo = {};   // 옮겼던 키 -> 원래 키
 
   function loadUnmoved() {
-    var u = global.VOCAB_UNMOVED || {};
     unmoved = {}; unmovedTo = {};
-    Object.keys(u).forEach(function (k) { unmoved[k] = u[k]; unmovedTo[u[k]] = k; });
+    mergeUnmoved(read(UNMOVED_KEY, {}), true);
+    mergeUnmoved(global.VOCAB_UNMOVED);
+  }
+
+  function mergeUnmoved(inc, loading) {
+    if (!inc || typeof inc !== 'object') return 0;
+    var n = 0;
+    Object.keys(inc).forEach(function (k) {
+      if (typeof inc[k] !== 'string' || unmoved[k] === inc[k]) return;
+      unmoved[k] = inc[k]; unmovedTo[inc[k]] = k;
+      n++;
+    });
+    if (n && !loading) write(UNMOVED_KEY, unmoved);
+    return n;
   }
 
   function applyUnmoved() {
@@ -1449,6 +1463,7 @@
       exams: read(EXAM_KEY, []),
       // 두 책에 같이 실린 단어 표. 받는 기기가 옛 N3 단어를 이 표로 걸러낸다.
       moved: moved,
+      unmoved: unmoved,
       affixes: affixes,
       marks: marks,
       stories: stories,
@@ -1470,6 +1485,7 @@
       grammar: gram,
       stories: stories,
       moved: moved,
+      unmoved: unmoved,
       affixes: affixes,
       progress: {}
     };
@@ -1492,6 +1508,8 @@
 
     // 표를 먼저 합친다. 받은 단어를 넣기 전에 걸러야 옮겨진 N3 단어가 끼어들지 않는다.
     // 이 기기가 표를 처음 받았으면 이미 가진 단어에서도 뺀다.
+    // 되돌린 표를 먼저 받는다. 그래야 옮김 표에서 그 줄이 빠진 채로 받은 단어를 넣는다.
+    if (mergeUnmoved(obj.unmoved)) applyUnmoved();
     if (mergeMoved(obj.moved) && dropMovedAll()) write(VOCAB_KEY, days);
 
     if (obj.vocab) {
